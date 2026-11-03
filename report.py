@@ -12,16 +12,42 @@ from matplotlib.ticker import FuncFormatter
 from configurazione import BENCH
 from metriche import RIGHE_ORIZZONTE, SINGOLO
 
-SCHEDE = ["Sintesi", "Risultati per orizzonte", "Fan chart", "Drawdown", "Rischio e correlazioni",
+SCHEDE = ["In una pagina", "Sintesi", "Risultati per orizzonte", "Fan chart", "Drawdown", "Rischio e correlazioni",
           "Stress test", "Robustezza", "Limiti dell'analisi"]
 PALETTE = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#882255", "#117733"]
 GRIGIO = "#555555"
+NOME_ANALISI = {"A": "Analisi A – periodo comune", "B": "Analisi B – periodo lungo", "C": "Analisi C – dal 1999 con proxy"}
+ROSSO_SOTTO = "#C62828"  # zona sotto il capitale investito
+
+# Indicatore di rischio a 5 livelli, in base alla volatilità annua simulata (ispirato alla scala SRI europea).
+# colori scuri: il testo bianco sopra resta leggibile (contrasto >= 4,5:1)
+LIVELLI_RISCHIO = [(0.08, "Basso", "#1B5E20"), (0.14, "Medio-basso", "#3F6B12"), (0.20, "Medio", "#8A5A00"),
+                   (0.30, "Alto", "#B23C00"), (float("inf"), "Molto alto", "#A31515")]
+
+
+def livello_rischio(vol):
+    """(numero 1-5, etichetta, colore) dalla volatilità annua."""
+    for i, (soglia, nome, col) in enumerate(LIVELLI_RISCHIO):
+        if vol < soglia:
+            return i + 1, nome, col
+    return 5, LIVELLI_RISCHIO[-1][1], LIVELLI_RISCHIO[-1][2]
+
+
+def criteri_rischio():
+    righe, basso = [], 0.0
+    for i, (soglia, nome, _) in enumerate(LIVELLI_RISCHIO):
+        intervallo = f"da {pct(basso, 0)} a {pct(soglia, 0)}" if np.isfinite(soglia) else f"da {pct(basso, 0)} in su"
+        righe.append([f"{i + 1} – {nome}", intervallo])
+        basso = soglia
+    return T(["Volatilità annua simulata"], righe, sx=True)
 
 
 # ------------------------------------------------------------------ formattazione italiana
 def num_it(n): return f"{n:,}".replace(",", ".")
 def eur(v): return "–" if v is None or not np.isfinite(v) else f"{v:,.0f} €".replace(",", ".")
-def pct(v, d=1): return "–" if v is None or not np.isfinite(v) else f"{v * 100:.{d}f}%".replace(".", ",")
+def pct(v, d=1):
+    """Percentuale in formato italiano, sempre con almeno una cifra decimale (es. 12,3%)."""
+    return "–" if v is None or not np.isfinite(v) else f"{v * 100:.{max(d, 1)}f}%".replace(".", ",")
 def num(v, d=1): return "mai" if not np.isfinite(v) else f"{v:.{d}f}".replace(".", ",")
 def esc(s): return html.escape(str(s), quote=False)
 
@@ -63,6 +89,7 @@ def fan_chart(ris, a):
         b = s["bande"][k]
         x = np.arange(b.shape[1]) / 12
         c = col[k]
+        ax.fill_between(x, 0, s["versato"], color=ROSSO_SOTTO, alpha=0.11, lw=0, label="Sotto il capitale investito")
         ax.fill_between(x, b[0], b[4], color=c, alpha=0.15, lw=0, label="5°–95° percentile")
         ax.fill_between(x, b[1], b[3], color=c, alpha=0.30, lw=0, label="25°–75° percentile")
         ax.plot(x, b[2], color=c, lw=2, label="Mediana")
@@ -166,11 +193,11 @@ FMT = {"Totale versato": eur, "Valore mediano": eur, "5° percentile": eur, "95�
        "Tempo sott'acqua max, mediano (anni)": num, "Tempo sott'acqua max, peggiore 95% (anni)": num}
 
 
-def tab_orizzonte(ris, h, anal):
+def tab_orizzonte(ris, h, a):
+    """Tabella di un solo orizzonte e una sola analisi (le analisi non sono più affiancate: entrano nella pagina)."""
     nomi = ris["nomi"]
-    righe = [[r] + [FMT[r](ris["sim"][a]["orizzonti"][h].loc[r, k]) for a in anal for k in nomi] for r in RIGHE_ORIZZONTE]
-    gruppi = [(f"Analisi {a}", len(nomi)) for a in anal] if len(anal) > 1 else None
-    return T([corto(k) for k in nomi] * len(anal), righe, gruppi)
+    righe = [[r] + [FMT[r](ris["sim"][a]["orizzonti"][h].loc[r, k]) for k in nomi] for r in RIGHE_ORIZZONTE]
+    return T([corto(k) for k in nomi], righe)
 
 
 def ordine(vals, desc=True):
@@ -317,12 +344,82 @@ def sezione_convergenza(ris):
             ("box", [testo_convergenza(ris)])]
 
 
+# ------------------------------------------------------------------ spiegazioni automatiche dei grafici
+def didascalia_fan(ris, a):
+    s, H = ris["sim"][a], ris["cfg"]["orizzonte_anni"]
+    j = H * 12
+    larg = {k: (s["bande"][k][4][j] - s["bande"][k][0][j]) / max(s["bande"][k][2][j], 1e-9) for k in s["nomi"]}
+    sotto = {k: s["orizzonti"][H].loc["Prob. sotto il versato", k] for k in s["nomi"]}
+    piu, meno, rischio = max(larg, key=larg.get), min(larg, key=larg.get), max(sotto, key=sotto.get)
+    return (f"La fascia di «{piu}» è la più larga: i risultati possibili sono i più dispersi; quella di «{meno}» è la più stretta. "
+            f"La zona rossa è sotto il capitale investito: a {H} anni «{rischio}» ci finisce più spesso ({pct(sotto[rischio])} dei casi).")
+
+
+def didascalia_mdd(ris):
+    s, H = ris["sim"]["A"], ris["cfg"]["orizzonte_anni"]
+    dd = {k: s["orizzonti"][H].loc["Max drawdown mediano", k] for k in s["nomi"]}
+    lo, hi = min(dd, key=dd.get), max(dd, key=dd.get)
+    return (f"Più una distribuzione sta a sinistra, più i cali sono profondi. Nel caso tipico «{lo}» attraversa il calo più profondo "
+            f"({pct(dd[lo])}), «{hi}» il più contenuto ({pct(dd[hi])}).")
+
+
+def didascalia_rischio(ris, a):
+    st, comp, frasi = ris["storico"][a], ris["cfg"]["composizione"], []
+    for k, rc in st["rc"].items():
+        pesi = np.array(list(comp[k].values()))
+        rapp = rc.values / pesi
+        i = int(np.argmax(rapp))
+        if rapp[i] > 1.15:
+            frasi.append(f"in «{k}» {rc.index[i]} pesa il {pct(pesi[i])} ma porta il {pct(rc.values[i])} del rischio")
+    if not frasi:
+        return "In ogni portafoglio il rischio è distribuito in modo simile ai pesi: nessun titolo domina."
+    return "Titoli che pesano sul rischio più di quanto pesano in euro: " + "; ".join(frasi) + "."
+
+
+def didascalia_corr(ris):
+    c = ris["storico"]["A"]["corr"].loc[ris["nomi"], ris["nomi"]]
+    coppie = [(c.iloc[i, j], c.index[i], c.columns[j]) for i in range(len(c)) for j in range(i + 1, len(c))]
+    if not coppie:
+        return ""
+    alta, bassa = max(coppie), min(coppie)
+    return (f"I portafogli più legati sono «{alta[1]}» e «{alta[2]}» (correlazione {num(alta[0], 2)}); i meno legati «{bassa[1]}» e "
+            f"«{bassa[2]}» ({num(bassa[0], 2)}). Unire portafogli poco correlati riduce le oscillazioni complessive.")
+
+
+def dati_schede(ris, a="A"):
+    """Numeri chiave per portafoglio (usati da «In una pagina» nel report e dalle card dell'app)."""
+    s, H, bn = ris["sim"][a], ris["cfg"]["orizzonte_anni"], ris["bench_nome"]
+    out = []
+    for k in s["nomi"]:
+        vol = s["vol_sim"][k]
+        liv = livello_rischio(vol)
+        o = s["orizzonti"][H]
+        out.append({"nome": k, "colore": colori(ris)[k], "valore_mediano": o.loc["Valore mediano", k], "versato": o.loc["Totale versato", k],
+                    "prob_perdita": o.loc["Prob. sotto il versato", k], "mdd": o.loc["Max drawdown mediano", k], "vol": vol,
+                    "vol_vs_bench": vol / s["vol_sim"][bn], "livello": liv[0], "livello_nome": liv[1], "livello_colore": liv[2],
+                    "benchmark": k == bn})
+    return out
+
+
+def sezione_una_pagina(ris):
+    H = ris["cfg"]["orizzonte_anni"]
+    B = [("nota", f"I numeri chiave di ogni portafoglio a {H} anni (analisi A, {num_it(ris['n'])} simulazioni). "
+                  "Il livello di rischio va da 1 (basso) a 5 (molto alto) ed è indicato con numero, nome e quadratini, non solo con il colore."),
+         ("schede", {"orizzonte": H, "schede": dati_schede(ris)}),
+         ("h3", "Come si legge il livello di rischio"),
+         ("nota", "Il livello dipende dalla volatilità annua simulata, cioè da quanto oscilla il valore in un anno. Le soglie sono "
+                  "ispirate alla scala di rischio (SRI) usata nei documenti europei dei prodotti finanziari, ridotta a 5 livelli."),
+         criteri_rischio()]
+    return B
+
+
 def sezioni(ris):
     """Ritorna {scheda: [blocchi]}."""
     cfg, n, nomi = ris["cfg"], ris["n"], ris["nomi"]
     anal = [a for a in ris["sim"] if a != "C"]
     H = cfg["orizzonte_anni"]
     S = {k: [] for k in SCHEDE}
+    S["In una pagina"] = sezione_una_pagina(ris)
     d = lambda t: t.strftime("%d/%m/%Y")
 
     # ---- Sintesi
@@ -391,47 +488,51 @@ def sezioni(ris):
               + "Max drawdown e tempo sott'acqua sono calcolati dall'inizio fino a quell'anno."))
     for h in cfg["orizzonti"]:
         B.append(("h3", f"Dopo {h} anni"))
-        if len(nomi) <= 4:
-            B.append(tab_orizzonte(ris, h, anal))
-        else:
-            for a in anal:
-                B.append(("nota", f"Analisi {a}"))
-                B.append(tab_orizzonte(ris, h, [a]))
+        for a in anal:
+            B.append(("sottotitolo", NOME_ANALISI[a]))
+            B.append(tab_orizzonte(ris, h, a))
 
     # ---- Fan chart
     B = S["Fan chart"]
     B.append(("nota", "Fascia scura = 50% dei casi, fascia chiara = 90%. I puntini segnano 5°, 50° e 95° percentile agli orizzonti scelti; la linea tratteggiata è il totale versato."))
     for a in anal:
-        B.append(("h3", f"Analisi {a}"))
+        B.append(("h3", NOME_ANALISI[a]))
         B.append(("img", fan_chart(ris, a)))
+        B.append(("didascalia", didascalia_fan(ris, a)))
 
     # ---- Drawdown
     B = S["Drawdown"]
     B.append(("nota", "Distribuzione del calo massimo (max drawdown) che ogni portafoglio attraversa nell'intero orizzonte: più la curva sta a sinistra, più sono frequenti cali profondi."))
     B.append(("img", istogrammi_mdd(ris)))
-    righe = []
-    for r in ["Max drawdown mediano", "Max drawdown peggiore (95%)", "Tempo sott'acqua max, mediano (anni)", "Tempo sott'acqua max, peggiore 95% (anni)"]:
-        righe.append([r] + [FMT[r](ris["sim"][a]["orizzonti"][H].loc[r, k]) for a in anal for k in nomi])
-    B.append(T([corto(k) for k in nomi] * len(anal), righe, [(f"Analisi {a}", len(nomi)) for a in anal] if len(anal) > 1 else None))
+    B.append(("didascalia", didascalia_mdd(ris)))
+    for a in anal:
+        righe = []
+        for r in ["Max drawdown mediano", "Max drawdown peggiore (95%)", "Tempo sott'acqua max, mediano (anni)", "Tempo sott'acqua max, peggiore 95% (anni)"]:
+            righe.append([r] + [FMT[r](ris["sim"][a]["orizzonti"][H].loc[r, k]) for k in nomi])
+        B.append(("sottotitolo", f"{NOME_ANALISI[a]} – a {H} anni"))
+        B.append(T([corto(k) for k in nomi], righe))
 
     # ---- Rischio e correlazioni
     B = S["Rischio e correlazioni"]
-    righe = []
-    for et, f in (("Volatilità annua storica", lambda a, k: pct(ris["storico"][a]["stat"][k]["vol"])),
-                  ("Volatilità annua simulata", lambda a, k: pct(ris["sim"][a]["vol_sim"][k])),
-                  ("Max drawdown storico", lambda a, k: pct(ris["storico"][a]["stat"][k]["mdd"])),
-                  ("VaR 95% a 1 anno", lambda a, k: pct(ris["sim"][a]["var_es"].loc["VaR 95% 1 anno", k])),
-                  ("Expected Shortfall 95% a 1 anno", lambda a, k: pct(ris["sim"][a]["var_es"].loc["Expected Shortfall 95% 1 anno", k])),
-                  ("Correlazione media tra i titoli", lambda a, k: num(ris["storico"][a]["corr_media"][k], 2) if k in ris["storico"][a]["corr_media"] else "–")):
-        righe.append([et] + [f(a, k) for a in anal for k in nomi])
-    B.append(T([corto(k) for k in nomi] * len(anal), righe, [(f"Analisi {a}", len(nomi)) for a in anal] if len(anal) > 1 else None))
+    metriche_tab = (
+        ("Volatilità annua storica", lambda a, k: pct(ris["storico"][a]["stat"][k]["vol"])),
+        ("Volatilità annua simulata", lambda a, k: pct(ris["sim"][a]["vol_sim"][k])),
+        ("Max drawdown storico", lambda a, k: pct(ris["storico"][a]["stat"][k]["mdd"])),
+        ("VaR 95% a 1 anno", lambda a, k: pct(ris["sim"][a]["var_es"].loc["VaR 95% 1 anno", k])),
+        ("Expected Shortfall 95% a 1 anno", lambda a, k: pct(ris["sim"][a]["var_es"].loc["Expected Shortfall 95% 1 anno", k])),
+        ("Correlazione media tra i titoli", lambda a, k: num(ris["storico"][a]["corr_media"][k], 2) if k in ris["storico"][a]["corr_media"] else "–"))
+    for a in anal:
+        B.append(("sottotitolo", NOME_ANALISI[a]))
+        B.append(T([corto(k) for k in nomi], [[et] + [f(a, k) for k in nomi] for et, f in metriche_tab]))
     g = grafico_rischio(ris, "A")
     if g:
         B.append(("h3", "Da dove arriva il rischio dentro ogni portafoglio (analisi A)"))
         B.append(("img", g))
+        B.append(("didascalia", didascalia_rischio(ris, "A")))
     B.append(("h3", "Correlazione tra i portafogli"))
     B.append(("nota", "1 = si muovono sempre insieme; 0 = indipendenti."))
     B.append(("img", heatmap(ris)))
+    B.append(("didascalia", didascalia_corr(ris)))
 
     # ---- Stress test
     B = S["Stress test"]
@@ -474,7 +575,7 @@ def sezioni(ris):
                 for nome, s in mod:
                     o = ordine(metriche_rischio(ris, s)[m])
                     righe.append([m, nome, esc(o), "sì" if o == rif[m] else "<b>NO</b>"])
-            B.append(("nota", f"Analisi {a}"))
+            B.append(("sottotitolo", NOME_ANALISI[a]))
             B.append(T(["Modello", "Classifica (dal più rischioso)", "Uguale al bootstrap?"], righe, sx=True))
     if ris["sensibilita"]:
         B.append(("h3", "Sensibilità al rendimento atteso"))
@@ -483,7 +584,7 @@ def sezioni(ris):
             for et, s in [("scelta di base", ris["sim"][a])] + var:
                 vals = {k: s["orizzonti"][H].loc["Valore mediano", k] for k in nomi}
                 righe.append([et] + [eur(vals[k]) for k in nomi] + [esc(ordine(vals))])
-            B.append(("nota", f"Analisi {a} – valore mediano a {H} anni"))
+            B.append(("sottotitolo", f"{NOME_ANALISI[a]} – valore mediano a {H} anni"))
             B.append(T([corto(k) for k in nomi] + ["Classifica (dal più alto)"], righe))
     if ris["idio"]:
         rs = cfg["rischio_singolo_titolo"]
@@ -495,7 +596,7 @@ def sezioni(ris):
             for r in ["Prob. sotto il versato", "Max drawdown mediano", "Max drawdown peggiore (95%)", "5° percentile"]:
                 righe.append([r + " – senza crolli"] + [FMT[r](ris["sim"][a]["orizzonti"][H].loc[r, k]) for k in nomi])
                 righe.append([r + " – con crolli"] + [FMT[r](ris["idio"][a]["orizzonti"][H].loc[r, k]) for k in nomi])
-            B.append(("nota", f"Analisi {a}, a {H} anni"))
+            B.append(("sottotitolo", f"{NOME_ANALISI[a]} – a {H} anni"))
             B.append(T([corto(k) for k in nomi], righe))
     if "C" in ris["sim"]:
         B.append(("h3", "Storia allungata dal 1999 con proxy (analisi C)"))
@@ -506,9 +607,10 @@ def sezioni(ris):
                           "di settore + residui ripescati da quelli reali del titolo (stessa volatilità e correlazione misurate quando il titolo esisteva). "
                           "Non sono dati veri. Quota di giorni sintetici: " + (", ".join(sint) or "nessuno") + "."))
         for h in cfg["orizzonti"]:
-            B.append(("nota", f"Dopo {h} anni – analisi C"))
-            B.append(tab_orizzonte(ris, h, ["C"]))
+            B.append(("sottotitolo", f"Dopo {h} anni – analisi C"))
+            B.append(tab_orizzonte(ris, h, "C"))
         B.append(("img", fan_chart(ris, "C")))
+        B.append(("didascalia", didascalia_fan(ris, "C")))
     if B:
         B.insert(0, ("box", conclusioni_stabili(ris) + ["Il <b>livello</b> dei numeri dipende sempre dalle ipotesi (rendimento atteso, periodo storico); "
                                                         "le <b>differenze di rischio</b> tra portafogli sono più solide."]))
@@ -534,20 +636,35 @@ def sezioni(ris):
 
 # ------------------------------------------------------------------ HTML
 CSS = """
-:root{--bg:#fff;--fg:#1c1c1c;--mut:#666;--line:#ddd;--card:#f5f6f8;--warn:#fff4e5;--warnb:#e8a33d}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#16181c;--fg:#e8e8e8;--mut:#9aa0a6;--line:#363a40;--card:#1f2227;--warn:#33291a;--warnb:#c58a2b}}
-.rep{background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
-body.rep{max-width:1100px;margin:0 auto;padding:16px}
-.rep h1{font-size:1.7rem}.rep h2{margin-top:2.2rem;border-bottom:1px solid var(--line);padding-bottom:4px}.rep h3{margin-top:1.4rem}
-.rep table{border-collapse:collapse;margin:10px 0;font-size:.84rem;width:100%}.rep td,.rep th{border:1px solid var(--line);padding:4px 7px;text-align:right}
+:root{--bg:#fff;--fg:#1c1c1c;--mut:#5f6368;--line:#dcdfe3;--card:#f5f6f8;--warn:#fff4e5;--warnb:#e8a33d;--accento:#1F3A5F}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#15181d;--fg:#e8e8e8;--mut:#9aa0a6;--line:#363a40;--card:#1f2329;--warn:#33291a;--warnb:#c58a2b;--accento:#8fb3e0}}
+.rep{background:var(--bg);color:var(--fg);font:15px/1.6 system-ui,-apple-system,Segoe UI,sans-serif}
+body.rep{max-width:1100px;margin:0 auto;padding:16px 20px}
+.rep h1{font-size:1.9rem;margin:.2rem 0}.rep h2{margin-top:2.6rem;border-bottom:2px solid var(--accento);padding-bottom:4px;color:var(--accento)}
+.rep h3{margin-top:1.6rem}.rep h4.sottotitolo{margin:1rem 0 .2rem;font-size:.95rem;color:var(--mut);font-weight:600}
+.rep table{border-collapse:collapse;margin:8px 0 14px;font-size:.86rem;width:100%}.rep td,.rep th{border:1px solid var(--line);padding:5px 8px;text-align:right}
 .rep th{background:var(--card)}.rep th.g{text-align:center}.rep td.e{text-align:left;font-weight:600;background:var(--card)}.rep table.sx td{text-align:left}
-.rep .sc{overflow-x:auto}.rep img{max-width:100%;height:auto;background:#fff}.rep .box{background:var(--card);padding:10px 16px;border-radius:8px}
+.rep .sc{overflow-x:auto}.rep img{max-width:100%;height:auto;background:#fff;border-radius:6px}.rep .box{background:var(--card);padding:10px 16px;border-radius:8px}
 .rep .warn{background:var(--warn);border-left:5px solid var(--warnb);padding:10px 16px;border-radius:6px;margin:12px 0}
-.rep .nota{color:var(--mut);font-size:.9rem}.rep details{margin:8px 0}.rep summary{cursor:pointer;font-weight:600}
+.rep .nota{color:var(--mut);font-size:.9rem}.rep .didascalia{color:var(--mut);font-size:.9rem;font-style:italic;margin:.2rem 0 1rem;border-left:3px solid var(--line);padding-left:10px}
+.rep details{margin:8px 0}.rep summary{cursor:pointer;font-weight:600}
+.rep .copertina{border:1px solid var(--line);border-radius:12px;padding:22px 26px;margin:8px 0 18px;background:var(--card)}
+.rep .copertina .sotto{color:var(--mut);margin:.2rem 0 .8rem}.rep .chip{display:inline-block;margin:3px 8px 3px 0;padding:2px 10px;border-radius:12px;border:1px solid var(--line);font-size:.88rem}
+.rep .chip i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+.rep nav.indice ol{columns:2;margin:.4rem 0}.rep nav.indice a{color:var(--accento);text-decoration:none}.rep nav.indice a:hover{text-decoration:underline}
+.rep .schede{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;margin:12px 0}
+.rep .scheda{border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--bg)}
+.rep .scheda .nome{font-weight:700;font-size:1.02rem;margin-bottom:6px}.rep .scheda dl{margin:8px 0 0;display:grid;grid-template-columns:1fr auto;gap:2px 8px;font-size:.88rem}
+.rep .scheda dt{color:var(--mut)}.rep .scheda dd{margin:0;text-align:right;font-weight:600}
+.rep .badge{display:inline-block;color:#fff;border-radius:6px;padding:2px 8px;font-size:.82rem;font-weight:600}.rep .quadri{letter-spacing:2px;margin-left:6px}
 """
 
 
-CSS_APP = re.sub(r"@media\(prefers-color-scheme:dark\)[^\n]*\n", "", CSS)  # nell'app il tema è sempre chiaro
+CSS_APP = re.sub(r"@media\(prefers-color-scheme:dark\)[^\n]*\n", "", CSS)  # nell'app i blocchi del report restano chiari
+
+
+def quadratini(n):
+    return "■" * n + "□" * (5 - n)
 
 
 def _html_tab(t):
@@ -560,16 +677,35 @@ def _html_tab(t):
     return h + "</table></div>"
 
 
+def html_schede(d):
+    h = '<div class="schede">'
+    for s in d["schede"]:
+        h += (f'<div class="scheda" style="border-top:5px solid {s["colore"]}"><div class="nome">{esc(s["nome"])}</div>'
+              f'<span class="badge" style="background:{s["livello_colore"]}">Rischio {s["livello"]}/5 · {s["livello_nome"]}</span>'
+              f'<span class="quadri" aria-hidden="true">{quadratini(s["livello"])}</span><dl>'
+              f'<dt>Valore mediano a {d["orizzonte"]} anni</dt><dd>{eur(s["valore_mediano"])}</dd>'
+              f'<dt>Totale versato</dt><dd>{eur(s["versato"])}</dd>'
+              f'<dt>Probabilità di perdita</dt><dd>{pct(s["prob_perdita"])}</dd>'
+              f'<dt>Calo massimo tipico</dt><dd>{pct(s["mdd"])}</dd>'
+              f'<dt>Volatilità annua</dt><dd>{pct(s["vol"])}</dd>'
+              f'<dt>Volatilità vs benchmark</dt><dd>{"—" if s["benchmark"] else num(s["vol_vs_bench"]) + " volte"}</dd></dl></div>')
+    return h + "</div>"
+
+
 def html_blocchi(blocchi):
     out = []
     for b in blocchi:
         k = b[0]
         if k in ("h2", "h3"):
             out.append(f"<{k}>{esc(b[1])}</{k}>")
+        elif k == "sottotitolo":
+            out.append(f"<h4 class='sottotitolo'>{esc(b[1])}</h4>")
         elif k == "p":
             out.append(f"<p>{b[1]}</p>")
         elif k == "nota":
             out.append(f"<p class='nota'>{b[1]}</p>")
+        elif k == "didascalia":
+            out.append(f"<p class='didascalia'>{b[1]}</p>")
         elif k == "warn":
             out.append(f"<div class='warn'>{b[1]}</div>")
         elif k == "box":
@@ -578,6 +714,8 @@ def html_blocchi(blocchi):
             out.append("<ul>" + "".join(f"<li>{x}</li>" for x in b[1]) + "</ul>")
         elif k == "tab":
             out.append(_html_tab(b[1]))
+        elif k == "schede":
+            out.append(html_schede(b[1]))
         elif k == "img":
             out.append(f'<img alt="grafico" src="data:image/png;base64,{base64.b64encode(b[1]).decode()}">')
         elif k == "dettagli":
@@ -595,9 +733,16 @@ def intestazione(ris):
 def html_report(ris, S=None):
     S = S or sezioni(ris)
     titolo = f"Confronto portafogli – {esc(ris['cfg']['nome'])}"
-    corpo = "".join(f"<h2>{esc(k)}</h2>{html_blocchi(v)}" for k, v in S.items() if v)
+    sezioni_piene = [(k, v) for k, v in S.items() if v]
+    col = colori(ris)
+    chips = "".join(f'<span class="chip"><i style="background:{col[k]}"></i>{esc(k)}</span>' for k in ris["nomi"])
+    indice = "".join(f'<li><a href="#sez-{i}">{esc(k)}</a></li>' for i, (k, _) in enumerate(sezioni_piene))
+    copertina = (f"<header class='copertina'><h1>{titolo}</h1><p class='sotto'>Simulazione Monte Carlo del rischio – {intestazione(ris)}</p>"
+                 f"<div>{chips}</div><p class='nota'>Non è consulenza finanziaria.</p>"
+                 f"<nav class='indice'><b>Indice</b><ol>{indice}</ol></nav></header>")
+    corpo = "".join(f"<h2 id='sez-{i}'>{esc(k)}</h2>{html_blocchi(v)}" for i, (k, v) in enumerate(sezioni_piene))
     return (f"<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
-            f"<title>{titolo}</title><style>{CSS}</style></head><body class='rep'><h1>{titolo}</h1><p class='nota'>{intestazione(ris)}</p>{corpo}</body></html>")
+            f"<title>{titolo}</title><style>{CSS}</style></head><body class='rep'>{copertina}{corpo}</body></html>")
 
 
 # ------------------------------------------------------------------ PDF (reportlab, solo Python)
@@ -627,24 +772,63 @@ def pdf_report(ris, S=None):
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
-    from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import (BaseDocTemplate, Frame, Image, KeepTogether, PageBreak, PageTemplate, Paragraph,
+                                    Spacer, Table, TableStyle)
+    from reportlab.platypus.tableofcontents import TableOfContents
     _font()
     S = S or sezioni(ris)
     buf = io.BytesIO()
     pag = landscape(A4)
-    doc = SimpleDocTemplate(buf, pagesize=pag, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
-                            title=f"Confronto portafogli – {ris['cfg']['nome']}")
     W = pag[0] - 24 * mm
+    BLU = colors.HexColor("#1F3A5F")
     st = {
-        "h1": ParagraphStyle("h1", fontName="DejaVu-B", fontSize=17, leading=21, spaceAfter=4),
-        "h2": ParagraphStyle("h2", fontName="DejaVu-B", fontSize=13.5, leading=17, spaceBefore=6, spaceAfter=6, textColor=colors.HexColor("#0b3d6b")),
+        "titolo": ParagraphStyle("titolo", fontName="DejaVu-B", fontSize=26, leading=31, textColor=BLU, spaceAfter=8),
+        "sotto": ParagraphStyle("sotto", fontName="DejaVu", fontSize=12, leading=16, textColor=colors.HexColor("#444444"), spaceAfter=6),
+        "h2": ParagraphStyle("h2", fontName="DejaVu-B", fontSize=14, leading=18, spaceBefore=4, spaceAfter=8, textColor=BLU),
+        "h2indice": ParagraphStyle("h2indice", fontName="DejaVu-B", fontSize=14, leading=18, spaceAfter=10, textColor=BLU),
         "h3": ParagraphStyle("h3", fontName="DejaVu-B", fontSize=11, leading=14, spaceBefore=8, spaceAfter=4),
+        "sottotitolo": ParagraphStyle("sottotitolo", fontName="DejaVu-B", fontSize=9, leading=12, spaceBefore=4, spaceAfter=2, textColor=colors.HexColor("#555555")),
         "p": ParagraphStyle("p", fontName="DejaVu", fontSize=9, leading=12.5, spaceAfter=4),
         "nota": ParagraphStyle("nota", fontName="DejaVu", fontSize=8, leading=10.5, textColor=colors.HexColor("#555555"), spaceAfter=4),
-        "cell": ParagraphStyle("cell", fontName="DejaVu", fontSize=7, leading=8.6, alignment=2),
-        "cellsx": ParagraphStyle("cellsx", fontName="DejaVu", fontSize=7, leading=8.6),
-        "head": ParagraphStyle("head", fontName="DejaVu-B", fontSize=7, leading=8.6, alignment=1),
+        "didascalia": ParagraphStyle("didascalia", fontName="DejaVu-I", fontSize=8.5, leading=11, textColor=colors.HexColor("#444444"), spaceAfter=6, leftIndent=6),
+        "cell": ParagraphStyle("cell", fontName="DejaVu", fontSize=7.5, leading=9.2, alignment=2),
+        "cellsx": ParagraphStyle("cellsx", fontName="DejaVu", fontSize=7.5, leading=9.2),
+        "head": ParagraphStyle("head", fontName="DejaVu-B", fontSize=7.5, leading=9.2, alignment=1),
+        "scheda": ParagraphStyle("scheda", fontName="DejaVu", fontSize=8.5, leading=11.5),
+        "schedab": ParagraphStyle("schedab", fontName="DejaVu-B", fontSize=10.5, leading=13),
+        "toc0": ParagraphStyle("toc0", fontName="DejaVu", fontSize=11, leading=17, leftIndent=10),
     }
+
+    class Documento(BaseDocTemplate):
+        """Documento con indice (TOC) cliccabile e segnalibri del PDF per ogni sezione."""
+        def __init__(self, *a, **kw):
+            super().__init__(*a, **kw)
+            self.addPageTemplates([PageTemplate(id="pagina", frames=[Frame(self.leftMargin, self.bottomMargin, self.width, self.height, id="f")],
+                                                onPage=piede)])
+            self.n_sez = 0
+
+        def afterFlowable(self, f):
+            if isinstance(f, Paragraph) and f.style.name == "h2":
+                self.n_sez += 1
+                chiave = f"sez{self.n_sez}-{self.page}"
+                testo = f.getPlainText()
+                self.canv.bookmarkPage(chiave)
+                self.canv.addOutlineEntry(testo, chiave, level=0, closed=False)
+                self.notify("TOCEntry", (0, testo, self.page, chiave))
+
+        def beforeDocument(self):
+            self.n_sez = 0
+
+    def piede(c, d):
+        c.saveState()
+        c.setFont("DejaVu", 7)
+        c.setFillColor(colors.HexColor("#777777"))
+        c.drawString(12 * mm, 6 * mm, f"Confronto portafogli – {ris['cfg']['nome']} – non è consulenza finanziaria")
+        c.drawRightString(pag[0] - 12 * mm, 6 * mm, f"pagina {d.page}")
+        c.restoreState()
+
+    doc = Documento(buf, pagesize=pag, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=13 * mm,
+                    title=f"Confronto portafogli – {ris['cfg']['nome']}", author="confronta-portafogli")
 
     def riquadro(par, sfondo, bordo=None):
         t = Table([[par]], colWidths=[W])
@@ -657,7 +841,7 @@ def pdf_report(ris, S=None):
 
     def tabella(t):
         nc = len(t["intest"]) + 1
-        prima = min(0.30, max(0.16, 1.6 / nc)) * W
+        prima = min(0.30, max(0.18, 1.6 / nc)) * W
         altre = (W - prima) / (nc - 1)
         dati = []
         if t["gruppi"]:
@@ -671,9 +855,9 @@ def pdf_report(ris, S=None):
             dati.append([Paragraph("<b>" + _rl(r[0]) + "</b>", st["cellsx"])] + [Paragraph(_rl(c), cs) for c in r[1:]])
         tb = Table(dati, colWidths=[prima] + [altre] * (nc - 1), repeatRows=1 + bool(t["gruppi"]))
         stile = [("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cccccc")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                 ("BACKGROUND", (0, 0), (-1, 0 + bool(t["gruppi"])), colors.HexColor("#f0f2f5")),
-                 ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f2f5")),
-                 ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]
+                 ("BACKGROUND", (0, 0), (-1, 0 + bool(t["gruppi"])), colors.HexColor("#eef1f5")),
+                 ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#eef1f5")),
+                 ("TOPPADDING", (0, 0), (-1, -1), 2.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5)]
         if t["gruppi"]:
             c = 1
             for _, n in t["gruppi"]:
@@ -681,13 +865,51 @@ def pdf_report(ris, S=None):
         tb.setStyle(TableStyle(stile))
         return tb
 
-    def flow(blocchi):
+    def schede(d):
+        per_riga = min(5, len(d["schede"]))
+        larg = W / per_riga
+        celle = []
+        for s in d["schede"]:
+            badge = ParagraphStyle("b", parent=st["scheda"], fontName="DejaVu-B", textColor=colors.white,
+                                   backColor=colors.HexColor(s["livello_colore"]), borderPadding=2)
+            celle.append([Paragraph(_rl(esc(s["nome"])), ParagraphStyle("n", parent=st["schedab"], textColor=colors.HexColor(s["colore"]))),
+                          Spacer(1, 3), Paragraph(f"Rischio {s['livello']}/5 · {s['livello_nome']}", badge),
+                          Paragraph(quadratini(s["livello"]), st["scheda"]), Spacer(1, 3),
+                          Paragraph(f"Valore mediano a {d['orizzonte']} anni: <b>{eur(s['valore_mediano'])}</b>", st["scheda"]),
+                          Paragraph(f"Totale versato: {eur(s['versato'])}", st["scheda"]),
+                          Paragraph(f"Probabilità di perdita: <b>{pct(s['prob_perdita'])}</b>", st["scheda"]),
+                          Paragraph(f"Calo massimo tipico: <b>{pct(s['mdd'])}</b>", st["scheda"]),
+                          Paragraph(f"Volatilità annua: {pct(s['vol'])}", st["scheda"]),
+                          Paragraph("Volatilità vs benchmark: " + ("—" if s["benchmark"] else f"<b>{num(s['vol_vs_bench'])} volte</b>"), st["scheda"])])
         out = []
-        for b in blocchi:
+        for i in range(0, len(celle), per_riga):
+            riga = celle[i:i + per_riga]
+            riga += [""] * (per_riga - len(riga))
+            tb = Table([riga], colWidths=[larg] * per_riga)
+            stile = [("VALIGN", (0, 0), (-1, -1), "TOP"), ("BOX", (0, 0), (-1, -1), 0, colors.white),
+                     ("LEFTPADDING", (0, 0), (-1, -1), 8), ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                     ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]
+            for j, s in enumerate(d["schede"][i:i + per_riga]):
+                stile += [("BOX", (j, 0), (j, 0), 0.6, colors.HexColor("#cfd4da")), ("LINEABOVE", (j, 0), (j, 0), 4, colors.HexColor(s["colore"]))]
+            tb.setStyle(TableStyle(stile))
+            out += [tb, Spacer(1, 8)]
+        return out
+
+    def immagine(dati_png, prec, dopo):
+        from PIL import Image as PI
+        w, h = PI.open(io.BytesIO(dati_png)).size
+        larg = min(W, w * 0.62)
+        alt = larg * h / w
+        if alt > pag[1] - 65 * mm:
+            alt = pag[1] - 65 * mm; larg = alt * w / h
+        return KeepTogether(prec + [Image(io.BytesIO(dati_png), width=larg, height=alt)] + dopo)
+
+    def flow(blocchi):
+        out, i = [], 0
+        while i < len(blocchi):
+            b = blocchi[i]
             k = b[0]
-            if k in ("h2", "h3"):
-                out.append(Paragraph(_rl(b[1]), st[k]))
-            elif k in ("p", "nota"):
+            if k in ("h2", "h3", "sottotitolo", "p", "nota", "didascalia"):
                 out.append(Paragraph(_rl(b[1]), st[k]))
             elif k == "warn":
                 out += [riquadro(Paragraph(_rl(b[1]), st["p"]), "#fff4e5", "#e8a33d"), Spacer(1, 5)]
@@ -695,29 +917,41 @@ def pdf_report(ris, S=None):
                 par = [Paragraph("• " + _rl(x), st["p"]) for x in b[1]]
                 out += [riquadro(par, "#f5f6f8") if k == "box" else KeepTogether(par), Spacer(1, 5)]
             elif k == "tab":
-                out += [tabella(b[1]), Spacer(1, 5)]
-            elif k == "img":
-                from PIL import Image as PI
-                w, h = PI.open(io.BytesIO(b[1])).size
-                larg = min(W, w * 0.62)
-                alt = larg * h / w
-                if alt > pag[1] - 60 * mm:
-                    alt = pag[1] - 60 * mm; larg = alt * w / h
-                img = Image(io.BytesIO(b[1]), width=larg, height=alt)
-                if out and isinstance(out[-1], Paragraph):  # tiene insieme titolo/nota e grafico
-                    prec = [out.pop()]
-                    if out and isinstance(out[-1], Paragraph):
-                        prec.insert(0, out.pop())
-                    out.append(KeepTogether(prec + [img]))
-                else:
-                    out.append(img)
+                tb, prec = tabella(b[1]), []
+                while out and isinstance(out[-1], Paragraph) and out[-1].style.name in ("sottotitolo", "h3") and len(prec) < 2:
+                    prec.insert(0, out.pop())  # titolo e sottotitolo sempre sulla stessa pagina della tabella
+                out.append(KeepTogether(prec + [tb]) if prec else tb)
                 out.append(Spacer(1, 5))
+            elif k == "schede":
+                out += schede(b[1])
+            elif k == "img":
+                prec = []
+                while out and isinstance(out[-1], Paragraph) and len(prec) < 2:  # titolo/nota insieme al grafico
+                    prec.insert(0, out.pop())
+                dopo = []
+                if i + 1 < len(blocchi) and blocchi[i + 1][0] == "didascalia":  # e la spiegazione sotto
+                    dopo = [Paragraph(_rl(blocchi[i + 1][1]), st["didascalia"])]
+                    i += 1
+                out += [immagine(b[1], prec, dopo), Spacer(1, 5)]
             elif k == "dettagli":
-                out.append(Paragraph(_rl(b[1]), st["h3"]))
-                out += flow(b[2])
+                out += flow([("h3", b[1])] + list(b[2]))
+            i += 1
         return out
 
-    storia = [Paragraph(_rl(f"Confronto portafogli – {ris['cfg']['nome']}"), st["h1"]), Paragraph(_rl(intestazione(ris)), st["nota"])]
+    # copertina
+    col = colori(ris)
+    elenco = Table([[Paragraph(f'<font color="{col[k]}">■</font>  {_rl(esc(k))}', st["sotto"])] for k in ris["nomi"]], colWidths=[W * 0.6])
+    elenco.setStyle(TableStyle([("LEFTPADDING", (0, 0), (-1, -1), 0), ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1)]))
+    cfg = ris["cfg"]
+    storia = [Spacer(1, 30 * mm), Paragraph("Confronto del rischio di portafogli", st["titolo"]),
+              Paragraph(_rl(esc(cfg["nome"])), st["sotto"]), Spacer(1, 6 * mm), elenco, Spacer(1, 8 * mm),
+              Paragraph(_rl(intestazione(ris)), st["p"]), Spacer(1, 12 * mm),
+              Paragraph("Simulazione Monte Carlo a scopo informativo. Non è consulenza finanziaria e non contiene raccomandazioni "
+                        "di acquisto o vendita.", st["nota"]), PageBreak()]
+    toc = TableOfContents()
+    toc.levelStyles = [st["toc0"]]
+    toc.dotsMinLevel = 0
+    storia += [Paragraph("Indice", st["h2indice"]), Paragraph("Clicca su una voce per andare alla sezione.", st["nota"]), toc, PageBreak()]
     primo = True
     for k, v in S.items():
         if not v:
@@ -727,15 +961,7 @@ def pdf_report(ris, S=None):
         primo = False
         storia.append(Paragraph(_rl(k), st["h2"]))
         storia += flow(v)
-
-    def piede(c, d):
-        c.saveState()
-        c.setFont("DejaVu", 7)
-        c.setFillColor(colors.HexColor("#777777"))
-        c.drawString(12 * mm, 6 * mm, "Non è consulenza finanziaria.")
-        c.drawRightString(pag[0] - 12 * mm, 6 * mm, f"pagina {d.page}")
-        c.restoreState()
-    doc.build(storia, onFirstPage=piede, onLaterPages=piede)
+    doc.multiBuild(storia)
     return buf.getvalue()
 
 

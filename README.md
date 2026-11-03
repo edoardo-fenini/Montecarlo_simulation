@@ -93,9 +93,11 @@ I prezzi scaricati restano nella cartella `cache_prezzi`, così le volte success
 ### Da dove arrivano i dati
 | Dato | Fonte principale | Fonti di riserva (automatiche) |
 |---|---|---|
-| Prezzi di azioni ed ETF | Yahoo Finance tramite la libreria `yfinance` (prezzi *adjusted*, dividendi inclusi) | 1) Yahoo Finance chiamato direttamente, senza `yfinance`; 2) **Stooq** (solo USA, Germania, Londra, Tokyo, Hong Kong; prezzi **senza dividendi**) |
+| Prezzi di azioni ed ETF | Yahoo Finance tramite la libreria `yfinance` (prezzi *adjusted*, dividendi inclusi) | 1) Yahoo Finance chiamato direttamente, senza `yfinance` (utile quando la libreria smette di funzionare); 2) **Stooq** (solo USA, Germania, Londra, Tokyo, Hong Kong; prezzi **senza dividendi**) |
 | Cambi in euro | Yahoo Finance (`EURUSD=X`, …) | Yahoo diretto, **Banca Centrale Europea** (tassi di riferimento dal 1999), Stooq |
-| Dollaro prima del 2003 | FRED (Federal Reserve) | – |
+| Dollaro prima del 2003 | FRED (Federal Reserve) | Banca Centrale Europea |
+
+Verifica fatta il 03/11/2026 su un Mac Apple Silicon (prova automatica su GitHub): Yahoo con `yfinance` e Yahoo diretto funzionano; la Banca Centrale Europea funziona; **Stooq al momento non restituisce dati** (resta come ultimo tentativo, costa mezzo secondo).
 | Prezzi caricati a mano | il tuo file CSV | – |
 
 Ogni fonte viene provata più volte con un'attesa crescente prima di passare alla successiva. Nel report, nella tabella "Titoli usati", c'è la fonte di ogni titolo. Lo script `python strumenti/verifica_fonti.py` mostra quali fonti rispondono dal tuo computer (la stessa prova gira anche nel test automatico su Mac).

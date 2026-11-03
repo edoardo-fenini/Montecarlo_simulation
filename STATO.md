@@ -14,7 +14,11 @@
       offline con cache, CSV manuali, freschezza, controllo ticker. Da qui Stooq è bloccato dalla rete della sessione e Yahoo diretto
       risponde 429: la verifica reale è nel workflow macOS (passo «Quali fonti di prezzi rispondono»).
       Scelta: User-Agent onesto ("confronta-portafogli/1.1"), nessun tentativo di aggirare i limiti di Yahoo.
-- [ ] 2. Report più leggibile (tabelle che entrano, copertina e indice, "In una pagina", formati, spiegazioni, zona sotto il capitale)
+- [x] 2. Report più leggibile: copertina, indice cliccabile e segnalibri PDF, «In una pagina» con livello di rischio 1-5
+      (volatilità simulata: <8% / 8-14% / 14-20% / 20-30% / >=30%, ispirato alla scala SRI), tabelle A e B separate,
+      percentuali con un decimale, didascalie automatiche, zona sotto il capitale nei fan chart. PDF controllato pagina per pagina.
+      Verifica fonti sul Mac di GitHub: yfinance OK, Yahoo diretto OK (ma con range=max dava dati mensili: corretto),
+      BCE falliva per certificati SSL (corretto con certifi, anche per la FRED), Stooq non restituisce dati.
 - [ ] 3. Estetica app e grafici (tema, palette fissa, Plotly, card, pagina iniziale, aiuto, avanzamento, errori)
 - [ ] 4. Funzioni in più (analisi salvate, prova rapida dei pesi, Excel, configurazioni di esempio)
 - [ ] 5. Qualità e prestazioni (tempi, parallelismo, ruff, type hints, test, log)

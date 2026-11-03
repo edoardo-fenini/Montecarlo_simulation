@@ -39,8 +39,17 @@ def settore_yahoo(ticker):
 
 
 def scarica_fred_usd():
-    """Cambio USD per 1 EUR dalla FRED (dal 1999), usato prima dei dati Yahoo (2003)."""
-    raw = urllib.request.urlopen("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXUSEU", timeout=60).read()
+    """Cambio USD per 1 EUR dalla FRED (dal 1999), usato prima dei dati Yahoo (2003).
+    Se la FRED non risponde, ripiega sui cambi della Banca Centrale Europea (anch'essi dal 1999)."""
+    try:
+        raw = fonti.con_tentativi(fonti._scarica_url, "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXUSEU")
+    except fonti.ErroreRete:
+        raw = b""
+    if not raw:
+        s, _ = fonti.con_tentativi(fonti.bce, "EURUSD=X")
+        if not len(s):
+            raise fonti.ErroreRete("FRED e BCE non rispondono")
+        return s
     f = pd.read_csv(io.BytesIO(raw), index_col=0, parse_dates=True).iloc[:, 0]
     return pd.to_numeric(f, errors="coerce").dropna()
 

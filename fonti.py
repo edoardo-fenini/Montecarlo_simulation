@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import ssl
 import time
 import urllib.error
 import urllib.parse
@@ -46,10 +47,20 @@ def _pulisci(s: pd.Series) -> pd.Series:
     return s[~s.index.duplicated(keep="last")].sort_index()
 
 
+def _contesto_ssl():
+    """Certificati di certifi: il Python installato da uv/python.org sul Mac a volte non trova quelli di sistema
+    (errore CERTIFICATE_VERIFY_FAILED, visto sul Mac di GitHub Actions con la BCE e la FRED)."""
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
 def _scarica_url(url: str) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": AGENTE, "Accept": "*/*"})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+        with urllib.request.urlopen(req, timeout=TIMEOUT, context=_contesto_ssl()) as r:
             return r.read()
     except urllib.error.HTTPError as e:
         if e.code in (404, 400):
@@ -89,8 +100,9 @@ def yahoo_yfinance(ticker: str):
 
 def yahoo_diretto(ticker: str):
     """Stessi dati di Yahoo, chiesti direttamente all'API dei grafici (utile quando yfinance smette di funzionare)."""
+    # con range=max Yahoo restituisce dati mensili: servono le date esplicite per avere i prezzi giornalieri
     url = ("https://query2.finance.yahoo.com/v8/finance/chart/" + urllib.parse.quote(ticker) +
-           "?range=max&interval=1d&events=div%2Csplit&includeAdjustedClose=true")
+           f"?period1=0&period2={int(time.time())}&interval=1d&events=div%2Csplit&includeAdjustedClose=true")
     raw = _scarica_url(url)
     if not raw:
         return vuota()
@@ -106,6 +118,9 @@ def yahoo_diretto(ticker: str):
     md = r.get("meta", {})
     date = pd.to_datetime(pd.Series(ts) + int(md.get("gmtoffset") or 0), unit="s")
     s = _pulisci(pd.Series(serie, index=date))
+    if len(s) > 20 and s.index.to_series().diff().dt.days.median() > 4:
+        log.warning("%s: Yahoo diretto ha restituito dati non giornalieri, li scarto", ticker)
+        return vuota()
     return s, {"valuta": md.get("currency"), "tipo": md.get("instrumentType"),
                "nome": md.get("longName") or md.get("shortName"), "borsa": md.get("fullExchangeName") or md.get("exchangeName")}
 

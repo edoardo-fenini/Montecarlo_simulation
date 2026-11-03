@@ -12,6 +12,20 @@
 - Controllo dei ticker nell'app: nome completo, borsa, valuta, anni di storia e fonte.
 - `strumenti/verifica_fonti.py`: mostra quali fonti rispondono (eseguito anche nella prova automatica su Mac).
 
+### Report più leggibile
+- Copertina e indice cliccabile (HTML e PDF, con i segnalibri del PDF).
+- Nuova prima sezione «In una pagina»: una scheda per portafoglio con valore mediano, probabilità di perdita, calo massimo
+  tipico, volatilità rispetto al benchmark e livello di rischio da 1 a 5 (numero, nome, quadratini e colore; criteri spiegati).
+- Le tabelle delle analisi A e B non sono più affiancate: nel PDF entrano sempre nella pagina; titoli tenuti con la tabella.
+- Percentuali sempre con una cifra decimale (TER con due), migliaia con il punto, € dopo il numero.
+- Sotto ogni grafico una spiegazione automatica di cosa guardare.
+- Nei fan chart la zona sotto il capitale investito è colorata.
+
+### Correzioni
+- Sul Mac le richieste dirette (FRED, BCE) fallivano con un errore di certificato SSL: ora si usano i certificati di
+  `certifi`. Nella 1.0 il cambio del dollaro prima del 2003 (FRED) poteva mancare sul Mac: interessava solo l'analisi C.
+- Yahoo diretto: richiesta con date esplicite per avere prezzi giornalieri (con `range=max` Yahoo li dà mensili).
+
 ### Sicurezza delle modifiche
 - Test di non regressione (`tests/test_non_regressione.py`): con configurazione e seed fissi, 1.236 numeri chiave
   (mediane, percentili, probabilità, drawdown, stress test, convergenza, modelli) devono restare identici.
