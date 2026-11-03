@@ -88,7 +88,34 @@ Nella **barra a sinistra**:
 
 **Salva / carica configurazione**: in fondo alla barra laterale puoi scaricare le impostazioni correnti in un file `.yaml` e ricaricarle la volta dopo.
 
-I prezzi scaricati restano nella cartella `cache_prezzi`, così le volte successive l'app è più veloce. Per avere i prezzi più recenti spunta **Aggiorna i dati**.
+I prezzi scaricati restano nella cartella `cache_prezzi`, così le volte successive l'app è più veloce. Per avere i prezzi più recenti spunta **Aggiorna i dati**. La data dei dati è indicata in alto nei risultati e nel report ("Dati aggiornati al …").
+
+### Da dove arrivano i dati
+| Dato | Fonte principale | Fonti di riserva (automatiche) |
+|---|---|---|
+| Prezzi di azioni ed ETF | Yahoo Finance tramite la libreria `yfinance` (prezzi *adjusted*, dividendi inclusi) | 1) Yahoo Finance chiamato direttamente, senza `yfinance`; 2) **Stooq** (solo USA, Germania, Londra, Tokyo, Hong Kong; prezzi **senza dividendi**) |
+| Cambi in euro | Yahoo Finance (`EURUSD=X`, …) | Yahoo diretto, **Banca Centrale Europea** (tassi di riferimento dal 1999), Stooq |
+| Dollaro prima del 2003 | FRED (Federal Reserve) | – |
+| Prezzi caricati a mano | il tuo file CSV | – |
+
+Ogni fonte viene provata più volte con un'attesa crescente prima di passare alla successiva. Nel report, nella tabella "Titoli usati", c'è la fonte di ogni titolo. Lo script `python strumenti/verifica_fonti.py` mostra quali fonti rispondono dal tuo computer (la stessa prova gira anche nel test automatico su Mac).
+
+**Senza internet**: se le fonti non rispondono ma i prezzi sono già in `cache_prezzi`, lo strumento usa quelli e lo scrive negli avvisi, con la data dell'ultimo aggiornamento.
+
+### Caricare i prezzi da un file (se le fonti online non funzionano)
+1. Scarica i prezzi a mano, ad esempio da finance.yahoo.com → pagina del titolo → **Historical Data** → **Download**, oppure da un altro sito.
+2. Nell'app apri **📄 Carica prezzi da file**, scegli il file, scrivi il ticker con cui lo userai, la valuta e il tipo (azione o ETF), poi premi **Importa i prezzi**.
+3. Usa quel ticker nella tabella dei portafogli. I prezzi caricati a mano non vengono mai sovrascritti dai download.
+
+Formato del file: una colonna con la **data** (`GG/MM/AAAA` oppure `AAAA-MM-GG`) e una con il **prezzo** (meglio se *Adj Close*, cioè con i dividendi). Separatore `;` o `,`, decimali con la virgola o con il punto; le righe che iniziano con `#` sono ignorate. Esempio pronto: `esempi/prezzi_esempio.csv`. Dalla riga di comando si può fare lo stesso in configurazione:
+
+```yaml
+prezzi_da_file:
+  MIOTITOLO: {file: esempi/prezzi_esempio.csv, valuta: EUR}
+```
+
+### Controllo dei ticker
+Nella barra laterale, **🔎 Controllo dei ticker** mostra per ogni ticker il nome completo della società, la borsa, la valuta, gli anni di storia e la fonte. Serve ad accorgersi subito di un ticker sbagliato che punta a un'altra azienda. I ticker nuovi (fino a tre alla volta) vengono controllati appena li scrivi; per molti ticker nuovi c'è il pulsante **Scarica e controlla tutti i ticker**.
 
 ### Come leggere il report: glossario breve
 

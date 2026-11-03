@@ -181,6 +181,7 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
         progresso(0.0, "Scarico/leggo i dati...")
     log("1/4  Dati: lettura dalla cache o download da Yahoo Finance")
     arch = D.Archivio(cartella_cache, aggiorna_dati, log, scaricatore)
+    D.importa_da_configurazione(cfg, arch)
     dati = D.costruisci(cfg, arch)
     R = dati["R"]
     proxy_info = None

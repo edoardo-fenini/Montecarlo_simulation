@@ -54,6 +54,7 @@ DEFAULT = {
     "ter": {},       # opzionale: TICKER_ETF: TER annuo (es. CSSPX.MI: 0.0007)
     "settori": {},   # opzionale: TICKER: tech | finanza | altro  (per gli stress test)
     "proxy": {},     # opzionale: TICKER: TICKER_PROXY            (per l'analisi C)
+    "prezzi_da_file": {},  # opzionale: TICKER: {file: percorso.csv, valuta: EUR} (prezzi scaricati a mano)
     "portafogli": [],
 }
 
@@ -218,6 +219,10 @@ def prepara(dati):
         raise ErroreConfig("I TER degli ETF devono essere numeri (es. 0.002 per lo 0,20%).")
     if cfg["ter_etf_default"] < 0 or cfg["ter_etf_default"] > 0.03 or any(v < 0 or v > 0.03 for v in cfg["ter"].values()):
         raise ErroreConfig("I TER degli ETF vanno scritti come frazione (0.002 = 0,20%) e devono essere tra 0 e 0.03.")
+    pf = cfg.get("prezzi_da_file") or {}
+    if not isinstance(pf, dict) or any(not isinstance(v, dict) or "file" not in v for v in pf.values()):
+        raise ErroreConfig("«prezzi_da_file»: per ogni ticker indica almeno «file» (es. XYZ: {file: dati/xyz.csv, valuta: EUR}).")
+    cfg["prezzi_da_file"] = {str(k).upper(): v for k, v in pf.items()}
     cfg["proxy"] = {str(k).upper(): str(v).upper() for k, v in (cfg.get("proxy") or {}).items()}
     return cfg
 

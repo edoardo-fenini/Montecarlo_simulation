@@ -23,6 +23,10 @@ jobs:
           .venv/bin/python -c "import sys, platform; print(sys.version); print(platform.machine())"
           test -d .python && test -d .venv
 
+      - name: Quali fonti di prezzi rispondono (informativo)
+        continue-on-error: true
+        run: .venv/bin/python strumenti/verifica_fonti.py
+
       - name: Test automatici
         run: .venv/bin/python -m pytest -q tests
 

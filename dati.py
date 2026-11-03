@@ -1,8 +1,9 @@
 """Dati: download da Yahoo Finance con cache su disco, conversione in EUR, controlli,
 classificazione automatica del settore (per stress test e proxy dell'analisi C)."""
-import io, json, logging, os, re, urllib.request, warnings
+import datetime, io, json, logging, os, re, urllib.request, warnings
 import numpy as np
 import pandas as pd
+import fonti
 from configurazione import BENCH
 
 warnings.filterwarnings("ignore")
@@ -25,26 +26,7 @@ class ErroreDati(Exception):
 
 
 # ------------------------------------------------------------------ download
-def scarica_yahoo(ticker):
-    """Prezzi 'adjusted close' (dividendi inclusi) e metadati di un ticker da Yahoo Finance."""
-    import yfinance as yf
-    tk = yf.Ticker(ticker)
-    try:
-        h = tk.history(period="max", auto_adjust=False, actions=False)
-    except Exception as e:
-        raise ErroreDati(f"Non riesco a scaricare «{ticker}» da Yahoo Finance ({e}). Controlla la connessione a internet.")
-    if h is None or h.empty or "Adj Close" not in h:
-        return pd.Series(dtype=float), {}
-    s = h["Adj Close"].dropna()
-    s = s[s > 0]
-    idx = s.index
-    if getattr(idx, "tz", None) is not None:
-        idx = idx.tz_localize(None)
-    s.index = pd.DatetimeIndex(idx).normalize()
-    s = s[~s.index.duplicated(keep="last")].sort_index()
-    md = tk.history_metadata or {}
-    return s, {"valuta": md.get("currency"), "tipo": md.get("instrumentType"),
-               "nome": md.get("longName") or md.get("shortName")}
+FONTE_MANUALE = "File CSV caricato a mano"
 
 
 def settore_yahoo(ticker):
@@ -64,20 +46,28 @@ def scarica_fred_usd():
 
 
 class Archivio:
-    """Cache su disco dei prezzi. Con aggiorna=True ogni ticker viene riscaricato (una volta per esecuzione)."""
+    """Cache su disco dei prezzi.
+    - Con aggiorna=True ogni ticker viene riscaricato (una volta per esecuzione).
+    - Se internet non risponde ma il ticker è in cache, usa la cache e lo segnala negli avvisi (modalità offline).
+    - I prezzi caricati a mano da CSV non vengono mai sovrascritti da un download."""
 
     def __init__(self, cartella=CARTELLA_CACHE, aggiorna=False, log=print, scaricatore=None):
         self.dir, self.aggiorna, self.log = cartella, aggiorna, log
-        self.scarica = scaricatore or scarica_yahoo
+        self.scarica = scaricatore or fonti.scarica_con_ripiego
         self.in_rete = scaricatore is None  # con un downloader di prova (test) niente accessi a internet
-        self.fatti, self.memoria = set(), {}
+        self.fatti, self.memoria, self.avvisi = set(), {}, []
         os.makedirs(cartella, exist_ok=True)
 
     def _base(self, t):
         return os.path.join(self.dir, re.sub(r"[^A-Za-z0-9._-]", "_", t))
 
     def _da_scaricare(self, t, f):
+        if os.path.exists(f) and self._meta(t).get("fonte") == FONTE_MANUALE:
+            return False
         return not os.path.exists(f) or (self.aggiorna and t not in self.fatti)
+
+    def in_cache(self, t):
+        return os.path.exists(self._base(t) + ".csv")
 
     def prezzi(self, t):
         if t in self.memoria:
@@ -85,19 +75,55 @@ class Archivio:
         base = self._base(t)
         if self._da_scaricare(t, base + ".csv"):
             self.log(f"  scarico {t} ...")
-            s, meta = self.scarica(t)
-            if s is None or len(s) == 0:
-                raise ErroreDati(f"Il ticker «{t}» non esiste su Yahoo Finance o non ha dati. "
-                                 "Scrivilo come compare su finance.yahoo.com (es. AAPL, ENI.MI, SAP.DE, IWDA.AS).")
-            s.rename("prezzo").to_csv(base + ".csv", index_label="Date")
-            vecchio = self._meta(t)
-            if "settore" in vecchio and not self.aggiorna:
-                meta["settore"] = vecchio["settore"]
-            json.dump(meta, open(base + ".json", "w"))
-            self.fatti.add(t)
+            try:
+                s, meta = self.scarica(t)
+            except fonti.ErroreRete as e:
+                if self.in_cache(t):
+                    ultimo = pd.read_csv(base + ".csv", index_col=0, parse_dates=True).index[-1]
+                    self.avvisi.append(f"{t}: nessuna risposta dalle fonti online, uso i prezzi salvati (aggiornati al {ultimo:%d/%m/%Y}).")
+                    fonti.log.warning("%s: offline, uso la cache (%s)", t, e)
+                    self.fatti.add(t)
+                    s = None
+                else:
+                    raise ErroreDati(f"Non riesco a scaricare «{t}»: nessuna fonte online risponde (Yahoo Finance, Stooq). "
+                                     "Controlla la connessione a internet e riprova tra qualche minuto, oppure carica i prezzi "
+                                     "da un file CSV (pulsante «Carica prezzi da file» nell'app).") from e
+            if s is not None:
+                if len(s) == 0:
+                    if self.in_cache(t):
+                        self.avvisi.append(f"{t}: le fonti online non lo trovano più, uso i prezzi salvati.")
+                    else:
+                        raise ErroreDati(f"Il ticker «{t}» non esiste su Yahoo Finance (né sulle fonti alternative) o non ha dati. "
+                                         "Scrivilo come compare su finance.yahoo.com (es. AAPL, ENI.MI, SAP.DE, IWDA.AS).")
+                else:
+                    s.rename("prezzo").to_csv(base + ".csv", index_label="Date")
+                    vecchio = self._meta(t)
+                    if "settore" in vecchio and not self.aggiorna:
+                        meta["settore"] = vecchio["settore"]
+                    meta.setdefault("fonte", "Yahoo Finance" if self.in_rete else "dati di prova")
+                    meta["scaricato_il"] = datetime.date.today().isoformat()
+                    json.dump(meta, open(base + ".json", "w"))
+                    self.fatti.add(t)
         s = pd.read_csv(base + ".csv", index_col=0, parse_dates=True).iloc[:, 0]
         self.memoria[t] = (s, self._meta(t))
         return self.memoria[t]
+
+    def importa_csv(self, t, contenuto, valuta, tipo="EQUITY", nome=""):
+        """Salva in cache i prezzi di un CSV scaricato a mano. Ritorna la serie letta."""
+        t = t.strip().upper()
+        if not t:
+            raise ErroreDati("Indica il ticker a cui appartengono i prezzi del file.")
+        try:
+            s = fonti.leggi_csv_prezzi(contenuto)
+        except ValueError as e:
+            raise ErroreDati(f"Non riesco a leggere il file di prezzi per «{t}»: {e}.") from e
+        base = self._base(t)
+        s.rename("prezzo").to_csv(base + ".csv", index_label="Date")
+        meta = {"valuta": valuta.strip(), "tipo": tipo, "nome": nome or f"{t} (prezzi da file)", "borsa": "file",
+                "fonte": FONTE_MANUALE, "scaricato_il": datetime.date.today().isoformat()}
+        json.dump(meta, open(base + ".json", "w"))
+        self.memoria.pop(t, None)
+        return s
 
     def _meta(self, t):
         f = self._base(t) + ".json"
@@ -214,14 +240,41 @@ def costruisci(cfg, arch):
         else:
             nome, primo, m = t, s.index[0], info[t]
         anni = (s.index[-1] - primo).days / 365.25
+        ultimo = (etf if t == BENCH else eur[t]).index[-1]
         righe.append({"ticker": nome, "nome": m.get("nome") or "", "valuta": m.get("valuta"), "tipo": m.get("tipo") or "",
-                      "primo dato": primo.date(), "anni di storia": round(anni, 1)})
+                      "primo dato": primo.date(), "anni di storia": round(anni, 1), "ultimo dato": ultimo.date(),
+                      "borsa": m.get("borsa") or "", "fonte": m.get("fonte") or "Yahoo Finance",  # cache della 1.0: solo Yahoo
+                      "scaricato il": m.get("scaricato_il") or ""})
+        if m.get("fonte") == "Stooq":
+            avvisi.append(f"{nome}: prezzi da Stooq (Yahoo non disponibile), senza dividendi reinvestiti: il rendimento storico è un po' sottostimato.")
+        if (R.index[-1] - ultimo).days > 7:
+            avvisi.append(f"{nome}: l'ultimo prezzo disponibile è del {ultimo:%d/%m/%Y}, più vecchio degli altri titoli.")
         if anni < 3:
             avvisi.append(f"{nome}: solo {anni:.1f} anni di storia. I risultati che lo riguardano sono poco affidabili.")
         for d, v in s[s.abs() > 0.30].items():
             estremi.append(f"{nome}: {v:+.0%} il {d:%d/%m/%Y}")
+    avvisi = list(dict.fromkeys(arch.avvisi + avvisi))
     return {"R": R, "info": pd.DataFrame(righe).set_index("ticker"), "avvisi": avvisi, "estremi": estremi,
             "ultimo_dato": R.index[-1], "calendario": cal}
+
+
+def verifica_ticker(arch, t):
+    """Scheda di un ticker per controllarlo prima della simulazione: nome, borsa, valuta, anni di storia, fonte.
+    Scarica il ticker se non è in cache (così la simulazione dopo è più veloce)."""
+    s, m = arch.prezzi(t)
+    return {"ticker": t, "nome": m.get("nome") or "", "borsa": m.get("borsa") or "", "valuta": m.get("valuta") or "",
+            "tipo": m.get("tipo") or "", "dal": s.index[0].date(), "al": s.index[-1].date(),
+            "anni": round((s.index[-1] - s.index[0]).days / 365.25, 1), "fonte": m.get("fonte") or "Yahoo Finance"}
+
+
+def importa_da_configurazione(cfg, arch):
+    """Importa i CSV indicati in configurazione: prezzi_da_file: {TICKER: {file: percorso, valuta: EUR}}."""
+    for t, v in (cfg.get("prezzi_da_file") or {}).items():
+        try:
+            contenuto = open(v["file"], "rb").read()
+        except (OSError, KeyError, TypeError) as e:
+            raise ErroreDati(f"prezzi_da_file: non riesco a leggere il file per «{t}» ({e}).") from e
+        arch.importa_csv(t, contenuto, v.get("valuta", "EUR"), v.get("tipo", "EQUITY"), v.get("nome", ""))
 
 
 def settimanali(r):

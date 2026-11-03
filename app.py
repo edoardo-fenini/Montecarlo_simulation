@@ -9,6 +9,7 @@ import yaml
 
 import analisi
 import configurazione as C
+import dati as D
 import report
 from dati import ErroreDati
 
@@ -131,6 +132,15 @@ def carica_file():
         ss.msg_caricamento = ("errore", f"Non riesco a caricare «{f.name}»: {e}")
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
+def verifica_cache(t):
+    """Scheda del ticker (scarica e mette in cache i prezzi se mancano). Ritorna un messaggio se non esiste."""
+    try:
+        return D.verifica_ticker(D.Archivio(log=lambda *a: None), t)
+    except ErroreDati as e:
+        return str(e).split(".")[0]
+
+
 def carica_esempio():
     applica_cfg(yaml.safe_load(open(ESEMPIO, encoding="utf-8")))
     ss.pop("ris", None)
@@ -152,6 +162,50 @@ with st.sidebar:
     c1, c2 = st.columns(2)
     c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch")
     c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch")
+
+    # ---- controllo dei ticker: nome, borsa, valuta e storia, per accorgersi subito di un errore
+    riferimenti = {str(x).strip().lower() for x in tab["Portafoglio"]} | {"benchmark"}
+    ticker_tab = list(dict.fromkeys(str(t).strip().upper() for t in tab["Ticker"]
+                                    if str(t).strip() and str(t).strip().lower() not in riferimenti and str(t) != "None"))
+    with st.expander("🔎 Controllo dei ticker", expanded=False):
+        arch_v = D.Archivio(log=lambda *a: None)
+        nuovi = [t for t in ticker_tab if not arch_v.in_cache(t)]
+        automatico = len(nuovi) <= 3 or ss.get("verifica_tutti", False)  # pochi ticker nuovi: li controllo subito
+        if nuovi and not automatico:
+            st.caption(f"{len(nuovi)} ticker non ancora scaricati: {', '.join(nuovi)}.")
+            if st.button("Scarica e controlla tutti i ticker", width="stretch"):
+                ss.verifica_tutti = True
+                st.rerun()
+        righe_v = []
+        with st.spinner("Controllo i ticker..."):
+            for t in ticker_tab:
+                if t in nuovi and not automatico:
+                    continue
+                v = verifica_cache(t)
+                if isinstance(v, str):
+                    righe_v.append({"Ticker": t, "Nome": "❌ " + v, "Borsa": "", "Valuta": "", "Anni": None, "Fonte": ""})
+                else:
+                    righe_v.append({"Ticker": t, "Nome": v["nome"], "Borsa": v["borsa"], "Valuta": v["valuta"], "Anni": v["anni"], "Fonte": v["fonte"]})
+        if righe_v:
+            st.dataframe(pd.DataFrame(righe_v), hide_index=True, width="stretch")
+            st.caption("Controlla che il nome corrisponda all'azienda che intendevi: un ticker sbagliato può indicare un'altra società.")
+
+    with st.expander("📄 Carica prezzi da file", expanded=False):
+        st.caption("Se le fonti online non funzionano, scarica i prezzi a mano (es. da Yahoo Finance → Historical data → Download) "
+                   "e caricali qui. Formato: una colonna con la data e una con il prezzo; vedi esempi/prezzi_esempio.csv.")
+        f_csv = st.file_uploader("File CSV dei prezzi", type=["csv", "txt"], key="file_prezzi")
+        c1, c2 = st.columns(2)
+        t_csv = c1.text_input("Ticker", key="ticker_csv", help="Il nome con cui userai questo titolo nella tabella dei portafogli.")
+        v_csv = c2.selectbox("Valuta dei prezzi", ["EUR", "USD", "GBP", "GBp", "CHF", "JPY", "SEK", "DKK", "NOK", "CAD"], key="valuta_csv")
+        tipo_csv = st.radio("Tipo", ["EQUITY", "ETF"], horizontal=True, key="tipo_csv", format_func=lambda x: "Azione" if x == "EQUITY" else "ETF")
+        if st.button("Importa i prezzi", width="stretch", disabled=f_csv is None or not t_csv.strip()):
+            try:
+                s_imp = D.Archivio(log=lambda *a: None).importa_csv(t_csv, f_csv.getvalue(), v_csv, tipo_csv)
+                verifica_cache.clear()
+                st.success(f"Importati {len(s_imp)} prezzi per {t_csv.strip().upper()} dal {s_imp.index[0]:%d/%m/%Y} al {s_imp.index[-1]:%d/%m/%Y}. "
+                           "Ora puoi usare questo ticker nella tabella.")
+            except ErroreDati as e:
+                st.error(str(e))
 
     st.subheader("Capitale e orizzonte")
     st.number_input("Capitale iniziale (€)", min_value=0.0, step=500.0, key="capitale")
@@ -242,7 +296,7 @@ if "ris" not in ss:
         "_Questo strumento non è consulenza finanziaria._")
 else:
     ris = ss.ris
-    st.caption(report.intestazione(ris))
+    st.caption("📅 " + report.intestazione(ris))
     c1, c2, _ = st.columns([1, 1, 3])
     nome_file = f"report_{(ris['cfg']['nome'] or 'confronto').replace(' ', '_')}"
     c1.download_button("⬇️ Report HTML", ss.html, file_name=f"{nome_file}.html", mime="text/html", width="stretch")

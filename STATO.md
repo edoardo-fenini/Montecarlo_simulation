@@ -10,7 +10,10 @@
 
 ## Versione 1.1 (ramo `v1.1`, poi pull request verso main)
 - [x] 0. Rete di sicurezza: 17 test verdi; test di non regressione (1.236 numeri, dati sintetici, seed fisso)
-- [ ] 1. Dati più affidabili (retry, fonte alternativa, CSV manuale, offline, freschezza, validazione ticker)
+- [x] 1. Dati più affidabili: `fonti.py` (yfinance → Yahoo diretto → Stooq; BCE per i cambi; 3 tentativi 1,5/3/6 s; timeout 25 s),
+      offline con cache, CSV manuali, freschezza, controllo ticker. Da qui Stooq è bloccato dalla rete della sessione e Yahoo diretto
+      risponde 429: la verifica reale è nel workflow macOS (passo «Quali fonti di prezzi rispondono»).
+      Scelta: User-Agent onesto ("confronta-portafogli/1.1"), nessun tentativo di aggirare i limiti di Yahoo.
 - [ ] 2. Report più leggibile (tabelle che entrano, copertina e indice, "In una pagina", formati, spiegazioni, zona sotto il capitale)
 - [ ] 3. Estetica app e grafici (tema, palette fissa, Plotly, card, pagina iniziale, aiuto, avanzamento, errori)
 - [ ] 4. Funzioni in più (analisi salvate, prova rapida dei pesi, Excel, configurazioni di esempio)

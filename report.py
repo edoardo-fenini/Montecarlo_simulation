@@ -373,9 +373,11 @@ def sezioni(ris):
     for t, r in info.iterrows():
         tt = BENCH if t == b["ticker"] else t
         pi = (ris["proxy_info"] or {}).get(tt, {})
-        righe.append([t, esc(corto(r["nome"] or "", 30)), r["valuta"] or "", r["tipo"], d(pd.Timestamp(r["primo dato"])), num(r["anni di storia"]),
-                      num(ris["beta"].get(tt, np.nan), 2), pi.get("categoria", "–"), esc(pi.get("fonte", ""))])
-    B.append(("dettagli", "Titoli usati (valuta, storia, beta, settore)", [T(["Nome", "Valuta", "Tipo", "Primo dato", "Anni", "Beta", "Settore stress", "Come è stato riconosciuto"], righe, sx=True)]))
+        righe.append([t, esc(corto(r["nome"] or "", 30)), esc(r.get("borsa", "") or ""), r["valuta"] or "", r["tipo"],
+                      d(pd.Timestamp(r["primo dato"])), d(pd.Timestamp(r["ultimo dato"])) if r.get("ultimo dato") else "", num(r["anni di storia"]),
+                      num(ris["beta"].get(tt, np.nan), 2), pi.get("categoria", "–"), esc(r.get("fonte", "") or "")])
+    B.append(("dettagli", "Titoli usati (borsa, valuta, storia, beta, settore, fonte dei dati)",
+              [T(["Nome", "Borsa", "Valuta", "Tipo", "Primo dato", "Ultimo dato", "Anni", "Beta", "Settore stress", "Fonte"], righe, sx=True)]))
     if ris["avvisi"]:
         B.append(("warn", "<b>Avvisi sui dati:</b><br/>" + "<br/>".join(esc(x) for x in ris["avvisi"])))
     if ris["estremi"]:
@@ -586,7 +588,7 @@ def html_blocchi(blocchi):
 def intestazione(ris):
     cfg = ris["cfg"]
     vers = f"{eur(cfg['versamento_mensile'])} al mese" if cfg["versamento_mensile"] else "nessun versamento mensile"
-    return (f"{num_it(ris['n'])} simulazioni – capitale iniziale {eur(cfg['capitale_iniziale'])}, {vers}, orizzonte {cfg['orizzonte_anni']} anni "
+    return (f"Dati aggiornati al {ris['ultimo_dato']:%d/%m/%Y} – {num_it(ris['n'])} simulazioni – capitale iniziale {eur(cfg['capitale_iniziale'])}, {vers}, orizzonte {cfg['orizzonte_anni']} anni "
             f"(risultati a {', '.join(str(h) for h in cfg['orizzonti'])} anni) – generato il {datetime.date.today():%d/%m/%Y}")
 
 
