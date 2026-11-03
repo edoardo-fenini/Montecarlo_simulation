@@ -1,0 +1,30 @@
+# Quando pubblichi una release su GitHub, crea uno zip pronto da scaricare e lo allega alla release.
+# Lo zip contiene solo i file del repository: niente .venv, cache dei prezzi o report generati.
+name: Zip per la release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Crea lo zip
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          NOME="confronta-portafogli-${TAG}"
+          git archive --format=zip --prefix="${NOME}/" -o "${NOME}.zip" HEAD
+          unzip -l "${NOME}.zip" | tail -3
+      - name: Allega lo zip alla release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "${TAG}" "confronta-portafogli-${TAG}.zip" --clobber

@@ -5,7 +5,8 @@
 - [x] 2. Script da riga di comando `confronta.py --config ...` -> report/AAAA-MM-GG_nome/ (HTML, PDF con reportlab, CSV con ; e virgola decimale per Excel)
 - [x] 3. App Streamlit `app.py` (verificata in headless: simulazione completa, schede, download, errori chiari)
 - [x] 4. `Installa.command` (uv + Python 3.12 dentro la cartella: .uv, .python, .venv) e `Avvia.command` (porta libera, solo 127.0.0.1, apre il browser) — provati su Linux in una copia pulita senza uv
-- [ ] 5. README e release
+- [x] 5. README passo passo, GitHub Action `.github/workflows/zip-release.yml` (zip allegato alla release), esempio `esempi/2026-11-03_tre_portafogli_metodo_beta/`
+- [ ] Release v1.0.0: da creare dal sito di GitHub (Claude non ha lo strumento per creare release; istruzioni nel README)
 
 ## Scelte fatte (default ragionevoli)
 - Rendimento atteso = media aritmetica annua (1 € vale in media 1+r dopo un anno), come nell'analisi iniziale.
@@ -18,6 +19,12 @@
 - Analisi B solo se il periodo comune (A) parte almeno un anno dopo `inizio_B`; altrimenti A copre già il periodo lungo.
 - Il modulo "confronto tra modelli" include anche la sensibilità al rendimento atteso (variante più bassa e più alta).
 - Stress test: lo shock di un portafoglio è la media pesata degli shock per categoria (tech/finanza/altro); dopo lo shock i versamenti continuano.
+
+## Verifiche fatte
+- 16 test pytest (offline, con un finto Yahoo): configurazione, errori, metodi di rendimento, portafogli misti, end-to-end, report, app.
+- App provata in headless con browser automatico: simulazione completa, schede, download, errore chiaro per ticker sbagliato.
+- `Installa.command` provato su Linux in una copia pulita senza uv (scarica uv e Python 3.12 nella cartella); `Avvia.command` avvia e si ferma alla chiusura. Non provato su un Mac vero.
+- Prova con dati reali europei (EUR, CHF, GBp), ETF, versamenti e portafoglio misto.
 
 ## Come riprendere
 `python -m pytest -q tests` (offline). Esempio di configurazione: `configurazioni/esempio_tre_portafogli.yaml`.

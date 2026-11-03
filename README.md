@@ -1,51 +1,196 @@
-# Confronto del rischio di 3 portafogli azionari (Monte Carlo)
+# Confronto del rischio di portafogli (Monte Carlo)
 
-Confronta cyber security, banche d'investimento/asset management/PE e big tech USA con un ETF azionario mondiale (MSCI World), partendo da 5.000 € senza versamenti, su 15 anni, con risultati a 5, 10 e 15 anni.
-**Non è consulenza finanziaria.**
+Uno strumento per confrontare il **rischio** di più portafogli di azioni ed ETF: simula migliaia di futuri possibili e ti dice quanto possono scendere, quanto è probabile finire sotto quanto hai investito e quanto tempo serve per recuperare. Funziona sul Mac con un doppio clic, senza saper programmare.
 
-## Come aprire il report
-Apri `report.html` con un doppio clic (si apre nel browser; i grafici sono già dentro il file, non serve internet).
-Se sei su GitHub, scarica il file dal repository (pulsante *Download raw file*) e aprilo dal tuo computer.
+> **Non è consulenza finanziaria.** È un aiuto per capire i rischi, non un consiglio di acquisto.
 
-## Come rilanciare tutto
+---
+
+## 1. Scaricare il programma
+
+**Metodo consigliato: lo zip della release.**
+1. Apri la pagina del progetto su GitHub e clicca **Releases** (colonna di destra).
+2. Nell'ultima versione (es. `v1.0.0`) clicca il file **`confronta-portafogli-v1.0.0.zip`**.
+
+**In alternativa**: nella pagina principale del progetto clicca il pulsante verde **Code → Download ZIP**.
+
+## 2. Dove metterlo
+
+1. Apri la cartella **Download** e fai doppio clic sullo zip: si crea una cartella.
+2. Spostala dove preferisci, ad esempio in **Documenti** (es. `Documenti/confronta-portafogli`).
+3. Non metterla su iCloud Drive o in cartelle sincronizzate: l'installazione crea molti file.
+
+## 3. Il primo avvio: l'avviso di sicurezza di macOS
+
+La prima volta macOS blocca i file scaricati da internet ("non può essere aperto perché proviene da uno sviluppatore non identificato"). È normale.
+
+1. Fai doppio clic su **`Installa.command`**: compare l'avviso. Premi **Fine** (o **OK**).
+2. Apri **Impostazioni di Sistema → Privacy e sicurezza**.
+3. Scorri in basso fino al messaggio su `Installa.command` e premi **Apri comunque**, poi conferma con la password del Mac.
+4. Ripeti la stessa cosa la prima volta che apri `Avvia.command`.
+
+## 4. Installare e avviare con il doppio clic
+
+1. **Doppio clic su `Installa.command`.** Si apre il Terminale: lo strumento scarica Python e le librerie **dentro la cartella del programma** (non tocca il resto del Mac). Ci vogliono alcuni minuti e serve internet. Alla fine compare **"Installazione completata"**. Va fatto una volta sola.
+2. **Doppio clic su `Avvia.command`.** Dopo qualche secondo si apre il browser con l'app.
+3. **Per chiudere l'app** chiudi la finestra del Terminale.
+
+Funziona sia sui Mac con chip Apple (M1, M2, M3, M4…) sia sui Mac Intel.
+
+## 5. In alternativa: installazione manuale con Python
+
+Se preferisci, installa Python 3.12 o 3.13 da [python.org](https://www.python.org/downloads/), poi apri il Terminale nella cartella del programma e scrivi:
+
 ```bash
 python3 -m venv .venv
-. .venv/bin/activate          # su Windows: .venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-python scarica_dati.py        # scarica i prezzi in data/ (solo la prima volta o per aggiornarli)
-python confronta.py           # simulazione completa (20.000 simulazioni) e report.html
+streamlit run app.py
 ```
-Altri comandi utili:
+
+Le volte successive bastano:
+
 ```bash
-python confronta.py --veloce      # prova rapida con 1.000 simulazioni -> report_veloce.html
-python confronta.py --tappa 3     # si ferma alla tappa 3 (1 base, 2 stress, 3 analisi C, ... vedi sotto)
-python confronta.py --rifai       # ricalcola tutto ignorando i risultati salvati in risultati/
-python -m pytest tests            # test di correttezza
+source .venv/bin/activate
+streamlit run app.py
 ```
-Le tappe: 2 = versione base, 3 = + stress test, 4 = + analisi C con proxy, 5 = + modelli, sensibilità e rischio sul singolo titolo.
-I risultati intermedi sono salvati in `risultati/`: se cambi solo il report, il rilancio è rapido. **Se cambi parametri o titoli in `config.yaml` usa `--rifai`.**
 
-## Come cambiare titoli e parametri (`config.yaml`)
-- `capitale_iniziale`, `versamento_mensile`, `orizzonte_anni`, `checkpoint_anni` (gli orizzonti mostrati), `n_simulazioni`, `seed`.
-- `rendimento_atteso`: rendimento medio annuo uguale per tutti (default 6%).
-- `costo_ribilanciamento`: costo sul ribilanciamento annuale (0,1%).
-- `portafogli`: elenco dei titoli (ticker Yahoo) di ogni portafoglio, a pesi uguali. Dopo aver cambiato un titolo, rilancia `python scarica_dati.py`.
-- `benchmark`: ETF e TER. `rendimenti_settoriali`: scenario con rendimenti diversi per settore.
-- `idio_p_anno`: probabilità annua di crollo di un singolo titolo (robustezza 4).
+## 6. Come usare l'app
 
-## File
+Nella **barra a sinistra**:
+- **Portafogli**: una riga per titolo con nome del portafoglio, ticker e peso. All'avvio trovi un esempio con tre portafogli (cyber security, banche d'investimento/PE, big tech USA).
+  - I **ticker** si scrivono come su [finance.yahoo.com](https://finance.yahoo.com): `AAPL`, `ENI.MI` (Milano), `SAP.DE` (Francoforte), `ASML.AS` (Amsterdam), `MC.PA` (Parigi), `HSBA.L` (Londra), `NESN.SW` (Zurigo), ETF come `IWDA.AS`. Tutto viene convertito in euro.
+  - **Peso in %**: lascialo vuoto (compare «None») per avere pesi uguali, oppure premi **Pesi uguali**. Se lo scrivi, i pesi di ogni portafoglio devono sommare a 100.
+  - **Portafoglio misto**: nella colonna Ticker scrivi il nome di un altro portafoglio o la parola `benchmark`. Esempio "Satellite": riga `benchmark` con peso 80 e riga `Cyber security` con peso 20.
+  - Per aggiungere una riga usa la riga vuota in fondo alla tabella; per toglierla selezionala e premi il cestino.
+- **Capitale e orizzonte**: capitale iniziale, versamento mensile (anche 0), anni, orizzonti intermedi (es. `5, 10`).
+- **Rendimento atteso**: scegli il metodo.
+  - `beta` (consigliato): rendimento = 2% + beta × 4%. Chi si muove di più con il mercato rende di più in media.
+  - `uguale`: stesso rendimento per tutti (es. 6%). Utile per confrontare solo il rischio.
+  - `storico`: i rendimenti del passato. Attenzione: proietta il passato nel futuro ed è troppo ottimista se scegli titoli che sono già andati bene.
+  - `personalizzato`: scegli tu il rendimento di ogni portafoglio.
+- **Moduli**: stress test e rischio sul singolo titolo sono attivi. Il confronto tra modelli e l'analisi dal 1999 con proxy sono più lenti.
+- **Numero di simulazioni**: 10.000 richiedono circa 1-3 minuti. Per una prova veloce usa 1.000.
+- Premi **▶ Avvia simulazione**.
+
+**Risultati**: compaiono in schede (Sintesi, Risultati per orizzonte, Fan chart, Drawdown, Rischio e correlazioni, Stress test, Robustezza, Limiti). In alto ci sono i pulsanti per scaricare il **report HTML** (si apre con il browser) e il **report PDF**.
+
+**Salva / carica configurazione**: in fondo alla barra laterale puoi scaricare le impostazioni correnti in un file `.yaml` e ricaricarle la volta dopo.
+
+I prezzi scaricati restano nella cartella `cache_prezzi`, così le volte successive l'app è più veloce. Per avere i prezzi più recenti spunta **Aggiorna i dati**.
+
+### Come leggere il report: glossario breve
+
+| Termine | Significato |
+|---|---|
+| **Volatilità** | Quanto oscilla il valore in un anno. 30% = oscillazioni tipiche di ±30%. |
+| **Max drawdown** | Il calo più grande da un massimo al minimo successivo. Da 10.000 a 4.000 € = −60%. |
+| **Tempo sott'acqua** | Il periodo più lungo passato sotto il massimo precedente. |
+| **Percentili** | Il 5° percentile è il valore sotto cui finisce il 5% dei casi peggiori; la mediana (50°) è il caso tipico; il 95° è il 5% dei casi migliori. |
+| **VaR 95% a 1 anno** | La perdita che in un anno viene superata solo nel 5% dei casi. |
+| **ES (Expected Shortfall)** | La perdita media in quel 5% di casi peggiori. |
+| **Volatility drag** | Con le oscillazioni il risultato tipico resta sotto la media: perdere il 50% richiede un +100% per tornare in pari. Più un portafoglio oscilla, più la mediana resta indietro. |
+| **Analisi A / B / C** | A: periodo in cui esistono tutti i titoli. B: periodo lungo, con i pesi ridistribuiti tra i titoli già quotati. C (facoltativa): dal 1999, con dati sintetici di settore per i titoli che non esistevano. |
+
+## 7. Creare una configurazione a mano (file YAML)
+
+Puoi anche lavorare senza app: copia `configurazioni/esempio_tre_portafogli.yaml`, rinominala (es. `configurazioni/mio_portafoglio.yaml`), modificala con TextEdit e lanciala dal Terminale:
+
+```bash
+source .venv/bin/activate
+python confronta.py --config configurazioni/mio_portafoglio.yaml
+```
+
+Il report va in `report/AAAA-MM-GG_nome/`: `report.html`, `report.pdf`, la cartella `dati_csv` (tabelle per Excel) e la configurazione usata. Opzioni utili: `--veloce` (1.000 simulazioni), `--simulazioni 20000` e `--aggiorna-dati`.
+
+Esempio commentato:
+
+```yaml
+nome: il mio confronto            # usato nel nome della cartella del report
+
+capitale_iniziale: 10000          # euro investiti all'inizio
+versamento_mensile: 200           # euro al mese (0 = nessuno)
+orizzonte_anni: 20
+orizzonti_intermedi: [5, 10]      # risultati anche a 5 e 10 anni
+
+rendimento_atteso:
+  metodo: beta                    # beta | uguale | storico | personalizzato
+  tasso_privo_rischio: 0.02       # 0.02 = 2%
+  premio_mercato: 0.04            # 0.04 = 4%
+  # valore_uguale: 0.06           # per il metodo "uguale"
+  # personalizzato:               # per il metodo "personalizzato"
+  #   Europa dividendi: 0.05
+  #   Satellite: 0.06
+  #   benchmark: 0.06
+
+n_simulazioni: 10000
+ribilanciamento: annuale          # annuale | semestrale | trimestrale | mensile | mai
+
+moduli:
+  stress_test: true
+  rischio_singolo_titolo: true
+  confronto_modelli: false        # più lento
+  analisi_C: false                # dal 1999 con proxy, più lento
+
+portafogli:
+  - nome: Europa dividendi
+    titoli: [ENI.MI, ENEL.MI, ALV.DE, SAN.PA, NESN.SW]   # lista = pesi uguali
+  - nome: USA qualità
+    titoli: {MSFT: 30, JNJ: 25, PG: 25, KO: 20}         # pesi in % (somma 100)
+  - nome: Satellite
+    titoli: {benchmark: 80, USA qualità: 20}            # portafoglio misto
+
+# Facoltativo: settore per gli stress test (tech | finanza | altro), se quello automatico non ti convince
+# settori: {AMZN: tech}
+```
+
+Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%). Prima della sua nascita (2009) si usa l'indice MSCI World. Per cambiarlo aggiungi una sezione `benchmark:` come nel file di esempio.
+
+## 8. Aggiornare a una nuova versione
+
+1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella.
+2. Copia nella nuova cartella le tue configurazioni (`configurazioni/*.yaml`) e, se vuoi, i report vecchi (`report/`).
+3. Fai doppio clic su `Installa.command` nella nuova cartella, poi usa `Avvia.command`.
+4. Quando tutto funziona puoi cancellare la cartella vecchia.
+
+## 9. Problemi comuni
+
+| Problema | Soluzione |
+|---|---|
+| "Non può essere aperto perché proviene da uno sviluppatore non identificato" | Vedi il punto 3: Impostazioni di Sistema → Privacy e sicurezza → **Apri comunque**. |
+| Il doppio clic apre un editor di testo invece del Terminale | Clic destro sul file → **Apri con → Terminale**. |
+| "Permission denied" su un file `.command` | Nel Terminale, dalla cartella del programma: `chmod +x Installa.command Avvia.command` |
+| L'installazione si ferma con un errore di rete | Controlla internet e rilancia `Installa.command`: riparte da dove si era fermata. |
+| "Il ticker «XYZ» non esiste" | Controlla il ticker su finance.yahoo.com, incluso il suffisso della borsa (`.MI`, `.DE`…). |
+| "Il periodo comune a tutti i titoli è troppo breve" | Un titolo è quotato da meno di un anno: toglilo o sostituiscilo. |
+| L'app non si apre nel browser | Guarda l'indirizzo scritto nel Terminale (es. `http://localhost:54321`) e copialo nel browser. |
+| La simulazione è lenta | Riduci il numero di simulazioni o spegni "Confronto tra modelli" e "Analisi C". |
+| Qualcosa non va dopo un aggiornamento di macOS | Cancella le cartelle `.venv`, `.python` e `.uv` e rilancia `Installa.command`. |
+| I prezzi sembrano vecchi | Spunta **Aggiorna i dati** nell'app (oppure usa `--aggiorna-dati`). |
+
+---
+
+## Per chi pubblica il programma: creare una release su GitHub
+
+1. Sul sito di GitHub apri il repository e clicca **Releases → Draft a new release** (o **Create a new release**).
+2. In **Choose a tag** scrivi `v1.0.0` e scegli **Create new tag on publish**. In **Target** scegli il ramo con il codice (di solito `main`).
+3. Titolo: `v1.0.0`. Nella descrizione scrivi brevemente cosa contiene.
+4. Premi **Publish release**.
+5. Dopo uno o due minuti la GitHub Action **"Zip per la release"** allega automaticamente il file `confronta-portafogli-v1.0.0.zip` alla release. Puoi vederla in corso nella scheda **Actions**. Lo zip non contiene `.venv`, la cache dei prezzi e i report generati.
+
+## Struttura dei file
+
 | File | Cosa fa |
 |---|---|
-| `scarica_dati.py` | scarica prezzi (Yahoo Finance) e cambio EUR/USD (Yahoo + FRED) in `data/` |
-| `dati.py` | conversione in EUR, periodi A/B/C, proxy, controlli sui dati |
+| `app.py` | l'app (Streamlit) |
+| `confronta.py` | lo stesso confronto da riga di comando |
+| `configurazione.py` | lettura e controllo della configurazione YAML |
+| `dati.py` | download dei prezzi con cache, conversione in euro, settori |
+| `analisi.py` | rendimenti attesi, periodi A/B/C, esecuzione dei moduli |
 | `simula.py` | motore Monte Carlo (bootstrap a blocchi, Student-t, GARCH, crolli sul singolo titolo) |
-| `metriche.py` | tabelle, drawdown, VaR/ES, stress test |
-| `report.py` | costruisce `report.html` |
-| `confronta.py` | script principale |
-| `tests/` | test pytest |
-| `STATO.md` | a che punto siamo e come riprendere |
-
-## Cosa significano le analisi A, B, C
-- **A**: dal 02/07/2021, quando esistono tutti i titoli (circa 5 anni). Confronto equo ma breve.
-- **B**: dal 2007, ogni portafoglio usa i titoli già quotati (pesi uguali tra quelli disponibili).
-- **C**: dal 1999, con rendimenti sintetici (proxy settoriale XLK/XLF) per i giorni in cui un titolo non esisteva. Non sono dati reali.
+| `metriche.py` | metriche e stress test |
+| `report.py` | report HTML, PDF e CSV |
+| `configurazioni/` | file di esempio |
+| `esempi/` | report di esempio già pronti |
+| `tests/` | test automatici (`python -m pytest -q tests`) |
+| `STATO.md` | note di sviluppo |
