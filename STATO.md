@@ -6,7 +6,7 @@
 ## Da fare
 - [x] Tappa 2: simulazione base + report.html (analisi A e B), test pytest (5 passano)
 - [x] Tappa 3: stress test (A e B, senza versamenti, tempo di ritorno a 5.000 €)
-- [ ] Tappa 4: robustezza punto 1 (analisi C con proxy)
+- [x] Tappa 4: robustezza punto 1 (analisi C dal 1999 con proxy XLK/XLF)
 - [ ] Tappa 5: robustezza punti 2-4 (modelli, sensibilità, rischio idiosincratico)
 
 ## Come riprendere
