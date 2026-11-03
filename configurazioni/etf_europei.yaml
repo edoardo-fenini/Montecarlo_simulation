@@ -1,0 +1,24 @@
+# Esempio con ETF quotati in Europa (in euro, borsa Xetra), confrontati con l'MSCI World.
+#   python confronta.py --config configurazioni/etf_europei.yaml
+
+nome: ETF europei
+capitale_iniziale: 10000
+versamento_mensile: 200
+orizzonte_anni: 20
+orizzonti_intermedi: [5, 10, 15]
+rendimento_atteso:
+  metodo: beta
+n_simulazioni: 20000
+
+# Costo annuo (TER) degli ETF usati come titoli: se non lo indichi si usa ter_etf_default (0,20%).
+# Controlla il TER di ogni ETF sul sito dell'emittente e scrivilo qui, ad esempio:
+# ter: {VWCE.DE: 0.0019, SXR8.DE: 0.0007}
+ter_etf_default: 0.002
+
+portafogli:
+  - nome: Azionario globale (un ETF)
+    titoli: [VWCE.DE]                                   # Vanguard FTSE All-World (Acc)
+  - nome: Tre ETF USA-Europa-Emergenti
+    titoli: {SXR8.DE: 60, EXSA.DE: 25, IS3N.DE: 15}     # S&P 500, STOXX Europe 600, MSCI EM IMI
+  - nome: Bilanciato 60-40
+    titoli: {SXR8.DE: 30, EXSA.DE: 20, IS3N.DE: 10, XGLE.DE: 40}   # 40% titoli di Stato area euro

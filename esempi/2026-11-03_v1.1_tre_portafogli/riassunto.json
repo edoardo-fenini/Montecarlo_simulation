@@ -1,0 +1,68 @@
+{
+ "nome": "tre portafogli v1.1",
+ "creato": "2026-11-03T23:12:37",
+ "simulazioni": 20000,
+ "orizzonte": 15,
+ "capitale": 5000.0,
+ "versamento": 0.0,
+ "metodo": "beta",
+ "dati_al": "2026-11-03",
+ "portafogli": [
+  {
+   "nome": "Cyber security",
+   "colore": "#0072B2",
+   "valore_mediano": 5130.83203125,
+   "versato": 5000.0,
+   "prob_perdita": 0.49115,
+   "mdd": -0.7446067333221436,
+   "vol": 0.35614042937793355,
+   "vol_vs_bench": 2.5488325681386033,
+   "livello": 5,
+   "livello_nome": "Molto alto",
+   "livello_colore": "#A31515",
+   "benchmark": false
+  },
+  {
+   "nome": "Banche d'investimento / PE",
+   "colore": "#D55E00",
+   "valore_mediano": 9250.35205078125,
+   "versato": 5000.0,
+   "prob_perdita": 0.2157,
+   "mdd": -0.5112915933132172,
+   "vol": 0.24131846589241573,
+   "vol_vs_bench": 1.7270725658251938,
+   "livello": 4,
+   "livello_nome": "Alto",
+   "livello_colore": "#B23C00",
+   "benchmark": false
+  },
+  {
+   "nome": "Big tech USA",
+   "colore": "#009E73",
+   "valore_mediano": 7202.029296875,
+   "versato": 5000.0,
+   "prob_perdita": 0.37105,
+   "mdd": -0.6591469049453735,
+   "vol": 0.29773240097131065,
+   "vol_vs_bench": 2.1308168845398647,
+   "livello": 4,
+   "livello_nome": "Alto",
+   "livello_colore": "#B23C00",
+   "benchmark": false
+  },
+  {
+   "nome": "MSCI World (ETF)",
+   "colore": "#666666",
+   "valore_mediano": 10059.36962890625,
+   "versato": 5000.0,
+   "prob_perdita": 0.0747,
+   "mdd": -0.3239222466945648,
+   "vol": 0.13972688274225117,
+   "vol_vs_bench": 1.0,
+   "livello": 2,
+   "livello_nome": "Medio-basso",
+   "livello_colore": "#3F6B12",
+   "benchmark": true
+  }
+ ]
+}

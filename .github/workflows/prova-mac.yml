@@ -23,11 +23,21 @@ jobs:
           .venv/bin/python -c "import sys, platform; print(sys.version); print(platform.machine())"
           test -d .python && test -d .venv
 
+      - name: Quali fonti di prezzi rispondono (informativo)
+        continue-on-error: true
+        run: .venv/bin/python strumenti/verifica_fonti.py
+
       - name: Test automatici
         run: .venv/bin/python -m pytest -q tests
 
       - name: Report da riga di comando (prova rapida)
         run: .venv/bin/python confronta.py --config configurazioni/prova_ci.yaml --veloce --uscita report/prova_ci
+
+      - name: Tempo dell'esecuzione completa di default (20.000 simulazioni, informativo)
+        continue-on-error: true
+        run: |
+          /usr/bin/time -p .venv/bin/python confronta.py --config configurazioni/esempio_tre_portafogli.yaml --uscita report/tempo_default --senza-pdf 2>&1 | grep -E "processi|Fatto in|real"
+          sysctl -n hw.ncpu machdep.cpu.brand_string || true
 
       - name: Controlla i file del report
         run: |
@@ -56,6 +66,10 @@ jobs:
           if pgrep -f "[s]treamlit run app.py" >/dev/null; then echo "ERRORE: l'app non si è fermata"; exit 1; fi
           echo "App fermata correttamente"
 
+      - name: Ultime righe del file di log
+        if: always()
+        run: tail -n 40 log.txt || true
+
       - name: Salva il report di prova
         if: always()
         uses: actions/upload-artifact@v5
@@ -64,4 +78,5 @@ jobs:
           path: |
             report/prova_ci
             avvia.log
+            log.txt
           if-no-files-found: ignore

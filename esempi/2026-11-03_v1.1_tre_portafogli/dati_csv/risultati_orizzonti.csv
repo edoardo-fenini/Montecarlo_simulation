@@ -1,0 +1,325 @@
+﻿analisi;orizzonte_anni;metrica;portafoglio;valore
+A;5;Totale versato;Cyber security;5000,0
+A;5;Totale versato;Banche d'investimento / PE;5000,0
+A;5;Totale versato;Big tech USA;5000,0
+A;5;Totale versato;MSCI World (ETF);5000,0
+A;5;Valore mediano;Cyber security;5000,38427734375
+A;5;Valore mediano;Banche d'investimento / PE;6156,040283203125
+A;5;Valore mediano;Big tech USA;5640,35498046875
+A;5;Valore mediano;MSCI World (ETF);6337,146240234375
+A;5;5° percentile;Cyber security;1622,07080078125
+A;5;5° percentile;Banche d'investimento / PE;2901,8817626953123
+A;5;5° percentile;Big tech USA;2105,328955078125
+A;5;5° percentile;MSCI World (ETF);3920,8908813476564
+A;5;95° percentile;Cyber security;15999,4033203125
+A;5;95° percentile;Banche d'investimento / PE;12797,083251953123
+A;5;95° percentile;Big tech USA;15486,781982421875
+A;5;95° percentile;MSCI World (ETF);9863,5677734375
+A;5;Prob. sotto il versato;Cyber security;0,49985
+A;5;Prob. sotto il versato;Banche d'investimento / PE;0,32385
+A;5;Prob. sotto il versato;Big tech USA;0,42305
+A;5;Prob. sotto il versato;MSCI World (ETF);0,2024
+A;5;Max drawdown mediano;Cyber security;-0,5458218455314636
+A;5;Max drawdown mediano;Banche d'investimento / PE;-0,36791133880615234
+A;5;Max drawdown mediano;Big tech USA;-0,478878915309906
+A;5;Max drawdown mediano;MSCI World (ETF);-0,23076780140399933
+A;5;Max drawdown peggiore (95%);Cyber security;-0,7824720114469528
+A;5;Max drawdown peggiore (95%);Banche d'investimento / PE;-0,5933906674385071
+A;5;Max drawdown peggiore (95%);Big tech USA;-0,7182776153087616
+A;5;Max drawdown peggiore (95%);MSCI World (ETF);-0,40744584798812866
+A;5;Tempo sott'acqua max, mediano (anni);Cyber security;3,1190476417541504
+A;5;Tempo sott'acqua max, mediano (anni);Banche d'investimento / PE;2,4841270446777344
+A;5;Tempo sott'acqua max, mediano (anni);Big tech USA;2,809523820877075
+A;5;Tempo sott'acqua max, mediano (anni);MSCI World (ETF);2,039682626724243
+A;5;Tempo sott'acqua max, peggiore 95% (anni);Cyber security;4,968254089355469
+A;5;Tempo sott'acqua max, peggiore 95% (anni);Banche d'investimento / PE;4,896825313568115
+A;5;Tempo sott'acqua max, peggiore 95% (anni);Big tech USA;4,94444465637207
+A;5;Tempo sott'acqua max, peggiore 95% (anni);MSCI World (ETF);4,682737874984738
+A;10;Totale versato;Cyber security;5000,0
+A;10;Totale versato;Banche d'investimento / PE;5000,0
+A;10;Totale versato;Big tech USA;5000,0
+A;10;Totale versato;MSCI World (ETF);5000,0
+A;10;Valore mediano;Cyber security;5043,211181640625
+A;10;Valore mediano;Banche d'investimento / PE;7568,890625
+A;10;Valore mediano;Big tech USA;6336,885009765625
+A;10;Valore mediano;MSCI World (ETF);7979,67578125
+A;10;5° percentile;Cyber security;1024,4940307617187
+A;10;5° percentile;Banche d'investimento / PE;2588,3707885742188
+A;10;5° percentile;Big tech USA;1555,5216125488282
+A;10;5° percentile;MSCI World (ETF);4135,6033203125
+A;10;95° percentile;Cyber security;25992,117382812492
+A;10;95° percentile;Banche d'investimento / PE;21060,409570312477
+A;10;95° percentile;Big tech USA;27020,373828124997
+A;10;95° percentile;MSCI World (ETF);14959,010888671874
+A;10;Prob. sotto il versato;Cyber security;0,4967
+A;10;Prob. sotto il versato;Banche d'investimento / PE;0,26185
+A;10;Prob. sotto il versato;Big tech USA;0,392
+A;10;Prob. sotto il versato;MSCI World (ETF);0,12045
+A;10;Max drawdown mediano;Cyber security;-0,6737969815731049
+A;10;Max drawdown mediano;Banche d'investimento / PE;-0,4569246172904968
+A;10;Max drawdown mediano;Big tech USA;-0,5911816656589508
+A;10;Max drawdown mediano;MSCI World (ETF);-0,2888241708278656
+A;10;Max drawdown peggiore (95%);Cyber security;-0,8850223511457443
+A;10;Max drawdown peggiore (95%);Banche d'investimento / PE;-0,695363262295723
+A;10;Max drawdown peggiore (95%);Big tech USA;-0,8253482073545456
+A;10;Max drawdown peggiore (95%);MSCI World (ETF);-0,47771169394254687
+A;10;Tempo sott'acqua max, mediano (anni);Cyber security;6,170634746551514
+A;10;Tempo sott'acqua max, mediano (anni);Banche d'investimento / PE;4,589285850524902
+A;10;Tempo sott'acqua max, mediano (anni);Big tech USA;5,43055534362793
+A;10;Tempo sott'acqua max, mediano (anni);MSCI World (ETF);3,547619104385376
+A;10;Tempo sott'acqua max, peggiore 95% (anni);Cyber security;9,936508178710938
+A;10;Tempo sott'acqua max, peggiore 95% (anni);Banche d'investimento / PE;9,647024202346799
+A;10;Tempo sott'acqua max, peggiore 95% (anni);Big tech USA;9,876984596252441
+A;10;Tempo sott'acqua max, peggiore 95% (anni);MSCI World (ETF);8,777777671813965
+A;15;Totale versato;Cyber security;5000,0
+A;15;Totale versato;Banche d'investimento / PE;5000,0
+A;15;Totale versato;Big tech USA;5000,0
+A;15;Totale versato;MSCI World (ETF);5000,0
+A;15;Valore mediano;Cyber security;5130,83203125
+A;15;Valore mediano;Banche d'investimento / PE;9250,35205078125
+A;15;Valore mediano;Big tech USA;7202,029296875
+A;15;Valore mediano;MSCI World (ETF);10059,36962890625
+A;15;5° percentile;Cyber security;723,0024536132813
+A;15;5° percentile;Banche d'investimento / PE;2510,9110595703123
+A;15;5° percentile;Big tech USA;1269,4240478515626
+A;15;5° percentile;MSCI World (ETF);4512,230200195312
+A;15;95° percentile;Cyber security;37891,64296874999
+A;15;95° percentile;Banche d'investimento / PE;32351,394238281235
+A;15;95° percentile;Big tech USA;42109,45312499998
+A;15;95° percentile;MSCI World (ETF);21755,575390625
+A;15;Prob. sotto il versato;Cyber security;0,49115
+A;15;Prob. sotto il versato;Banche d'investimento / PE;0,2157
+A;15;Prob. sotto il versato;Big tech USA;0,37105
+A;15;Prob. sotto il versato;MSCI World (ETF);0,0747
+A;15;Max drawdown mediano;Cyber security;-0,7446067333221436
+A;15;Max drawdown mediano;Banche d'investimento / PE;-0,5112915933132172
+A;15;Max drawdown mediano;Big tech USA;-0,6591469049453735
+A;15;Max drawdown mediano;MSCI World (ETF);-0,3239222466945648
+A;15;Max drawdown peggiore (95%);Cyber security;-0,9287152737379074
+A;15;Max drawdown peggiore (95%);Banche d'investimento / PE;-0,7523912191390991
+A;15;Max drawdown peggiore (95%);Big tech USA;-0,8786723405122757
+A;15;Max drawdown peggiore (95%);MSCI World (ETF);-0,5157653331756592
+A;15;Tempo sott'acqua max, mediano (anni);Cyber security;9,234127044677734
+A;15;Tempo sott'acqua max, mediano (anni);Banche d'investimento / PE;6,440476417541504
+A;15;Tempo sott'acqua max, mediano (anni);Big tech USA;7,916666507720947
+A;15;Tempo sott'acqua max, mediano (anni);MSCI World (ETF);4,757936477661133
+A;15;Tempo sott'acqua max, peggiore 95% (anni);Cyber security;14,904762268066406
+A;15;Tempo sott'acqua max, peggiore 95% (anni);Banche d'investimento / PE;14,214285850524902
+A;15;Tempo sott'acqua max, peggiore 95% (anni);Big tech USA;14,773809432983398
+A;15;Tempo sott'acqua max, peggiore 95% (anni);MSCI World (ETF);12,095237731933594
+B;5;Totale versato;Cyber security;5000,0
+B;5;Totale versato;Banche d'investimento / PE;5000,0
+B;5;Totale versato;Big tech USA;5000,0
+B;5;Totale versato;MSCI World (ETF);5000,0
+B;5;Valore mediano;Cyber security;5346,478271484375
+B;5;Valore mediano;Banche d'investimento / PE;5447,843017578125
+B;5;Valore mediano;Big tech USA;5878,5009765625
+B;5;Valore mediano;MSCI World (ETF);6208,12109375
+B;5;5° percentile;Cyber security;1788,5612548828126
+B;5;5° percentile;Banche d'investimento / PE;2053,030798339844
+B;5;5° percentile;Big tech USA;2296,598278808594
+B;5;5° percentile;MSCI World (ETF);3374,98916015625
+B;5;95° percentile;Cyber security;16048,666992187489
+B;5;95° percentile;Banche d'investimento / PE;13853,119775390624
+B;5;95° percentile;Big tech USA;14388,99951171875
+B;5;95° percentile;MSCI World (ETF);10625,257666015623
+B;5;Prob. sotto il versato;Cyber security;0,46025
+B;5;Prob. sotto il versato;Banche d'investimento / PE;0,4412
+B;5;Prob. sotto il versato;Big tech USA;0,3876
+B;5;Prob. sotto il versato;MSCI World (ETF);0,26855
+B;5;Max drawdown mediano;Cyber security;-0,5208599865436554
+B;5;Max drawdown mediano;Banche d'investimento / PE;-0,4699784070253372
+B;5;Max drawdown mediano;Big tech USA;-0,4399186372756958
+B;5;Max drawdown mediano;MSCI World (ETF);-0,29361723363399506
+B;5;Max drawdown peggiore (95%);Cyber security;-0,7654914617538452
+B;5;Max drawdown peggiore (95%);Banche d'investimento / PE;-0,7288138896226883
+B;5;Max drawdown peggiore (95%);Big tech USA;-0,6900473386049271
+B;5;Max drawdown peggiore (95%);MSCI World (ETF);-0,5116477638483048
+B;5;Tempo sott'acqua max, mediano (anni);Cyber security;2,9285714626312256
+B;5;Tempo sott'acqua max, mediano (anni);Banche d'investimento / PE;2,8214285373687744
+B;5;Tempo sott'acqua max, mediano (anni);Big tech USA;2,674603223800659
+B;5;Tempo sott'acqua max, mediano (anni);MSCI World (ETF);2,230158805847168
+B;5;Tempo sott'acqua max, peggiore 95% (anni);Cyber security;4,952381134033203
+B;5;Tempo sott'acqua max, peggiore 95% (anni);Banche d'investimento / PE;4,94444465637207
+B;5;Tempo sott'acqua max, peggiore 95% (anni);Big tech USA;4,916666507720947
+B;5;Tempo sott'acqua max, peggiore 95% (anni);MSCI World (ETF);4,80555534362793
+B;10;Totale versato;Cyber security;5000,0
+B;10;Totale versato;Banche d'investimento / PE;5000,0
+B;10;Totale versato;Big tech USA;5000,0
+B;10;Totale versato;MSCI World (ETF);5000,0
+B;10;Valore mediano;Cyber security;5802,396484375
+B;10;Valore mediano;Banche d'investimento / PE;5850,561767578125
+B;10;Valore mediano;Big tech USA;6754,24658203125
+B;10;Valore mediano;MSCI World (ETF);7622,8359375
+B;10;5° percentile;Cyber security;1216,1581176757813
+B;10;5° percentile;Banche d'investimento / PE;1487,7571838378906
+B;10;5° percentile;Big tech USA;1832,121533203125
+B;10;5° percentile;MSCI World (ETF);3264,787731933594
+B;10;95° percentile;Cyber security;26918,668066406244
+B;10;95° percentile;Banche d'investimento / PE;22188,902246093745
+B;10;95° percentile;Big tech USA;24446,16845703125
+B;10;95° percentile;MSCI World (ETF);16495,018359374997
+B;10;Prob. sotto il versato;Cyber security;0,43995
+B;10;Prob. sotto il versato;Banche d'investimento / PE;0,42455
+B;10;Prob. sotto il versato;Big tech USA;0,34855
+B;10;Prob. sotto il versato;MSCI World (ETF);0,2041
+B;10;Max drawdown mediano;Cyber security;-0,6404381990432739
+B;10;Max drawdown mediano;Banche d'investimento / PE;-0,588873952627182
+B;10;Max drawdown mediano;Big tech USA;-0,5509358644485474
+B;10;Max drawdown mediano;MSCI World (ETF);-0,37023302912712097
+B;10;Max drawdown peggiore (95%);Cyber security;-0,8665835171937942
+B;10;Max drawdown peggiore (95%);Banche d'investimento / PE;-0,8322109580039978
+B;10;Max drawdown peggiore (95%);Big tech USA;-0,7953150570392609
+B;10;Max drawdown peggiore (95%);MSCI World (ETF);-0,601538798213005
+B;10;Tempo sott'acqua max, mediano (anni);Cyber security;5,726190567016602
+B;10;Tempo sott'acqua max, mediano (anni);Banche d'investimento / PE;5,55555534362793
+B;10;Tempo sott'acqua max, mediano (anni);Big tech USA;5,107142925262451
+B;10;Tempo sott'acqua max, mediano (anni);MSCI World (ETF);4,05555534362793
+B;10;Tempo sott'acqua max, peggiore 95% (anni);Cyber security;9,90079402923584
+B;10;Tempo sott'acqua max, peggiore 95% (anni);Banche d'investimento / PE;9,873015403747559
+B;10;Tempo sott'acqua max, peggiore 95% (anni);Big tech USA;9,797618865966797
+B;10;Tempo sott'acqua max, peggiore 95% (anni);MSCI World (ETF);9,404960680007932
+B;15;Totale versato;Cyber security;5000,0
+B;15;Totale versato;Banche d'investimento / PE;5000,0
+B;15;Totale versato;Big tech USA;5000,0
+B;15;Totale versato;MSCI World (ETF);5000,0
+B;15;Valore mediano;Cyber security;6168,65625
+B;15;Valore mediano;Banche d'investimento / PE;6256,613525390625
+B;15;Valore mediano;Big tech USA;7855,94677734375
+B;15;Valore mediano;MSCI World (ETF);9327,794921875
+B;15;5° percentile;Cyber security;902,29765625
+B;15;5° percentile;Banche d'investimento / PE;1186,810809326172
+B;15;5° percentile;Big tech USA;1579,2728942871095
+B;15;5° percentile;MSCI World (ETF);3329,5302734375
+B;15;95° percentile;Cyber security;39730,66484374998
+B;15;95° percentile;Banche d'investimento / PE;31445,82304687499
+B;15;95° percentile;Big tech USA;38135,45097656249
+B;15;95° percentile;MSCI World (ETF);24390,430078124988
+B;15;Prob. sotto il versato;Cyber security;0,42745
+B;15;Prob. sotto il versato;Banche d'investimento / PE;0,40805
+B;15;Prob. sotto il versato;Big tech USA;0,3253
+B;15;Prob. sotto il versato;MSCI World (ETF);0,1554
+B;15;Max drawdown mediano;Cyber security;-0,7146411538124084
+B;15;Max drawdown mediano;Banche d'investimento / PE;-0,6588330566883087
+B;15;Max drawdown mediano;Big tech USA;-0,6170540750026703
+B;15;Max drawdown mediano;MSCI World (ETF);-0,4172312915325165
+B;15;Max drawdown peggiore (95%);Cyber security;-0,9139057248830795
+B;15;Max drawdown peggiore (95%);Banche d'investimento / PE;-0,881006833910942
+B;15;Max drawdown peggiore (95%);Big tech USA;-0,8471591651439667
+B;15;Max drawdown peggiore (95%);MSCI World (ETF);-0,6509228408336639
+B;15;Tempo sott'acqua max, mediano (anni);Cyber security;8,468254089355469
+B;15;Tempo sott'acqua max, mediano (anni);Banche d'investimento / PE;8,251984119415283
+B;15;Tempo sott'acqua max, mediano (anni);Big tech USA;7,42460298538208
+B;15;Tempo sott'acqua max, mediano (anni);MSCI World (ETF);5,626984119415283
+B;15;Tempo sott'acqua max, peggiore 95% (anni);Cyber security;14,84920597076416
+B;15;Tempo sott'acqua max, peggiore 95% (anni);Banche d'investimento / PE;14,797618865966797
+B;15;Tempo sott'acqua max, peggiore 95% (anni);Big tech USA;14,658730506896973
+B;15;Tempo sott'acqua max, peggiore 95% (anni);MSCI World (ETF);13,769841194152832
+C;5;Totale versato;Cyber security;5000,0
+C;5;Totale versato;Banche d'investimento / PE;5000,0
+C;5;Totale versato;Big tech USA;5000,0
+C;5;Totale versato;MSCI World (ETF);5000,0
+C;5;Valore mediano;Cyber security;5155,998046875
+C;5;Valore mediano;Banche d'investimento / PE;5573,436279296875
+C;5;Valore mediano;Big tech USA;5298,731689453125
+C;5;Valore mediano;MSCI World (ETF);6193,367431640625
+C;5;5° percentile;Cyber security;1494,7660156250001
+C;5;5° percentile;Banche d'investimento / PE;2132,0741333007813
+C;5;5° percentile;Big tech USA;1631,8005432128907
+C;5;5° percentile;MSCI World (ETF);3327,697314453125
+C;5;95° percentile;Cyber security;17317,4076171875
+C;5;95° percentile;Banche d'investimento / PE;13812,82197265625
+C;5;95° percentile;Big tech USA;17042,119921875
+C;5;95° percentile;MSCI World (ETF);10854,783984374999
+C;5;Prob. sotto il versato;Cyber security;0,4846
+C;5;Prob. sotto il versato;Banche d'investimento / PE;0,42295
+C;5;Prob. sotto il versato;Big tech USA;0,46545
+C;5;Prob. sotto il versato;MSCI World (ETF);0,28055
+C;5;Max drawdown mediano;Cyber security;-0,5620827972888947
+C;5;Max drawdown mediano;Banche d'investimento / PE;-0,4611140191555023
+C;5;Max drawdown mediano;Big tech USA;-0,5398650467395782
+C;5;Max drawdown mediano;MSCI World (ETF);-0,30302534997463226
+C;5;Max drawdown peggiore (95%);Cyber security;-0,8091817408800125
+C;5;Max drawdown peggiore (95%);Banche d'investimento / PE;-0,7105290472507477
+C;5;Max drawdown peggiore (95%);Big tech USA;-0,7938103765249253
+C;5;Max drawdown peggiore (95%);MSCI World (ETF);-0,518276059627533
+C;5;Tempo sott'acqua max, mediano (anni);Cyber security;3,0
+C;5;Tempo sott'acqua max, mediano (anni);Banche d'investimento / PE;2,7936508655548096
+C;5;Tempo sott'acqua max, mediano (anni);Big tech USA;2,944444417953491
+C;5;Tempo sott'acqua max, mediano (anni);MSCI World (ETF);2,261904716491699
+C;5;Tempo sott'acqua max, peggiore 95% (anni);Cyber security;4,964285850524902
+C;5;Tempo sott'acqua max, peggiore 95% (anni);Banche d'investimento / PE;4,94444465637207
+C;5;Tempo sott'acqua max, peggiore 95% (anni);Big tech USA;4,952381134033203
+C;5;Tempo sott'acqua max, peggiore 95% (anni);MSCI World (ETF);4,8214287757873535
+C;10;Totale versato;Cyber security;5000,0
+C;10;Totale versato;Banche d'investimento / PE;5000,0
+C;10;Totale versato;Big tech USA;5000,0
+C;10;Totale versato;MSCI World (ETF);5000,0
+C;10;Valore mediano;Cyber security;5263,89990234375
+C;10;Valore mediano;Banche d'investimento / PE;6050,536376953125
+C;10;Valore mediano;Big tech USA;5567,79931640625
+C;10;Valore mediano;MSCI World (ETF);7563,0439453125
+C;10;5° percentile;Cyber security;924,1970794677734
+C;10;5° percentile;Banche d'investimento / PE;1596,3289611816406
+C;10;5° percentile;Big tech USA;1048,922314453125
+C;10;5° percentile;MSCI World (ETF);3191,2748046875
+C;10;95° percentile;Cyber security;29006,950195312485
+C;10;95° percentile;Banche d'investimento / PE;22359,53320312499
+C;10;95° percentile;Big tech USA;28906,479101562498
+C;10;95° percentile;MSCI World (ETF);16927,03017578124
+C;10;Prob. sotto il versato;Cyber security;0,48025
+C;10;Prob. sotto il versato;Banche d'investimento / PE;0,4071
+C;10;Prob. sotto il versato;Big tech USA;0,45735
+C;10;Prob. sotto il versato;MSCI World (ETF);0,2104
+C;10;Max drawdown mediano;Cyber security;-0,6932390332221985
+C;10;Max drawdown mediano;Banche d'investimento / PE;-0,5768520832061768
+C;10;Max drawdown mediano;Big tech USA;-0,6669061481952667
+C;10;Max drawdown mediano;MSCI World (ETF);-0,3805890381336212
+C;10;Max drawdown peggiore (95%);Cyber security;-0,9038808166980743
+C;10;Max drawdown peggiore (95%);Banche d'investimento / PE;-0,8171637743711472
+C;10;Max drawdown peggiore (95%);Big tech USA;-0,8895918995141983
+C;10;Max drawdown peggiore (95%);MSCI World (ETF);-0,6109329462051392
+C;10;Tempo sott'acqua max, mediano (anni);Cyber security;5,960317611694336
+C;10;Tempo sott'acqua max, mediano (anni);Banche d'investimento / PE;5,480158805847168
+C;10;Tempo sott'acqua max, mediano (anni);Big tech USA;5,80555534362793
+C;10;Tempo sott'acqua max, mediano (anni);MSCI World (ETF);4,162698268890381
+C;10;Tempo sott'acqua max, peggiore 95% (anni);Cyber security;9,928571701049805
+C;10;Tempo sott'acqua max, peggiore 95% (anni);Banche d'investimento / PE;9,869047164916992
+C;10;Tempo sott'acqua max, peggiore 95% (anni);Big tech USA;9,896825790405273
+C;10;Tempo sott'acqua max, peggiore 95% (anni);MSCI World (ETF);9,432539939880371
+C;15;Totale versato;Cyber security;5000,0
+C;15;Totale versato;Banche d'investimento / PE;5000,0
+C;15;Totale versato;Big tech USA;5000,0
+C;15;Totale versato;MSCI World (ETF);5000,0
+C;15;Valore mediano;Cyber security;5311,430419921875
+C;15;Valore mediano;Banche d'investimento / PE;6693,62451171875
+C;15;Valore mediano;Big tech USA;5871,37109375
+C;15;Valore mediano;MSCI World (ETF);9219,291015625
+C;15;5° percentile;Cyber security;633,0515350341797
+C;15;5° percentile;Banche d'investimento / PE;1287,9213928222657
+C;15;5° percentile;Big tech USA;739,5357635498046
+C;15;5° percentile;MSCI World (ETF);3200,9012084960937
+C;15;95° percentile;Cyber security;44072,22285156245
+C;15;95° percentile;Banche d'investimento / PE;32888,83222656249
+C;15;95° percentile;Big tech USA;44174,34472656247
+C;15;95° percentile;MSCI World (ETF);24917,6244140625
+C;15;Prob. sotto il versato;Cyber security;0,4809
+C;15;Prob. sotto il versato;Banche d'investimento / PE;0,38445
+C;15;Prob. sotto il versato;Big tech USA;0,44955
+C;15;Prob. sotto il versato;MSCI World (ETF);0,16715
+C;15;Max drawdown mediano;Cyber security;-0,7646902203559875
+C;15;Max drawdown mediano;Banche d'investimento / PE;-0,6448423266410828
+C;15;Max drawdown mediano;Big tech USA;-0,7388119399547577
+C;15;Max drawdown mediano;MSCI World (ETF);-0,4293219894170761
+C;15;Max drawdown peggiore (95%);Cyber security;-0,9437615007162095
+C;15;Max drawdown peggiore (95%);Banche d'investimento / PE;-0,870552945137024
+C;15;Max drawdown peggiore (95%);Big tech USA;-0,9324937641620636
+C;15;Max drawdown peggiore (95%);MSCI World (ETF);-0,6649173140525818
+C;15;Tempo sott'acqua max, mediano (anni);Cyber security;8,972222328186035
+C;15;Tempo sott'acqua max, mediano (anni);Banche d'investimento / PE;8,059523582458496
+C;15;Tempo sott'acqua max, mediano (anni);Big tech USA;8,672619342803955
+C;15;Tempo sott'acqua max, mediano (anni);MSCI World (ETF);5,797618865966797
+C;15;Tempo sott'acqua max, peggiore 95% (anni);Cyber security;14,881151247024533
+C;15;Tempo sott'acqua max, peggiore 95% (anni);Banche d'investimento / PE;14,781745910644531
+C;15;Tempo sott'acqua max, peggiore 95% (anni);Big tech USA;14,83353142738342
+C;15;Tempo sott'acqua max, peggiore 95% (anni);MSCI World (ETF);13,742261934280393

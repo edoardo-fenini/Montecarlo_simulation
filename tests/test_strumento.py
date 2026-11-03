@@ -1,5 +1,7 @@
 """Test dello strumento generico: configurazione, metodi di rendimento atteso, portafogli misti, end-to-end."""
+
 import copy
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -98,8 +100,8 @@ def test_metodi_uguale_personalizzato_storico(cfg_piccola):
 
 def test_ricentratura_con_metodo_beta_da_il_rendimento_atteso_al_netto_del_ter(cfg_piccola):
     cfg = copy.deepcopy(cfg_piccola)
-    cfg["ter"] = {"ETF1.MI": 0.0007}       # TER noto
-    cfg["ter_etf_default"] = 0.0025        # per gli ETF senza TER indicato
+    cfg["ter"] = {"ETF1.MI": 0.0007}  # TER noto
+    cfg["ter_etf_default"] = 0.0025  # per gli ETF senza TER indicato
     cfg = C.prepara(cfg)
     cols = [("P", "X"), ("P", BENCH), ("P", "ETF1.MI"), ("P", "ETF2.DE")]
     tipi = {"X": "EQUITY", "ETF1.MI": "ETF", "ETF2.DE": "ETF"}
@@ -108,11 +110,11 @@ def test_ricentratura_con_metodo_beta_da_il_rendimento_atteso_al_netto_del_ter(c
     mu = analisi.rendimento_colonne(cfg, cols, beta=beta)
     M = analisi.prepara_M(cfg, np.random.default_rng(2).normal(0.002, 0.02, (1000, 4)), cols, mu, tipi)
     lordo = lambda j, ter: (1 + M[:, j].mean() + ter / 252) ** 252 - 1
-    assert lordo(0, 0) == pytest.approx(0.08, abs=1e-12)          # azione: 2% + 1,5 x 4%, nessun TER
-    assert lordo(1, 0.002) == pytest.approx(0.06, abs=1e-12)      # benchmark: TER 0,20% sottratto
-    assert lordo(2, 0.0007) == pytest.approx(0.06, abs=1e-12)     # ETF con TER indicato
-    assert lordo(3, 0.0025) == pytest.approx(0.04, abs=1e-12)     # ETF con TER di default
-    assert (1 + M[:, 2].mean()) ** 252 - 1 < 0.06                # al netto del costo il rendimento è più basso
+    assert lordo(0, 0) == pytest.approx(0.08, abs=1e-12)  # azione: 2% + 1,5 x 4%, nessun TER
+    assert lordo(1, 0.002) == pytest.approx(0.06, abs=1e-12)  # benchmark: TER 0,20% sottratto
+    assert lordo(2, 0.0007) == pytest.approx(0.06, abs=1e-12)  # ETF con TER indicato
+    assert lordo(3, 0.0025) == pytest.approx(0.04, abs=1e-12)  # ETF con TER di default
+    assert (1 + M[:, 2].mean()) ** 252 - 1 < 0.06  # al netto del costo il rendimento è più basso
     # tabella dei rendimenti attesi: costo pesato dei titoli del portafoglio
     cfg2 = copy.deepcopy(cfg_piccola)
     cfg2["portafogli"].append({"nome": "Con ETF", "titoli": {"ETF1.MI": 50, "AAA.MI": 50}})
@@ -127,31 +129,34 @@ def test_ricentratura_con_metodo_beta_da_il_rendimento_atteso_al_netto_del_ter(c
 def test_end_to_end_configurazione_piccola(cfg_piccola, finto_yahoo, tmp_path):
     cfg = C.prepara(copy.deepcopy(cfg_piccola))
     passi = []
-    ris = analisi.esegui(cfg, cartella_cache=str(tmp_path), scaricatore=finto_yahoo, log=lambda *a: None,
-                         progresso=lambda f, m: passi.append(f))
+    ris = analisi.esegui(
+        cfg, cartella_cache=str(tmp_path), scaricatore=finto_yahoo, log=lambda *a: None, progresso=lambda f, m: passi.append(f)
+    )
     assert set(ris["sim"]) == {"A", "B"}
     assert ris["sim"]["A"]["n_effettivi"] == ris["sim"]["B"]["n_effettivi"] == cfg["n_simulazioni"]
-    conv = ris["convergenza"]                         # modulo attivo di default: 3 seed
+    conv = ris["convergenza"]  # modulo attivo di default: 3 seed
     assert len(conv["seed"]) == 3 and conv["mediana"].shape == (3, 3)
     assert isinstance(conv["sufficienti"], bool)
-    assert ris["periodi"]["A"][0] >= pd.Timestamp("2016-01-01")      # BBB.DE nasce nel 2016
+    assert ris["periodi"]["A"][0] >= pd.Timestamp("2016-01-01")  # BBB.DE nasce nel 2016
     assert ris["periodi"]["B"][0] < pd.Timestamp("2013-01-01")
     tab = ris["sim"]["A"]["orizzonti"][4]
     assert list(tab.columns) == ["Uno", "Due", "Benchmark test"]
     assert (tab.loc["Totale versato"] == 1000).all()
     assert ((tab.loc["Prob. sotto il versato"] >= 0) & (tab.loc["Prob. sotto il versato"] <= 1)).all()
-    assert len(ris["stress"]["A"]) == 3 * 2 + 2       # 2 scenari x 3 portafogli + singolo titolo x 2
+    assert len(ris["stress"]["A"]) == 3 * 2 + 2  # 2 scenari x 3 portafogli + singolo titolo x 2
     assert set(ris["idio"]) == {"A", "B"}
     assert passi[-1] == 1.0 and passi == sorted(passi)
     # il beta di AAA (costruito con 1,5) deve uscire vicino a 1,5
     assert ris["beta"]["AAA.MI"] == pytest.approx(1.5, abs=0.1)
     # la seconda esecuzione usa la cache (nessun download)
-    analisi.esegui(cfg, cartella_cache=str(tmp_path), scaricatore=lambda t: (_ for _ in ()).throw(AssertionError(t)),
-                   log=lambda *a: None, n=100)
+    analisi.esegui(
+        cfg, cartella_cache=str(tmp_path), scaricatore=lambda t: (_ for _ in ()).throw(AssertionError(t)), log=lambda *a: None, n=100
+    )
 
 
 def test_report_html_pdf_csv(cfg_piccola, finto_yahoo, tmp_path):
     import report
+
     cfg = copy.deepcopy(cfg_piccola)
     cfg["portafogli"].append({"nome": "Satellite", "titoli": {"benchmark": 80, "Uno": 20}})
     cfg["moduli"].update({"confronto_modelli": True, "analisi_C": True})
@@ -161,8 +166,16 @@ def test_report_html_pdf_csv(cfg_piccola, finto_yahoo, tmp_path):
     assert set(ris["sim"]) == {"A", "B", "C"} and ris["modelli"] and ris["sensibilita"]
     f = report.salva(ris, str(tmp_path / "out"))
     testo = open(f, encoding="utf-8").read()
-    for parola in ["Sintesi", "Dopo 2 anni", "Dopo 4 anni", "Stress test", "Quanto sono solide", "non è consulenza finanziaria", "Satellite",
-                   "Le simulazioni bastano?"]:
+    for parola in [
+        "Sintesi",
+        "Dopo 2 anni",
+        "Dopo 4 anni",
+        "Stress test",
+        "Quanto sono solide",
+        "non è consulenza finanziaria",
+        "Satellite",
+        "Le simulazioni bastano?",
+    ]:
         assert parola in testo
     assert (tmp_path / "out" / "report.pdf").read_bytes()[:4] == b"%PDF"
     csv = pd.read_csv(tmp_path / "out" / "dati_csv" / "risultati_orizzonti.csv", sep=";", decimal=",")
