@@ -4,7 +4,7 @@
 - [x] Tappa 1: dati scaricati (`python scarica_dati.py`), convertiti in EUR e controllati (`python dati.py` -> `data/controlli.txt`).
 
 ## Da fare
-- [ ] Tappa 2: simulazione base + report.html (analisi A e B)
+- [x] Tappa 2: simulazione base + report.html (analisi A e B), test pytest (5 passano)
 - [ ] Tappa 3: stress test
 - [ ] Tappa 4: robustezza punto 1 (analisi C con proxy)
 - [ ] Tappa 5: robustezza punti 2-4 (modelli, sensibilità, rischio idiosincratico)
