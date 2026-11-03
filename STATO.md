@@ -12,7 +12,10 @@
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
       modulo «Le simulazioni bastano?» (attivo, 3 seed); test sul numero di percorsi.
 - [x] 4. TER sottratto anche agli ETF usati come titoli (`ter:` per ticker, `ter_etf_default` 0,20%).
-- [ ] 2. Prova su Mac reale con GitHub Actions (`.github/workflows/prova-mac.yml`)
+- [x] 2. Prova su Mac reale con GitHub Actions (`.github/workflows/prova-mac.yml`, macos-14 Apple Silicon):
+      prima esecuzione **riuscita** (run 41713088802, circa 1 minuto e 15 secondi): Installa.command --non-interattivo
+      (Python 3.12.16 arm64 in .python), 17 test ok, confronta.py --veloce con dati Yahoo reali, app headless risponde
+      e si ferma. Nota sulla quarantena (xattr) nel README.
 - [ ] 3. Ramo main
 - [ ] 5. Release v1.0.0
 - [ ] 6. Riepilogo finale

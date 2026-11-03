@@ -11,7 +11,7 @@ jobs:
     runs-on: macos-14   # Apple Silicon (M1)
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Installazione (come il doppio clic su Installa.command)
         run: ./Installa.command --non-interattivo
@@ -58,7 +58,7 @@ jobs:
 
       - name: Salva il report di prova
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: report-prova-mac
           path: |

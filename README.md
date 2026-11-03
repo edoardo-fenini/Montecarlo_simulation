@@ -189,13 +189,23 @@ Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%).
 
 ---
 
-## Per chi pubblica il programma: creare una release su GitHub
+## Per chi pubblica il programma
 
-1. Sul sito di GitHub apri il repository e clicca **Releases → Draft a new release** (o **Create a new release**).
-2. In **Choose a tag** scrivi `v1.0.0` e scegli **Create new tag on publish**. In **Target** scegli il ramo con il codice (di solito `main`).
-3. Titolo: `v1.0.0`. Nella descrizione scrivi brevemente cosa contiene.
+### Ramo principale
+Il codice di riferimento sta nel ramo **`main`**. Per renderlo il ramo predefinito (quello che si vede aprendo il repository e che usa **Code → Download ZIP**):
+1. Sul sito di GitHub apri il repository e clicca **Settings** (in alto a destra, icona a ingranaggio).
+2. Nel menu a sinistra clicca **General**; nella sezione **Default branch** premi il pulsante con le due frecce (⇄ *Switch to another branch*).
+3. Scegli **`main`**, premi **Update** e conferma con **I understand, update the default branch**.
+
+### Creare una release
+1. Apri il repository e clicca **Releases → Draft a new release** (o **Create a new release**).
+2. In **Choose a tag** scrivi `v1.0.0` e scegli **Create new tag: v1.0.0 on publish**. In **Target** scegli **`main`**.
+3. Titolo: `v1.0.0`. Nella descrizione incolla il contenuto di `RELEASE_NOTES.md`.
 4. Premi **Publish release**.
-5. Dopo uno o due minuti la GitHub Action **"Zip per la release"** allega automaticamente il file `confronta-portafogli-v1.0.0.zip` alla release. Puoi vederla in corso nella scheda **Actions**. Lo zip non contiene `.venv`, la cache dei prezzi e i report generati.
+5. Dopo uno o due minuti la GitHub Action **"Zip per la release"** allega automaticamente `confronta-portafogli-v1.0.0.zip` alla release (puoi seguirla nella scheda **Actions**). Lo zip non contiene `.venv`, cache e report generati.
+
+### Prova automatica su Mac
+A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, GitHub esegue su un Mac Apple Silicon: installazione con `Installa.command`, test, un report di prova e l'avvio dell'app. L'esito (spunta verde o croce rossa) si vede nella scheda **Actions** e accanto all'ultimo commit; il report di prova si scarica dagli *Artifacts* dell'esecuzione.
 
 ## Struttura dei file
 
