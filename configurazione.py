@@ -7,6 +7,8 @@ Un "titolo" può anche essere il nome di un altro portafoglio o la parola `bench
 così si costruiscono portafogli misti (es. 80% benchmark + 20% Cyber security).
 """
 
+from __future__ import annotations
+
 import copy
 
 import yaml
@@ -76,7 +78,7 @@ def _unisci(base, extra):
     return out
 
 
-def carica(percorso):
+def carica(percorso: str) -> dict:
     try:
         with open(percorso, encoding="utf-8") as f:
             dati = yaml.safe_load(f)
@@ -133,7 +135,7 @@ def _pesi(nome, titoli):
     return {c: v / s for c, v in zip(chiavi, valori)}
 
 
-def prepara(dati):
+def prepara(dati: dict) -> dict:
     """Completa la configurazione con i default e la controlla. Solleva ErroreConfig."""
     if not isinstance(dati, dict):
         raise ErroreConfig("La configurazione è vuota o non è nel formato atteso.")
@@ -232,7 +234,7 @@ def prepara(dati):
     return cfg
 
 
-def appiattisci(cfg):
+def appiattisci(cfg: dict) -> dict[str, dict[str, float]]:
     """{nome portafoglio: {TICKER: peso}} risolvendo i portafogli misti. Il benchmark è l'ultimo."""
     per_nome = {p["nome"].lower(): p for p in cfg["portafogli"]}
     bnome = cfg["benchmark"]["nome"]
@@ -258,7 +260,7 @@ def appiattisci(cfg):
     return comp
 
 
-def misto(cfg, nome):
+def misto(cfg: dict, nome: str) -> bool:
     """True se il portafoglio contiene altri portafogli o il benchmark."""
     for p in cfg["portafogli"]:
         if p["nome"] == nome:
@@ -267,7 +269,7 @@ def misto(cfg, nome):
     return False
 
 
-def in_yaml(cfg):
+def in_yaml(cfg: dict) -> str:
     """Configurazione 'pulita' (solo le chiavi dell'utente) come testo YAML."""
     tieni = [k for k in DEFAULT if k != "portafogli"]
     out = {k: cfg[k] for k in tieni if k in cfg}

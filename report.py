@@ -2,6 +2,8 @@
 
 Le stesse sezioni sono mostrate come schede nell'app Streamlit."""
 
+from __future__ import annotations
+
 import base64
 import datetime
 import html
@@ -520,7 +522,7 @@ def didascalia_corr(ris):
     )
 
 
-def dati_schede(ris, a="A"):
+def dati_schede(ris: dict, a: str = "A") -> list[dict]:
     """Numeri chiave per portafoglio (usati da «In una pagina» nel report e dalle card dell'app)."""
     s, H, bn = ris["sim"][a], ris["cfg"]["orizzonte_anni"], ris["bench_nome"]
     out = []
@@ -567,7 +569,7 @@ def sezione_una_pagina(ris):
     return B
 
 
-def sezioni(ris):
+def sezioni(ris: dict) -> dict[str, list]:
     """Ritorna {scheda: [blocchi]}."""
     cfg, n, nomi = ris["cfg"], ris["n"], ris["nomi"]
     anal = [a for a in ris["sim"] if a != "C"]
@@ -1046,7 +1048,7 @@ def intestazione(ris):
     )
 
 
-def html_report(ris, S=None):
+def html_report(ris: dict, S: dict | None = None) -> str:
     S = S or sezioni(ris)
     titolo = f"Confronto portafogli – {esc(ris['cfg']['nome'])}"
     sezioni_piene = [(k, v) for k, v in S.items() if v]
@@ -1091,7 +1093,7 @@ def _rl(testo):
     return t
 
 
-def pdf_report(ris, S=None):
+def pdf_report(ris: dict, S: dict | None = None) -> bytes:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.styles import ParagraphStyle
@@ -1366,7 +1368,7 @@ def pdf_report(ris, S=None):
 
 
 # ------------------------------------------------------------------ CSV
-def tabelle_csv(ris):
+def tabelle_csv(ris: dict) -> dict[str, pd.DataFrame]:
     """{nome_file: DataFrame} con i numeri del report."""
     out = {}
     righe = []
@@ -1612,7 +1614,7 @@ def elenco_analisi(base: str = "report") -> list[dict]:
     return out
 
 
-def salva(ris, cartella, pdf=True, log=print, S=None, pdf_bytes=None):
+def salva(ris: dict, cartella: str, pdf: bool = True, log=print, S: dict | None = None, pdf_bytes: bytes | None = None) -> str:
     """Scrive report.html, report.pdf, report.xlsx, i CSV e riassunto.json in `cartella`. Ritorna il percorso dell'HTML."""
     os.makedirs(cartella, exist_ok=True)
     S = S or sezioni(ris)

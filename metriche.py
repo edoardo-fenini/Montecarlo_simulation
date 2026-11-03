@@ -1,5 +1,7 @@
 """Metriche dei risultati simulati, statistiche storiche e stress test."""
 
+from __future__ import annotations
+
 import numpy as np
 import pandas as pd
 
@@ -18,12 +20,12 @@ RIGHE_ORIZZONTE = [
 ]
 
 
-def versato(capitale, versamento, mese):
+def versato(capitale: float, versamento: float, mese: int) -> float:
     """Totale versato a fine mese `mese` (i versamenti partono dall'inizio del secondo mese)."""
     return capitale + versamento * max(mese - 1, 0)
 
 
-def sommario(res, cfg, n_sim):
+def sommario(res: dict, cfg: dict, n_sim: int) -> dict:
     """Riduce i risultati grezzi della simulazione a ciò che serve al report."""
     cap, ver = cfg["capitale_iniziale"], cfg["versamento_mensile"]
     nomi = [k for k in res if not k.startswith("_")]
@@ -77,7 +79,7 @@ def sommario(res, cfg, n_sim):
 
 
 # ------------------------------------------------------------------ storico
-def serie_portafoglio(R, pesi, rib_giorni=252, costo=0.0):
+def serie_portafoglio(R: np.ndarray, pesi: np.ndarray, rib_giorni: int = 252, costo: float = 0.0) -> np.ndarray:
     """Rendimenti giornalieri storici di un portafoglio ribilanciato ogni `rib_giorni` (0 = mai)."""
     R, w = np.asarray(R, float), np.asarray(pesi, float)
     passo = rib_giorni if rib_giorni else len(R)
@@ -93,7 +95,7 @@ def serie_portafoglio(R, pesi, rib_giorni=252, costo=0.0):
     return np.concatenate(out)
 
 
-def stat_storiche(r):
+def stat_storiche(r: np.ndarray) -> dict[str, float]:
     v = np.cumprod(1 + np.asarray(r))
     return {
         "vol": float(np.std(r, ddof=1) * np.sqrt(252)),
@@ -102,7 +104,7 @@ def stat_storiche(r):
     }
 
 
-def contributo_rischio(R, w):
+def contributo_rischio(R: np.ndarray, w: np.ndarray) -> tuple[np.ndarray, float]:
     """Quota della varianza del portafoglio dovuta a ogni titolo + correlazione media tra i titoli."""
     R, w = np.asarray(R, float), np.asarray(w, float)
     C = np.cov(R.T)
@@ -119,7 +121,9 @@ SCENARI = {
 SINGOLO = "Il titolo più pesante perde il 90%"
 
 
-def stress_test(gen, porte, cfg, somm, categorie, peso_singolo, n_rec=2000, anni_rec=30, progresso=None):
+def stress_test(
+    gen, porte: dict, cfg: dict, somm: dict, categorie: dict, peso_singolo: dict, n_rec: int = 2000, anni_rec: int = 30, progresso=None
+) -> pd.DataFrame:
     """Shock applicato al valore mediano simulato a metà orizzonte; poi una nuova simulazione stima
     quanti anni servono per tornare al totale versato.
     categorie: {portafoglio: lista categoria per colonna}; peso_singolo: {portafoglio: peso del titolo

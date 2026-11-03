@@ -3,6 +3,8 @@
 Uso:  ris = esegui(cfg, aggiorna_dati=False, progresso=funzione(frazione, messaggio), log=print)
 """
 
+from __future__ import annotations
+
 import logging
 import multiprocessing as mp
 import os
@@ -24,7 +26,7 @@ registro_log = logging.getLogger("confronta")
 
 
 # ------------------------------------------------------------------ rendimenti attesi
-def stima_beta(R):
+def stima_beta(R: pd.DataFrame) -> dict[str, float]:
     """Beta di ogni titolo rispetto al benchmark, su rendimenti settimanali (riduce l'effetto degli
     orari di chiusura diversi tra le borse), usando solo i dati reali disponibili."""
     W = D.settimanali(R)
@@ -40,7 +42,15 @@ def stima_beta(R):
     return out
 
 
-def rendimento_colonne(cfg, colonne, metodo=None, premio=None, uguale=None, spost=0.0, beta=None):
+def rendimento_colonne(
+    cfg: dict,
+    colonne: list,
+    metodo: str | None = None,
+    premio: float | None = None,
+    uguale: float | None = None,
+    spost: float = 0.0,
+    beta: dict | None = None,
+) -> np.ndarray | None:
     """Rendimento atteso annuo per ogni colonna della matrice (None = storico, nessuna ricentratura).
     colonne: lista di (portafoglio, ticker)."""
     ra = cfg["rendimento_atteso"]
@@ -72,7 +82,7 @@ def ter_titolo(cfg, t, tipi=None):
     return 0.0
 
 
-def spiega_rendimenti(cfg, beta, tipi=None):
+def spiega_rendimenti(cfg: dict, beta: dict, tipi: dict | None = None) -> pd.DataFrame:
     """Tabella: per portafoglio beta e rendimento atteso annuo (metodo scelto)."""
     ra, comp = cfg["rendimento_atteso"], cfg["composizione"]
     righe = {}
@@ -92,7 +102,7 @@ def spiega_rendimenti(cfg, beta, tipi=None):
 
 
 # ------------------------------------------------------------------ matrice per la simulazione
-def matrice(cfg, R):
+def matrice(cfg: dict, R: pd.DataFrame) -> tuple[np.ndarray, dict, list, pd.DatetimeIndex]:
     """Una colonna per ogni (portafoglio, titolo). I buchi (titolo non ancora quotato) sono riempiti con la
     media pesata dei titoli disponibili dello stesso portafoglio = pesi ridistribuiti tra quelli disponibili."""
     blocchi, porte, colonne, i = [], {}, [], 0
@@ -113,7 +123,7 @@ def matrice(cfg, R):
     return M[ok], porte, colonne, R.index[ok]
 
 
-def prepara_M(cfg, M, colonne, mu, tipi=None):
+def prepara_M(cfg: dict, M: np.ndarray, colonne: list, mu: np.ndarray | None, tipi: dict | None = None) -> np.ndarray:
     """Ricentra i rendimenti sul rendimento atteso `mu` e sottrae il TER di benchmark ed ETF.
     Con il metodo storico (mu None) i dati restano come sono: i prezzi storici degli ETF sono già al netto del TER."""
     if mu is None:
@@ -288,8 +298,16 @@ def esegui_lavori(lavori: list, cfg: dict, n: int, av: Avanzamento, log=print) -
 
 
 def esegui(
-    cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D.CARTELLA_CACHE, scaricatore=None, n=None, solo=None, seed=None
-):
+    cfg: dict,
+    aggiorna_dati: bool = False,
+    progresso=None,
+    log=print,
+    cartella_cache: str = D.CARTELLA_CACHE,
+    scaricatore=None,
+    n: int | None = None,
+    solo: list | None = None,
+    seed: int | None = None,
+) -> dict:
     """solo: lista di analisi da fare (es. ["A"]); seed: sostituisce quello della configurazione."""
     t0 = time.time()
     tempi = {}
@@ -422,7 +440,7 @@ def esegui(
     return ris
 
 
-def prova_pesi(ris, satellite, quota_benchmark, n=2000):
+def prova_pesi(ris: dict, satellite: str, quota_benchmark: float, n: int = 2000) -> dict:
     """Prova rapida: portafoglio misto «quota_benchmark» di benchmark + resto nel portafoglio «satellite», simulato con poche
     simulazioni (risultato approssimato). Ritorna i numeri chiave a fine orizzonte."""
     cfg = ris["cfg"]
@@ -459,7 +477,7 @@ def prova_pesi(ris, satellite, quota_benchmark, n=2000):
     }
 
 
-def confronto_seed(cfg, sommari, n):
+def confronto_seed(cfg: dict, sommari: list, n: int) -> dict:
     """Mediana e 5° percentile a fine orizzonte per ogni seed, e scarto massimo dalla media in %."""
     H = cfg["orizzonte_anni"]
     seeds = [cfg["seed"] + 1000 * j for j in range(len(sommari))]
@@ -491,7 +509,7 @@ def varianti_sensibilita(cfg):
     return [("tutti 3 punti più bassi", dict(spost=-0.03)), ("tutti 3 punti più alti", dict(spost=0.03))]
 
 
-def storico(cfg, M, porte, colonne, idx):
+def storico(cfg: dict, M: np.ndarray, porte: dict, colonne: list, idx: pd.DatetimeIndex) -> dict:
     rib = cfg["ribilanciamento_mesi"] * 21
     out = {"serie": {}, "stat": {}, "rc": {}, "corr_media": {}}
     for p, (c, w) in porte.items():

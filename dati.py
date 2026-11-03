@@ -1,6 +1,8 @@
 """Dati: download da Yahoo Finance con cache su disco, conversione in EUR, controlli,
 classificazione automatica del settore (per stress test e proxy dell'analisi C)."""
 
+from __future__ import annotations
+
 import datetime
 import io
 import json
@@ -204,7 +206,7 @@ class Archivio:
 
 
 # ------------------------------------------------------------------ conversione in EUR
-def cambio(arch, valuta):
+def cambio(arch: Archivio, valuta: str) -> pd.Series:
     """Unità di `valuta` per 1 EUR (serie giornaliera)."""
     fx, _ = arch.prezzi(f"EUR{valuta}=X")
     if valuta == "USD":
@@ -214,7 +216,7 @@ def cambio(arch, valuta):
     return fx[~fx.index.duplicated()]
 
 
-def serie_eur(arch, t, valuta_default=None, avvisi=None):
+def serie_eur(arch: Archivio, t: str, valuta_default: str | None = None, avvisi: list | None = None) -> tuple[pd.Series, dict]:
     s, meta = arch.prezzi(t)
     valuta = meta.get("valuta") or valuta_default
     if valuta is None:
@@ -241,7 +243,7 @@ def _allinea(s, calendario, limite=10):
     return x.where((x.index >= s.index[0]) & (x.index <= s.index[-1] + pd.Timedelta(days=15)))
 
 
-def calendario_comune(serie):
+def calendario_comune(serie: dict[str, pd.Series]) -> pd.DatetimeIndex:
     """Giorni in cui almeno metà dei titoli già quotati ha scambiato (evita festività di singole borse)."""
     unione = sorted(set().union(*[s.index for s in serie.values()]))
     idx = pd.DatetimeIndex(unione)
@@ -252,7 +254,7 @@ def calendario_comune(serie):
 
 
 # ------------------------------------------------------------------ costruzione dataset
-def costruisci(cfg, arch):
+def costruisci(cfg: dict, arch: Archivio) -> dict:
     """Rendimenti giornalieri in EUR di tutti i titoli (NaN prima della quotazione) e del benchmark.
     Ritorna dict con R, info sui titoli, avvisi, movimenti estremi."""
     avvisi = []
@@ -327,7 +329,7 @@ def costruisci(cfg, arch):
     }
 
 
-def verifica_ticker(arch, t):
+def verifica_ticker(arch: Archivio, t: str) -> dict:
     """Scheda di un ticker per controllarlo prima della simulazione: nome, borsa, valuta, anni di storia, fonte.
     Scarica il ticker se non è in cache (così la simulazione dopo è più veloce)."""
     s, m = arch.prezzi(t)
@@ -344,7 +346,7 @@ def verifica_ticker(arch, t):
     }
 
 
-def importa_da_configurazione(cfg, arch):
+def importa_da_configurazione(cfg: dict, arch: Archivio) -> None:
     """Importa i CSV indicati in configurazione: prezzi_da_file: {TICKER: {file: percorso, valuta: EUR}}."""
     for t, v in (cfg.get("prezzi_da_file") or {}).items():
         try:
@@ -358,7 +360,7 @@ def settimanali(r):
     return (1 + r).resample("W-FRI").prod(min_count=1) - 1
 
 
-def classifica(cfg, dati, arch, log=print, serve_proxy=False):
+def classifica(cfg: dict, dati: dict, arch: Archivio, log=print, serve_proxy: bool = False) -> tuple[dict, dict]:
     """Per ogni titolo: categoria per gli stress test (tech/finanza/altro) e proxy per l'analisi C.
     Ordine: indicazione in configurazione -> settore Yahoo -> ETF di settore più correlato."""
     R = dati["R"]

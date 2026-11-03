@@ -1,18 +1,20 @@
 """Motore di simulazione Monte Carlo. Tre generatori di rendimenti (bootstrap, Student-t, GARCH)
 più un involucro per eventi idiosincratici, e un motore che simula i portafogli mese per mese."""
 
+from __future__ import annotations
+
 import numpy as np
 
 GG = 21  # giorni di borsa in un mese (12 mesi = 252 giorni)
 
 
 # ---------------------------------------------------------------- ricentratura
-def mu_giornaliero(rend_annuo, giorni=252):
+def mu_giornaliero(rend_annuo, giorni: int = 252) -> np.ndarray:
     """Rendimento medio giornaliero semplice tale che 1 € cresce in media del rend_annuo in un anno."""
     return (1.0 + np.asarray(rend_annuo, float)) ** (1.0 / giorni) - 1.0
 
 
-def ricentra(M, rend_annui, costi_annui=None, giorni=252):
+def ricentra(M: np.ndarray, rend_annui, costi_annui=None, giorni: int = 252) -> np.ndarray:
     """M (giorni x titoli): toglie la media storica e mette quella desiderata.
     Volatilità, code e correlazioni restano quelle storiche. costi_annui = TER sottratto ogni giorno."""
     M = np.asarray(M, float)
@@ -130,7 +132,7 @@ class ConCrolli:
 
 
 # ---------------------------------------------------------------- motore
-def ribilancia(H, w, costo_rb):
+def ribilancia(H: np.ndarray, w: np.ndarray, costo_rb: float) -> np.ndarray:
     """Riporta i valori per titolo H (n x titoli) ai pesi target w, pagando costo_rb sull'importo movimentato."""
     tot = H.sum(1)
     target = tot[:, None] * w
@@ -138,7 +140,21 @@ def ribilancia(H, w, costo_rb):
     return target * ((tot - costo) / tot)[:, None]
 
 
-def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni, seed, giorni=252, chunk=1000, rib_mesi=12, progresso=None):
+def simula(
+    gen,
+    porte: dict,
+    n: int,
+    anni: int,
+    capitale: float,
+    versamento: float,
+    costo_rb: float,
+    checkpoint_anni: list,
+    seed: int,
+    giorni: int = 252,
+    chunk: int = 1000,
+    rib_mesi: int = 12,
+    progresso=None,
+) -> dict:
     """porte: {nome: (colonne, pesi)}. Ritorna dict con, per portafoglio, i valori a fine mese
     (n x mesi+1), max drawdown e tempo sott'acqua massimo ai checkpoint, più volatilità e correlazioni.
     rib_mesi: ogni quanti mesi si ribilancia (0 = mai). progresso: funzione(frazione completata)."""
