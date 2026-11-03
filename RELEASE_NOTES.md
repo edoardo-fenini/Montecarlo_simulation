@@ -28,5 +28,5 @@ Tutti i dettagli sono nel `README.md`.
 - **Il futuro può essere diverso dal passato.** Il modello rimescola eventi già avvenuti, e i titoli quotati da poco hanno poca storia.
 - **Dati da Yahoo Finance**: possono contenere errori, e il servizio a volte limita gli accessi (in quel caso basta riprovare dopo qualche minuto). Il settore dei titoli non è sempre disponibile: allora si usa l'ETF di settore più correlato, che si può correggere nella configurazione.
 - **Costi**: sono inclusi TER degli ETF e costo di ribilanciamento, ma non imposte, spread e commissioni.
-- **Numero di simulazioni**: con le 10.000 di default la mediana può variare di circa ±3% tra un'esecuzione e l'altra. Per numeri più stabili usa 20.000 simulazioni, che richiedono circa il doppio del tempo.
+- **Tempo di calcolo**: con le 20.000 simulazioni di default (risultati stabili entro circa ±2%) un confronto richiede alcuni minuti. Per una prova veloce si può scendere a 1.000.
 - I file `.command` non sono firmati da Apple, per questo serve "Apri comunque" la prima volta.

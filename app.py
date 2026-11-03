@@ -180,7 +180,7 @@ with st.sidebar:
 
     st.subheader("Simulazione")
     st.number_input("Numero di simulazioni", min_value=500, max_value=100000, step=1000, key="nsim",
-                    help="10.000 = circa 1-3 minuti. Per una prova veloce usa 1.000.")
+                    help="20.000 (default) = risultati stabili, circa 3-5 minuti. Per una prova veloce usa 1.000.")
     with st.expander("Benchmark e impostazioni avanzate"):
         st.text_input("Nome del benchmark", key="b_nome")
         st.text_input("Ticker del benchmark", key="b_ticker")

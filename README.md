@@ -81,7 +81,7 @@ Nella **barra a sinistra**:
   - `storico`: i rendimenti del passato. Attenzione: proietta il passato nel futuro ed è troppo ottimista se scegli titoli che sono già andati bene.
   - `personalizzato`: scegli tu il rendimento di ogni portafoglio.
 - **Moduli**: stress test, rischio sul singolo titolo e «Le simulazioni bastano?» sono attivi. L'ultimo ripete il calcolo con 3 seed per controllare che il numero di simulazioni sia sufficiente. Il confronto tra modelli e l'analisi dal 1999 con proxy sono più lenti.
-- **Numero di simulazioni**: 10.000 richiedono circa 1-3 minuti. Per una prova veloce usa 1.000.
+- **Numero di simulazioni**: il default è 20.000, così i risultati cambiano al massimo di circa ±2% tra un calcolo e l'altro. Con i moduli di default servono circa 3-5 minuti. Per una prova veloce usa 1.000.
 - Premi **▶ Avvia simulazione**.
 
 **Risultati**: compaiono in schede (Sintesi, Risultati per orizzonte, Fan chart, Drawdown, Rischio e correlazioni, Stress test, Robustezza, Limiti). In alto ci sono i pulsanti per scaricare il **report HTML** (si apre con il browser) e il **report PDF**.
@@ -134,7 +134,7 @@ rendimento_atteso:
   #   Satellite: 0.06
   #   benchmark: 0.06
 
-n_simulazioni: 10000
+n_simulazioni: 20000
 ribilanciamento: annuale          # annuale | semestrale | trimestrale | mensile | mai
 
 moduli:

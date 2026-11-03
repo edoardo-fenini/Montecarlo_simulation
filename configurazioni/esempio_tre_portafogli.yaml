@@ -18,7 +18,7 @@ rendimento_atteso:
   #   Cyber security: 0.05
   #   benchmark: 0.06
 
-n_simulazioni: 10000
+n_simulazioni: 20000          # 20.000 = mediana stabile entro ±2% (per una prova veloce: 1000)
 seed: 12345
 ribilanciamento: annuale       # annuale | semestrale | trimestrale | mensile | mai
 costo_ribilanciamento: 0.001   # 0,1% dell'importo movimentato

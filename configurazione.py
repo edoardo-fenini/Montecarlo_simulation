@@ -20,7 +20,7 @@ DEFAULT = {
     "versamento_mensile": 0,
     "orizzonte_anni": 15,
     "orizzonti_intermedi": [5, 10],
-    "n_simulazioni": 10000,
+    "n_simulazioni": 20000,  # con 20.000 la mediana resta entro ±2% tra seed diversi (vedi esempi/verifica_convergenza)
     "seed": 12345,
     "costo_ribilanciamento": 0.001,
     "ribilanciamento": "annuale",
