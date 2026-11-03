@@ -130,9 +130,10 @@ def ribilancia(H, w, costo_rb):
 
 
 def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni, seed,
-           giorni=252, chunk=2500):
+           giorni=252, chunk=1000, rib_mesi=12, progresso=None):
     """porte: {nome: (colonne, pesi)}. Ritorna dict con, per portafoglio, i valori a fine mese
-    (n x mesi+1), max drawdown e tempo sott'acqua massimo ai checkpoint, più volatilità e correlazioni."""
+    (n x mesi+1), max drawdown e tempo sott'acqua massimo ai checkpoint, più volatilità e correlazioni.
+    rib_mesi: ogni quanti mesi si ribilancia (0 = mai). progresso: funzione(frazione completata)."""
     assert giorni == 12 * GG
     rng = np.random.default_rng(seed)
     mesi, nomi = anni * 12, list(porte)
@@ -161,7 +162,7 @@ def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni,
                 cols, w = porte[k][0], np.asarray(porte[k][1], float)
                 s = st[k]
                 H = s["H"]
-                if m > 0 and m % 12 == 0:  # ribilanciamento annuale ai pesi target, con costo
+                if rib_mesi and m > 0 and m % rib_mesi == 0:  # ribilanciamento ai pesi target, con costo
                     H = ribilancia(H, w, costo_rb)
                 if versamento and m > 0:
                     H = H + versamento * w
@@ -183,10 +184,13 @@ def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni,
             R = np.stack(rets, axis=2).reshape(-1, P)
             s1 += R.sum(0); cross += R.T @ R; cnt += len(R)
         fatti += nn
+        if progresso:
+            progresso(fatti / n)
     mean = s1 / cnt
     cov = cross / cnt - np.outer(mean, mean)
     sd = np.sqrt(np.diag(cov))
     for i, k in enumerate(nomi):
         out[k]["vol"] = float(sd[i] * np.sqrt(giorni))
-    out["_corr"] = (nomi, cov / np.outer(sd, sd))
+    with np.errstate(invalid="ignore", divide="ignore"):
+        out["_corr"] = (nomi, cov / np.outer(sd, sd))
     return out
