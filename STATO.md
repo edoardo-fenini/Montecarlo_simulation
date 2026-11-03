@@ -30,9 +30,13 @@
       scartate: richiederebbero di riordinare i calcoli (rischio di cambiare i numeri). Cache di sessione nell'app, log.txt.
       ruff (commit separato 17a97e6, «All checks passed»), type hints sulle funzioni principali, nessuna funzione inutilizzata.
       Misura su Mac reale: passo informativo nel workflow «Prova su Mac».
-- [~] 6. Release v1.1.0: README con 3 screenshot (docs/immagini), CHANGELOG, RELEASE_NOTES v1.1.0, esempio
-      esempi/2026-11-03_v1.1_tre_portafogli (tutti i moduli, 232 s su 4 core). Tempo misurato sul Mac M1 (3 core) di GitHub:
-      104 s con i default. Da fare: PR verso main, merge dopo i controlli verdi, release dal sito.
+- [x] 6. README con 3 screenshot, CHANGELOG, RELEASE_NOTES v1.1.0, esempio completo; tempo sul Mac M1 (3 core) di GitHub
+      con i default: 102 s. Pull request #1 unita in main (2ef9b61) dopo 50 test verdi e prova su Mac verde.
+- [ ] Release v1.1.0: da pubblicare dal sito (Claude non ha lo strumento): Releases → Draft a new release → tag v1.1.0
+      (Create new tag on publish) → Target main → testo di RELEASE_NOTES.md → Publish; poi controllare in Actions lo zip.
+- [ ] Ramo predefinito: impostare main dal sito (Settings → General → Default branch).
+
+Test di non regressione: identico dall'inizio alla fine della 1.1 (anche in parallelo). Nessun numero del calcolo è cambiato.
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
