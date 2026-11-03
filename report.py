@@ -353,5 +353,12 @@ def conclusioni_solidita(ris):
         ords = {ordine({k: ris[x]["orizzonti"][cp].loc["Valore mediano", k] for k in ORD}) for x in (f"sens_3_{a}", f"base_{a}", f"sens_9_{a}", f"sens_settori_{a}")}
         ch.append(f"analisi {a}: " + ("classifica del valore finale invariata" if len(ords) == 1 else "classifica del valore finale diversa tra gli scenari di rendimento"))
     h += "<li>Sensibilità al rendimento atteso – " + "; ".join(ch) + "</li>"
-    h += "</ul><p>In ogni caso: il <b>livello</b> dei numeri (quanto vale la mediana, quanto è probabile perdere) dipende dal rendimento atteso e dal periodo storico scelto; le <b>differenze di rischio tra ETF diversificato e singole azioni</b> sono ampie e si ripetono in tutte le varianti. Il rischio sul singolo titolo pesa di più dove i titoli sono meno (big tech, 5 titoli).</p>"
+    oa = {m: ordine(v) for m, v in metriche_rischio(ris["base_A"]).items()}
+    ob = {m: ordine(v) for m, v in metriche_rischio(ris["base_B"]).items()}
+    if oa != ob:
+        h += "<li>Il confronto tra <i>banche d'investimento</i> e <i>big tech</i> dipende dal periodo storico: nell'analisi A (2021-2026, include il ribasso tech del 2022) i finanziari risultano meno rischiosi, nell'analisi B (dal 2007, include il 2008) lo sono la big tech.</li>"
+    dp = max(ris[f"idio_{a}"]["orizzonti"][cp].loc["Prob. sotto il versato", k] - ris[f"base_{a}"]["orizzonti"][cp].loc["Prob. sotto il versato", k] for a in "AB" for k in ORD[:3])
+    dd = max(ris[f"base_{a}"]["orizzonti"][cp].loc["Max drawdown mediano", k] - ris[f"idio_{a}"]["orizzonti"][cp].loc["Max drawdown mediano", k] for a in "AB" for k in ORD[:3])
+    h += f"<li>Rischio sul singolo titolo (crollo 80-100% con probabilità {pct(ris['cfg']['idio_p_anno'])} l'anno per titolo): l'effetto è <b>contenuto</b> rispetto alla volatilità normale di questi titoli, che già produce cali enormi. La probabilità di stare sotto il versato sale al massimo di {num(dp * 100)} punti percentuali e il max drawdown mediano peggiora al massimo di {num(dd * 100)} punti. Non cambia nessuna classifica.</li>"
+    h += "</ul><p>In ogni caso: il <b>livello</b> dei numeri (quanto vale la mediana, quanto è probabile perdere) dipende dal rendimento atteso e dal periodo storico scelto; la <b>distanza di rischio tra l'ETF diversificato e i portafogli di singole azioni</b> è ampia e si ripete in tutte le varianti: l'ETF è sempre il meno rischioso e ha sempre il valore mediano più alto.</p>"
     return h
