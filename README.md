@@ -29,6 +29,17 @@ La prima volta macOS blocca i file scaricati da internet ("non può essere apert
 3. Scorri in basso fino al messaggio su `Installa.command` e premi **Apri comunque**, poi conferma con la password del Mac.
 4. Ripeti la stessa cosa la prima volta che apri `Avvia.command`.
 
+**Se il doppio clic viene bloccato anche dopo "Apri comunque".** macOS mette un'etichetta invisibile, detta *quarantena*, su tutto quello che scarichi da internet, e a volte continua a bloccare i file anche dopo il permesso. Puoi togliere l'etichetta dalla cartella del programma con un solo comando:
+
+1. Apri il **Terminale** (Launchpad → Altro → Terminale, oppure cerca "Terminale" con Spotlight ⌘+Spazio).
+2. Scrivi questo comando, sostituendo `confronta-portafogli` con il nome della tua cartella dentro Documenti, e premi Invio:
+
+```bash
+xattr -dr com.apple.quarantine ~/Documents/confronta-portafogli
+```
+
+Il comando non stampa niente se va tutto bene. Toglie l'etichetta solo ai file di quella cartella e non cambia nient'altro sul Mac. Ora il doppio clic su `Installa.command` e `Avvia.command` funziona. Se la cartella non è in Documenti, scrivi `xattr -dr com.apple.quarantine ` (con lo spazio finale) e trascina la cartella nella finestra del Terminale: il percorso si scrive da solo.
+
 ## 4. Installare e avviare con il doppio clic
 
 1. **Doppio clic su `Installa.command`.** Si apre il Terminale: lo strumento scarica Python e le librerie **dentro la cartella del programma** (non tocca il resto del Mac). Ci vogliono alcuni minuti e serve internet. Alla fine compare **"Installazione completata"**. Va fatto una volta sola.
@@ -165,6 +176,7 @@ Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%).
 | Problema | Soluzione |
 |---|---|
 | "Non può essere aperto perché proviene da uno sviluppatore non identificato" | Vedi il punto 3: Impostazioni di Sistema → Privacy e sicurezza → **Apri comunque**. |
+| Bloccato anche dopo "Apri comunque" | Nel Terminale: `xattr -dr com.apple.quarantine ~/Documents/confronta-portafogli` (vedi il punto 3). |
 | Il doppio clic apre un editor di testo invece del Terminale | Clic destro sul file → **Apri con → Terminale**. |
 | "Permission denied" su un file `.command` | Nel Terminale, dalla cartella del programma: `chmod +x Installa.command Avvia.command` |
 | L'installazione si ferma con un errore di rete | Controlla internet e rilancia `Installa.command`: riparte da dove si era fermata. |

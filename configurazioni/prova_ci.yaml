@@ -1,0 +1,18 @@
+# Configurazione piccola usata dalla prova automatica su Mac (GitHub Actions).
+nome: prova automatica
+capitale_iniziale: 1000
+versamento_mensile: 50
+orizzonte_anni: 5
+orizzonti_intermedi: [2]
+n_simulazioni: 1000
+moduli:
+  stress_test: true
+  rischio_singolo_titolo: true
+  verifica_convergenza: true
+verifica_convergenza: {numero_seed: 2}
+settori: {AAPL: tech, MSFT: tech}
+portafogli:
+  - nome: Tech
+    titoli: [AAPL, MSFT]
+  - nome: Misto
+    titoli: {benchmark: 70, Tech: 30}

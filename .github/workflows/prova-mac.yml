@@ -1,0 +1,67 @@
+# Prova completa su un Mac Apple Silicon di GitHub, a ogni push e su richiesta (Actions → Prova su Mac → Run workflow):
+# installazione con Installa.command, test, report da riga di comando, avvio dell'app.
+name: Prova su Mac
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  mac:
+    runs-on: macos-14   # Apple Silicon (M1)
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Installazione (come il doppio clic su Installa.command)
+        run: ./Installa.command --non-interattivo
+
+      - name: Controlla che Python e librerie siano dentro la cartella
+        run: |
+          uname -m
+          readlink -f .venv/bin/python || .venv/bin/python -c "import sys; print(sys.executable)"
+          .venv/bin/python -c "import sys, platform; print(sys.version); print(platform.machine())"
+          test -d .python && test -d .venv
+
+      - name: Test automatici
+        run: .venv/bin/python -m pytest -q tests
+
+      - name: Report da riga di comando (prova rapida)
+        run: .venv/bin/python confronta.py --config configurazioni/prova_ci.yaml --veloce --uscita report/prova_ci
+
+      - name: Controlla i file del report
+        run: |
+          ls -la report/prova_ci report/prova_ci/dati_csv
+          test -s report/prova_ci/report.html
+          head -c 4 report/prova_ci/report.pdf | grep -q "%PDF"
+          grep -q "Le simulazioni bastano?" report/prova_ci/report.html
+
+      - name: Avvia l'app per qualche secondo e verifica che risponda
+        run: |
+          ./Avvia.command --non-interattivo > avvia.log 2>&1 &
+          AVVIA=$!
+          URL=""
+          for i in $(seq 1 120); do
+            URL=$(grep -o "http://localhost:[0-9]*" avvia.log | head -1)
+            if [ -n "$URL" ] && curl -sf "$URL/_stcore/health" >/dev/null; then break; fi
+            sleep 1
+          done
+          cat avvia.log
+          echo "Indirizzo: $URL"
+          curl -sf "$URL/_stcore/health" && echo " <- l'app risponde"
+          curl -sf "$URL" | grep -qi "streamlit"
+          sleep 5
+          kill $AVVIA
+          sleep 3
+          if pgrep -f "[s]treamlit run app.py" >/dev/null; then echo "ERRORE: l'app non si è fermata"; exit 1; fi
+          echo "App fermata correttamente"
+
+      - name: Salva il report di prova
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-prova-mac
+          path: |
+            report/prova_ci
+            avvia.log
+          if-no-files-found: ignore

@@ -2,9 +2,16 @@
 # Installa lo strumento con un doppio clic. Python e librerie restano dentro questa cartella.
 cd "$(dirname "$0")" || exit 1
 
+# Modalità non interattiva (per le prove automatiche su GitHub): ./Installa.command --non-interattivo
+# oppure variabile d'ambiente CI impostata. Con il doppio clic non cambia nulla.
+NON_INTERATTIVO=0
+if [ "$1" = "--non-interattivo" ] || [ -n "$CI" ]; then NON_INTERATTIVO=1; fi
+
 fine() {
   echo
-  read -r -p "Premi Invio per chiudere questa finestra..." _
+  if [ "$NON_INTERATTIVO" = 0 ]; then
+    read -r -p "Premi Invio per chiudere questa finestra..." _
+  fi
   exit "$1"
 }
 
