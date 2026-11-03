@@ -100,6 +100,19 @@ def stress_test(gen, porte, cfg, somm, categorie, peso_singolo, n_rec=2000, anni
         if peso_singolo.get(k):
             casi.append((k, SINGOLO, v_mid, -0.90 * peso_singolo[k]))
     tgt = versato(cap, ver, mid)
+    # Una sola simulazione di "crescita di 1 €" per portafoglio, riusata per tutti gli scenari: senza versamenti
+    # il valore è proporzionale al capitale di partenza; i versamenti si aggiungono come percorso separato.
+    percorsi = {}
+
+    def crescita(k):
+        if k not in percorsi:
+            args = dict(n=n_rec, anni=anni_rec, costo_rb=cfg["costo_ribilanciamento"], checkpoint_anni=[anni_rec],
+                        seed=cfg["seed"] + 99, giorni=252, rib_mesi=cfg["ribilanciamento_mesi"])
+            G = simula(gen, {k: porte[k]}, capitale=1.0, versamento=0, **args)[k]["mensile"].astype(float)
+            K = simula(gen, {k: porte[k]}, capitale=1e-9, versamento=ver, **args)[k]["mensile"].astype(float) if ver else 0.0
+            percorsi[k] = (G, K)
+        return percorsi[k]
+
     righe = []
     for i, (k, sc, v_mid, perdita) in enumerate(casi):
         v_dopo = v_mid * (1 + perdita)
@@ -108,9 +121,8 @@ def stress_test(gen, porte, cfg, somm, categorie, peso_singolo, n_rec=2000, anni
         if v_dopo >= tgt:
             r.update({"Anni per tornare al versato (mediana)": 0.0, "Prob. di tornarci entro 10 anni": 1.0, "Scende sotto il versato": False})
         else:
-            sim = simula(gen, {k: porte[k]}, n_rec, anni_rec, v_dopo, ver, cfg["costo_ribilanciamento"], [anni_rec],
-                         cfg["seed"] + 99, 252, rib_mesi=cfg["ribilanciamento_mesi"])
-            m = sim[k]["mensile"]
+            G, K = crescita(k)
+            m = v_dopo * G + K
             obiettivo = tgt + ver * np.arange(m.shape[1])
             hit = m >= obiettivo
             primo = np.where(hit.any(1), hit.argmax(1), 10 ** 6)

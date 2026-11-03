@@ -181,7 +181,7 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
         if mod["rischio_singolo_titolo"] and a != "C":
             pesi[f"idio_{a}"] = 1.0
         if mod["stress_test"] and a != "C":
-            pesi[f"stress_{a}"] = 0.6
+            pesi[f"stress_{a}"] = 0.4
         if mod["confronto_modelli"] and a != "C":
             pesi[f"t_{a}"] = 1.0
             pesi[f"garch_{a}"] = 1.3
@@ -228,7 +228,7 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
             log(f"     Analisi {a}: stress test ...")
             cb = av.passo(f"stress_{a}", f"Analisi {a}: stress test")
             ris["stress"][a] = metriche.stress_test(Bootstrap(Mr, b), porte, cfg, ris["sim"][a], cat, singolo,
-                                                    n_rec=min(n, 2000), progresso=cb)
+                                                    n_rec=min(n, 1000), progresso=cb)
         if mod["confronto_modelli"]:
             ris["modelli"][a] = {
                 "Student-t multivariata": corri(StudentT(Mr, 5), porte, f"t_{a}", f"Analisi {a}: modello Student-t"),

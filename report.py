@@ -1,43 +1,68 @@
-"""Costruisce report.html (autonomo: grafici incorporati come immagini)."""
-import base64, io, html, datetime
-import numpy as np, pandas as pd
+"""Report: costruisce le sezioni (blocchi di testo, tabelle e grafici) e le scrive in HTML, PDF e CSV.
+
+Le stesse sezioni sono mostrate come schede nell'app Streamlit."""
+import base64, datetime, html, io, os, re
+import numpy as np
+import pandas as pd
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
 
-NOME = {"cyber": "Cyber security", "finanza": "Banche d'investimento / PE", "bigtech": "Big tech USA", "bench": "MSCI World (ETF)"}
-COL = {"cyber": "#0072B2", "finanza": "#D55E00", "bigtech": "#009E73", "bench": "#555555"}
-ORD = ["cyber", "finanza", "bigtech", "bench"]
+from configurazione import BENCH
+from metriche import RIGHE_ORIZZONTE, SINGOLO
+
+SCHEDE = ["Sintesi", "Risultati per orizzonte", "Fan chart", "Drawdown", "Rischio e correlazioni",
+          "Stress test", "Robustezza", "Limiti dell'analisi"]
+PALETTE = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#882255", "#117733"]
+GRIGIO = "#555555"
 
 
-# ------------------------------------------------------------------ formattazione
+# ------------------------------------------------------------------ formattazione italiana
 def num_it(n): return f"{n:,}".replace(",", ".")
-def eur(v): return f"{v:,.0f} €".replace(",", ".")
-def pct(v, d=1): return f"{v*100:.{d}f}%".replace(".", ",")
+def eur(v): return "–" if v is None or not np.isfinite(v) else f"{v:,.0f} €".replace(",", ".")
+def pct(v, d=1): return "–" if v is None or not np.isfinite(v) else f"{v * 100:.{d}f}%".replace(".", ",")
 def num(v, d=1): return "mai" if not np.isfinite(v) else f"{v:.{d}f}".replace(".", ",")
-def fig64(fig):
-    b = io.BytesIO(); fig.savefig(b, format="png", dpi=110, bbox_inches="tight"); plt.close(fig)
-    return f'<img src="data:image/png;base64,{base64.b64encode(b.getvalue()).decode()}" alt="grafico">'
+def esc(s): return html.escape(str(s), quote=False)
 
 
-def tabella(righe, intestazione, gruppi=None, classe=""):
-    """righe: lista di liste (prima colonna = etichetta). gruppi: [(titolo, n_colonne)]."""
-    h = f'<table class="{classe}">'
-    if gruppi:
-        h += "<tr><th></th>" + "".join(f'<th colspan="{n}" class="g">{t}</th>' for t, n in gruppi) + "</tr>"
-    h += "<tr><th></th>" + "".join(f"<th>{c}</th>" for c in intestazione) + "</tr>"
-    for r in righe:
-        h += f'<tr><td class="e">{r[0]}</td>' + "".join(f"<td>{c}</td>" for c in r[1:]) + "</tr>"
-    return h + "</table>"
+def colori(ris):
+    c, i = {}, 0
+    for k in ris["nomi"]:
+        if k == ris["bench_nome"]:
+            c[k] = GRIGIO
+        else:
+            c[k] = PALETTE[i % len(PALETTE)]; i += 1
+    return c
+
+
+def corto(k, n=22):
+    return k if len(k) <= n else k[:n - 1] + "…"
+
+
+def png(fig):
+    b = io.BytesIO()
+    fig.savefig(b, format="png", dpi=110, bbox_inches="tight")
+    plt.close(fig)
+    return b.getvalue()
+
+
+def _euro_asse(ax):
+    ax.yaxis.set_major_formatter(FuncFormatter(lambda v, _: f"{v:,.0f}".replace(",", ".")))
 
 
 # ------------------------------------------------------------------ grafici
-def fan_chart(s, titolo, cp):
-    fig, axs = plt.subplots(2, 2, figsize=(11, 7.4), sharex=True, sharey=True)
-    top = max(s["bande"][k][4][cp[-1] * 12] for k in ORD) * 1.12
-    for ax, k in zip(axs.ravel(), ORD):
-        b, x = s["bande"][k], np.arange(s["bande"][k].shape[1]) / 12
-        c = COL[k]
+def fan_chart(ris, a):
+    s, cfg, col = ris["sim"][a], ris["cfg"], colori(ris)
+    nomi, cp = s["nomi"], cfg["orizzonti"]
+    nc = 2 if len(nomi) > 1 else 1
+    nr = int(np.ceil(len(nomi) / nc))
+    fig, axs = plt.subplots(nr, nc, figsize=(11, 3.7 * nr), sharex=True, sharey=True, squeeze=False)
+    top = max(s["bande"][k][4][cp[-1] * 12] for k in nomi) * 1.12
+    for ax, k in zip(axs.ravel(), nomi):
+        b = s["bande"][k]
+        x = np.arange(b.shape[1]) / 12
+        c = col[k]
         ax.fill_between(x, b[0], b[4], color=c, alpha=0.15, lw=0, label="5°–95° percentile")
         ax.fill_between(x, b[1], b[3], color=c, alpha=0.30, lw=0, label="25°–75° percentile")
         ax.plot(x, b[2], color=c, lw=2, label="Mediana")
@@ -47,318 +72,678 @@ def fan_chart(s, titolo, cp):
             ax.axvline(h, color="#999", lw=0.8, ls=":")
             for v, dy in ((b[4][j], 5), (b[2][j], 6), (b[0][j], -12)):
                 ax.plot([h], [v], "o", color=c, ms=5, mec="white", mew=0.8, zorder=5)
-                ax.annotate(eur(v), (h, v), xytext=(-5, dy), textcoords="offset points", ha="right", fontsize=7.5, color="#111",
-                            bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.75), zorder=6)
-        ax.set_title(NOME[k], color=c, fontweight="bold", fontsize=11)
-        ax.set_ylim(0, top); ax.grid(alpha=0.25)
-        ax.yaxis.set_major_formatter(matplotlib.ticker.FuncFormatter(lambda v, _: f"{v:,.0f}".replace(",", ".")))
-        ax.set_xticks(range(0, cp[-1] + 1, 1 if cp[-1] <= 15 else 5))
-    for ax in axs[1]: ax.set_xlabel("anni")
-    for ax in axs[:, 0]: ax.set_ylabel("valore (€)")
+                ax.annotate(eur(v), (h, v), xytext=(-5, dy), textcoords="offset points", ha="right", fontsize=7.5,
+                            color="#111", bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.75), zorder=6)
+        ax.set_title(k, color=c, fontweight="bold", fontsize=11)
+        ax.set_ylim(0, top)
+        ax.grid(alpha=0.25)
+        _euro_asse(ax)
+    for ax in axs.ravel()[len(nomi):]:
+        ax.axis("off")
+    for ax in axs[-1]:
+        ax.set_xlabel("anni")
+    for ax in axs[:, 0]:
+        ax.set_ylabel("valore (€)")
     axs[0, 0].legend(loc="upper left", fontsize=7.5, frameon=False)
-    fig.suptitle(titolo, fontsize=12, y=1.0)
     fig.tight_layout()
-    return fig64(fig)
+    return png(fig)
 
 
-def istogrammi_mdd(sA, sB, h):
-    fig, axs = plt.subplots(1, 2, figsize=(11, 3.8), sharey=True)
-    for ax, (t, s) in zip(axs, (("Analisi A", sA), ("Analisi B", sB))):
-        for k in ORD:
-            ax.hist(s["mdd_fin"][k] * 100, bins=np.linspace(-100, 0, 41), alpha=0.5, color=COL[k], label=NOME[k], density=True)
-        ax.set_title(f"{t}: max drawdown nei {h} anni"); ax.set_xlabel("max drawdown (%)"); ax.grid(alpha=0.25)
-    axs[0].set_ylabel("frequenza"); axs[0].legend(fontsize=8, frameon=False, loc="upper left")
-    fig.tight_layout(); return fig64(fig)
+def istogrammi_mdd(ris):
+    anal = [a for a in ris["sim"] if a != "C"]
+    col, h = colori(ris), ris["cfg"]["orizzonte_anni"]
+    fig, axs = plt.subplots(1, len(anal), figsize=(5.5 * len(anal), 3.9), sharey=True, squeeze=False)
+    for ax, a in zip(axs[0], anal):
+        s = ris["sim"][a]
+        for k in s["nomi"]:
+            ax.hist(s["mdd_fin"][k] * 100, bins=np.linspace(-100, 0, 41), alpha=0.45, color=col[k], label=corto(k, 30), density=True)
+        ax.set_title(f"Analisi {a}: calo massimo nei {h} anni")
+        ax.set_xlabel("max drawdown (%)")
+        ax.grid(alpha=0.25)
+    axs[0, 0].set_ylabel("frequenza")
+    axs[0, 0].legend(fontsize=8, frameon=False, loc="upper left")
+    fig.tight_layout()
+    return png(fig)
 
 
-def grafico_rischio(st):
-    fig, axs = plt.subplots(1, 3, figsize=(11, 3.6))
-    for ax, k in zip(axs, ORD[:3]):
+def grafico_rischio(ris, a):
+    st, col = ris["storico"][a], colori(ris)
+    nomi = [k for k in ris["nomi"] if k in st["rc"]]
+    if not nomi:
+        return None
+    nc = min(3, len(nomi))
+    nr = int(np.ceil(len(nomi) / nc))
+    alt = max(len(st["rc"][k]) for k in nomi)
+    fig, axs = plt.subplots(nr, nc, figsize=(11, max(2.6, 0.32 * alt + 1.2) * nr), squeeze=False)
+    for ax, k in zip(axs.ravel(), nomi):
         rc = st["rc"][k]
-        ax.barh(rc.index[::-1], rc.values[::-1] * 100, color=COL[k])
-        ax.axvline(100 / len(rc), color="black", ls="--", lw=1)
-        ax.set_title(NOME[k], color=COL[k], fontsize=10, fontweight="bold"); ax.set_xlabel("% del rischio totale"); ax.grid(alpha=0.25, axis="x")
-    fig.text(0.5, -0.02, "Linea tratteggiata = quota 'equa' (1/numero di titoli). Barre più lunghe = titolo che pesa di più sul rischio.", ha="center", fontsize=8.5)
-    fig.tight_layout(); return fig64(fig)
+        ax.barh(rc.index[::-1], rc.values[::-1] * 100, color=col[k])
+        pesi = list(ris["cfg"]["composizione"][k].values())
+        ax.scatter(np.array(pesi[::-1]) * 100, range(len(pesi)), marker="|", s=200, color="black", zorder=5)
+        ax.set_title(corto(k, 32), color=col[k], fontsize=10, fontweight="bold")
+        ax.set_xlabel("% del rischio totale")
+        ax.grid(alpha=0.25, axis="x")
+    for ax in axs.ravel()[len(nomi):]:
+        ax.axis("off")
+    fig.text(0.5, -0.02, "Barra = quota del rischio del titolo; trattino nero = suo peso nel portafoglio. "
+             "Barra più lunga del trattino = il titolo pesa sul rischio più di quanto pesa in euro.", ha="center", fontsize=8.5)
+    fig.tight_layout()
+    return png(fig)
 
 
-def heatmap(mats):
-    fig, axs = plt.subplots(2, 2, figsize=(9, 8))
+def heatmap(ris):
+    mats = []
+    for a in ris["sim"]:
+        if a == "C":
+            continue
+        mats += [(f"Storica – analisi {a}", ris["storico"][a]["corr"]), (f"Simulata – analisi {a}", ris["sim"][a]["corr_sim"])]
+    nomi = ris["nomi"]
+    n = len(nomi)
+    lato = max(4.2, 0.75 * n + 1.5)
+    fig, axs = plt.subplots(len(mats) // 2, 2, figsize=(2 * lato, lato * len(mats) // 2), squeeze=False)
     for ax, (t, m) in zip(axs.ravel(), mats):
-        m = m.loc[ORD, ORD]
+        m = m.loc[nomi, nomi]
         ax.imshow(m.values, vmin=0, vmax=1, cmap="Blues")
-        ax.set_xticks(range(4)); ax.set_yticks(range(4))
-        ax.set_xticklabels([NOME[k].split(" /")[0].replace(" (ETF)", "") for k in ORD], rotation=25, ha="right", fontsize=9)
-        ax.set_yticklabels([NOME[k].split(" /")[0].replace(" (ETF)", "") for k in ORD], fontsize=9)
-        for i in range(4):
-            for j in range(4):
-                ax.text(j, i, f"{m.values[i, j]:.2f}".replace(".", ","), ha="center", va="center", fontsize=11, color="white" if m.values[i, j] > 0.6 else "black")
+        ax.set_xticks(range(n)); ax.set_yticks(range(n))
+        ax.set_xticklabels([corto(k, 16) for k in nomi], rotation=30, ha="right", fontsize=8)
+        ax.set_yticklabels([corto(k, 16) for k in nomi], fontsize=8)
+        for i in range(n):
+            for j in range(n):
+                v = m.values[i, j]
+                ax.text(j, i, f"{v:.2f}".replace(".", ","), ha="center", va="center", fontsize=9, color="white" if v > 0.6 else "black")
         ax.set_title(t, fontsize=10)
-    fig.tight_layout(); return fig64(fig)
+    fig.tight_layout()
+    return png(fig)
 
 
-# ------------------------------------------------------------------ tabelle di sezione
-RIGHE_H = [("Totale versato", eur), ("Valore mediano", eur), ("5° percentile", eur), ("95° percentile", eur),
-           ("Prob. sotto il versato", pct), ("Max drawdown mediano", pct), ("Max drawdown peggiore (95%)", pct),
-           ("Tempo sott'acqua max, mediano (anni)", num), ("Tempo sott'acqua max, peggiore 95% (anni)", num)]
+# ------------------------------------------------------------------ blocchi
+def T(intest, righe, gruppi=None, sx=False):
+    return ("tab", {"intest": intest, "righe": righe, "gruppi": gruppi, "sx": sx})
 
 
-def tab_orizzonti(sA, sB, h, nomeA="Analisi A", nomeB="Analisi B"):
-    righe = []
-    for r, f in RIGHE_H:
-        riga = [r]
-        for s in (sA, sB):
-            if s is not None:
-                riga += [f(s["orizzonti"][h].loc[r, k]) for k in ORD]
-        righe.append(riga)
-    gruppi = [(t, 4) for t, s in ((nomeA, sA), (nomeB, sB)) if s is not None]
-    return tabella(righe, [NOME[k].split(" /")[0].replace(" (ETF)", "") for k in ORD] * len(gruppi), gruppi)
+FMT = {"Totale versato": eur, "Valore mediano": eur, "5° percentile": eur, "95° percentile": eur,
+       "Prob. sotto il versato": pct, "Max drawdown mediano": pct, "Max drawdown peggiore (95%)": pct,
+       "Tempo sott'acqua max, mediano (anni)": num, "Tempo sott'acqua max, peggiore 95% (anni)": num}
 
 
-def tab_altre(ris):
-    righe = []
-    for etichetta, f in (("Volatilità annua storica", lambda a, k: pct(ris["storico"][a]["stat"][k]["vol"])),
-                         ("Volatilità annua simulata", lambda a, k: pct(ris[f"base_{a}"]["vol_sim"][k])),
-                         ("Max drawdown storico", lambda a, k: pct(ris["storico"][a]["stat"][k]["mdd"])),
-                         ("VaR 95% a 1 anno (perdita)", lambda a, k: pct(ris[f"base_{a}"]["var_es"].loc["VaR 95% 1 anno", k])),
-                         ("Expected Shortfall 95% a 1 anno", lambda a, k: pct(ris[f"base_{a}"]["var_es"].loc["Expected Shortfall 95% 1 anno", k])),
-                         ("Correlazione media tra i titoli", lambda a, k: "–" if k == "bench" else num(ris["storico"][a]["corr_media"][k], 2))):
-        righe.append([etichetta] + [f(a, k) for a in "AB" for k in ORD])
-    return tabella(righe, [NOME[k].split(" /")[0].replace(" (ETF)", "") for k in ORD] * 2, [("Analisi A", 4), ("Analisi B", 4)])
+def tab_orizzonte(ris, h, anal):
+    nomi = ris["nomi"]
+    righe = [[r] + [FMT[r](ris["sim"][a]["orizzonti"][h].loc[r, k]) for a in anal for k in nomi] for r in RIGHE_ORIZZONTE]
+    gruppi = [(f"Analisi {a}", len(nomi)) for a in anal] if len(anal) > 1 else None
+    return T([corto(k) for k in nomi] * len(anal), righe, gruppi)
 
 
 def ordine(vals, desc=True):
-    """Stringa 'a > b > c > d' ordinando i portafogli (primo = più rischioso/più alto)."""
-    ks = sorted(ORD, key=lambda k: vals[k], reverse=desc)
-    return " > ".join(NOME[k].split(" /")[0].replace(" (ETF)", "") for k in ks)
+    return " > ".join(sorted(vals, key=lambda k: vals[k], reverse=desc))
 
 
-def metriche_rischio(s):
-    return {"ES 95% a 1 anno": {k: s["var_es"].loc["Expected Shortfall 95% 1 anno", k] for k in ORD},
-            "Max drawdown mediano a 15 anni": {k: -s["orizzonti"][15].loc["Max drawdown mediano", k] for k in ORD},
-            "Prob. sotto il versato a 15 anni": {k: s["orizzonti"][15].loc["Prob. sotto il versato", k] for k in ORD}}
+def metriche_rischio(ris, s):
+    h = ris["cfg"]["orizzonte_anni"]
+    return {"ES 95% a 1 anno": {k: s["var_es"].loc["Expected Shortfall 95% 1 anno", k] for k in s["nomi"]},
+            f"Max drawdown mediano a {h} anni": {k: -s["orizzonti"][h].loc["Max drawdown mediano", k] for k in s["nomi"]},
+            f"Prob. sotto il versato a {h} anni": {k: s["orizzonti"][h].loc["Prob. sotto il versato", k] for k in s["nomi"]}}
 
 
-def sezione_stress(ris):
-    h = ""
-    for a in "AB":
-        d = ris.get(f"stress_{a}")
-        if d is None: continue
-        righe = []
-        for _, r in d.iterrows():
-            rec = "non scende sotto il versato" if not r["Scende sotto il versato"] else (
-                "oltre 30 anni (in più di metà dei casi)" if not np.isfinite(r["Anni per tornare al versato (mediana)"]) else num(r["Anni per tornare al versato (mediana)"]))
-            righe.append([NOME[r["Portafoglio"]], r["Scenario"], eur(r["Valore a metà orizzonte"]), eur(r["Valore dopo lo shock"]),
-                          f'{eur(r["Perdita massima (€)"])} ({pct(r["Perdita massima (%)"], 0)})', rec,
-                          "–" if not r["Scende sotto il versato"] else pct(r["Prob. ritorno entro 10 anni"], 0)])
-        h += f"<h3>Analisi {a}</h3>" + tabella(righe, ["Scenario", "Valore a metà orizzonte", "Valore dopo lo shock", "Perdita massima", "Anni per tornare a 5.000 € (mediana)", "Prob. di tornarci entro 10 anni"], classe="st")
-    return h
+def testo_metodo(ris):
+    cfg = ris["cfg"]
+    ra = cfg["rendimento_atteso"]
+    m = ra["metodo"]
+    drag = (" <b>Volatility drag:</b> il rendimento atteso è una <i>media</i> (1 € vale in media 1+r dopo un anno). "
+            "Con le oscillazioni il risultato <i>tipico</i> (la mediana) resta più basso della media: una perdita del 50% "
+            "richiede un guadagno del 100% per rientrare. Più un portafoglio oscilla, più la sua mediana resta indietro.")
+    if m == "beta":
+        t = (f"<b>Metodo del rendimento atteso: beta.</b> Ogni titolo ha rendimento atteso = {pct(ra['tasso_privo_rischio'], 0)} (tasso privo di rischio) "
+             f"+ beta × {pct(ra['premio_mercato'], 0)} (premio per il rischio di mercato). Il beta misura quanto il titolo si muove "
+             "con il benchmark (beta 1,5 = in media si muove del 50% in più). Il rischio di mercato, che non si può eliminare "
+             "diversificando, viene remunerato; il rischio specifico del singolo titolo no, perché si può diversificare. "
+             "Le volatilità, le code e le correlazioni restano quelle storiche: cambia solo la media.")
+    elif m == "uguale":
+        t = (f"<b>Metodo del rendimento atteso: uguale.</b> Tutti i portafogli hanno lo stesso rendimento medio del "
+             f"{pct(ra['valore_uguale'], 0)} annuo: le differenze dipendono solo dal rischio. Volatilità, code e correlazioni restano quelle storiche.")
+    elif m == "personalizzato":
+        t = "<b>Metodo del rendimento atteso: personalizzato.</b> Il rendimento medio annuo di ogni portafoglio è quello indicato nella configurazione."
+    else:
+        t = ("<b>Metodo del rendimento atteso: storico.</b> ATTENZIONE: si usano i rendimenti realmente ottenuti in passato. "
+             "Questo proietta il passato nel futuro: se i titoli sono stati scelti oggi perché sono andati bene (survivorship bias), "
+             "i risultati saranno troppo ottimistici.")
+    return t + drag
 
 
-# ------------------------------------------------------------------ sintesi
 def sintesi(ris):
     cfg, n = ris["cfg"], ris["n"]
-    sA, sB, hz = ris["base_A"], ris["base_B"], max(cfg["checkpoint_anni"])
-    v = {k: sA["orizzonti"][hz].loc["Valore mediano", k] for k in ORD}
-    pr = {k: sA["orizzonti"][hz].loc["Prob. sotto il versato", k] for k in ORD}
-    vol = {k: ris["storico"]["A"]["stat"][k]["vol"] for k in ORD}
-    dd = {k: sA["orizzonti"][hz].loc["Max drawdown mediano", k] for k in ORD}
-    cap = cfg["capitale_iniziale"]
+    a = "A"
+    s = ris["sim"][a]
+    nomi, bn, H = ris["nomi"], ris["bench_nome"], cfg["orizzonte_anni"]
+    st = ris["storico"][a]["stat"]
     F = []
-    F.append(f"Ho simulato {num_it(n)} futuri possibili a {hz} anni per quattro portafogli (cyber security, banche d'investimento/PE, big tech USA e un ETF azionario mondiale), partendo da {eur(cap)} e senza altri versamenti, dando a tutti lo stesso rendimento atteso del {pct(cfg['rendimento_atteso'], 0)} l'anno: le differenze che vedi dipendono quindi solo dal <b>rischio</b>, non da rendimenti promessi.")
-    F.append(f"Il più volatile nella storia recente è «{NOME[max(vol, key=vol.get)]}» ({pct(max(vol.values()), 0)} annuo), il meno volatile l'ETF mondiale ({pct(vol['bench'], 0)}); i tre portafogli di singole azioni hanno una volatilità da {num(min(vol[k] for k in ORD[:3]) / vol['bench'])} a {num(max(vol[k] for k in ORD[:3]) / vol['bench'])} volte quella dell'ETF.")
-    F.append(f"Dopo {hz} anni il valore <b>mediano</b> (la metà dei casi sta sopra, la metà sotto) è {eur(v['bench'])} per l'ETF mondiale contro {eur(v['finanza'])} per i finanziari, {eur(v['bigtech'])} per la big tech e {eur(v['cyber'])} per la cyber security: pur con lo stesso rendimento <i>medio</i>, più un portafoglio oscilla più il caso tipico resta indietro, perché una perdita del 50% richiede un guadagno del 100% per rientrare.")
-    F.append(f"La probabilità di avere meno di quanto versato dopo {hz} anni va da {pct(pr['bench'], 0)} (ETF) a {pct(max(pr.values()), 0)} (portafoglio peggiore), e nel caso tipico il portafoglio più rischioso attraversa un calo massimo del {pct(-min(dd.values()), 0)} contro il {pct(-dd['bench'], 0)} dell'ETF.")
-    if "stress_A" in ris:
-        d = ris["stress_A"]; d = d[d["Scenario"].str.startswith("Crisi")]
-        worst = d.loc[d["Perdita massima (%)"].idxmax()]
-        F.append(f"Negli scenari di stress a metà percorso, la perdita più pesante è quella di «{NOME[worst['Portafoglio']]}» nella crisi stile 2008 ({pct(worst['Perdita massima (%)'], 0)} del valore).")
-    if "mod_t_A" in ris:
-        F.append("Nella sezione «Quanto sono solide queste conclusioni?» trovi cosa resta uguale cambiando modello, rendimento atteso e rischio sul singolo titolo.")
-    F.append("Attenzione: il periodo comune (analisi A) copre solo circa cinque anni, quindi i risultati dipendono molto dal ribasso del 2022; non è consulenza finanziaria e non contiene indicazioni di acquisto.")
-    return "<ul>" + "".join(f"<li>{f}</li>" for f in F) + "</ul>"
+    vers = f" e versando {eur(cfg['versamento_mensile'])} al mese" if cfg["versamento_mensile"] else " senza altri versamenti"
+    metodo = {"beta": "rendimento atteso legato al rischio di mercato (metodo beta)", "uguale": "stesso rendimento atteso per tutti",
+              "storico": "rendimenti storici (proiettano il passato nel futuro)", "personalizzato": "rendimenti attesi scelti da te"}[cfg["rendimento_atteso"]["metodo"]]
+    F.append(f"Ho simulato {num_it(n)} futuri possibili a {H} anni per {len(nomi)} portafogli, partendo da {eur(cfg['capitale_iniziale'])}{vers}, con {metodo}.")
+    vol = {k: st[k]["vol"] for k in nomi}
+    altri = [k for k in nomi if k != bn]
+    if altri:
+        top = max(altri, key=vol.get)
+        rapp = "; ".join(f"«{k}» {num(vol[k] / vol[bn])} volte" for k in sorted(altri, key=vol.get, reverse=True))
+        F.append(f"Il portafoglio che oscilla di più è «{top}» (volatilità {pct(vol[top], 0)} l'anno contro {pct(vol[bn], 0)} del benchmark). "
+                 f"Rispetto al benchmark la volatilità è: {rapp}.")
+    prob = "; ".join(f"«{k}» " + " / ".join(pct(s['orizzonti'][h].loc['Prob. sotto il versato', k], 0) for h in cfg["orizzonti"]) for k in nomi)
+    F.append(f"Probabilità di avere meno di quanto versato a {' / '.join(str(h) for h in cfg['orizzonti'])} anni: {prob}.")
+    dd = {k: s["orizzonti"][H].loc["Max drawdown mediano", k] for k in nomi}
+    lo, hi = min(dd, key=dd.get), max(dd, key=dd.get)
+    F.append(f"Il calo massimo tipico (mediano) in {H} anni va dal {pct(-dd[hi], 0)} di «{hi}» al {pct(-dd[lo], 0)} di «{lo}».")
+    med = "; ".join(f"«{k}» {eur(s['orizzonti'][H].loc['Valore mediano', k])}" for k in nomi)
+    F.append(f"Valore mediano dopo {H} anni (versati {eur(s['orizzonti'][H].loc['Totale versato', nomi[0]])}): {med}. "
+             "La mediana è più bassa del valore medio, e lo è di più per i portafogli che oscillano di più (volatility drag).")
+    if a in ris["stress"]:
+        d = ris["stress"][a]
+        d2 = d[d["Scenario"] != SINGOLO]
+        w = d2.loc[d2["Perdita (%)"].idxmax()]
+        lenti = sorted({r["Portafoglio"] for _, r in d2.iterrows() if r["Scende sotto il versato"] and r["Prob. di tornarci entro 10 anni"] < 0.5})
+        f = f"Negli stress test la perdita più pesante è di «{w['Portafoglio']}» nello scenario «{w['Scenario']}» (−{pct(w['Perdita (%)'], 0)})."
+        if lenti:
+            f += " In almeno uno scenario non tornerebbero al versato entro 10 anni in più di metà dei casi: " + ", ".join(f"«{k}»" for k in lenti) + "."
+        F.append(f)
+    F += conclusioni_stabili(ris, breve=True)
+    F.append("Questa analisi non è consulenza finanziaria e non contiene indicazioni di acquisto o vendita.")
+    return F
 
 
-def solidita(ris):
-    if "mod_t_A" not in ris:
-        return "<p>Sezione disponibile dalla tappa 5.</p>"
-    h = ""
-    for a in "AB":
-        base = ris[f"base_{a}"]
-        modelli = [("Block bootstrap", base), ("Student-t multivariata", ris[f"mod_t_{a}"]), ("GARCH(1,1) + residui bootstrap", ris[f"mod_garch_{a}"])]
-        righe, uguali = [], True
-        rif = {m: ordine(vals) for m, vals in metriche_rischio(base).items()}
-        for m in rif:
-            for nome, s in modelli:
-                o = ordine(metriche_rischio(s)[m])
-                righe.append([m, nome, o, "sì" if o == rif[m] else "<b>no</b>"])
-                uguali &= o == rif[m]
-        h += f"<h3>Classifica di rischio per modello – analisi {a} (dal più al meno rischioso)</h3>" + tabella(righe, ["Modello", "Classifica", "Uguale al bootstrap?"], classe="st")
-        h += f"<p class='nota'>{'La classifica di rischio resta identica con tutti e tre i modelli.' if uguali else 'La classifica cambia in almeno una metrica: vedi le righe con «no».'}</p>"
-    return h
+def conclusioni_stabili(ris, breve=False):
+    out = []
+    anal = [a for a in ris["sim"] if a != "C"]
+    ES = "ES 95% a 1 anno"
+    if ris["modelli"]:
+        cambi = []
+        for a in ris["modelli"]:
+            base = ordine(metriche_rischio(ris, ris["sim"][a])[ES])
+            for nome, s in ris["modelli"][a].items():
+                if ordine(metriche_rischio(ris, s)[ES]) != base:
+                    cambi.append(f"{nome} (analisi {a})")
+        out.append("La classifica di rischio (perdita media nei casi peggiori a 1 anno) è la stessa con tutti i modelli." if not cambi
+                   else "La classifica di rischio cambia con: " + ", ".join(cambi) + ".")
+    if len(anal) > 1:
+        o = {a: ordine(metriche_rischio(ris, ris["sim"][a])[ES]) for a in anal}
+        out.append("Il periodo storico usato (A o B) non cambia la classifica di rischio." if len(set(o.values())) == 1
+                   else "La classifica di rischio dipende dal periodo storico: analisi A " + o["A"] + "; analisi B " + o["B"] + ".")
+    if ris["idio"]:
+        H = ris["cfg"]["orizzonte_anni"]
+        dp = max(ris["idio"][a]["orizzonti"][H].loc["Prob. sotto il versato", k] - ris["sim"][a]["orizzonti"][H].loc["Prob. sotto il versato", k]
+                 for a in ris["idio"] for k in ris["nomi"])
+        out.append(f"Il rischio di crollo di un singolo titolo aumenta la probabilità di finire sotto il versato al massimo di {num(dp * 100)} punti percentuali.")
+    if ris["sensibilita"]:
+        H = ris["cfg"]["orizzonte_anni"]
+        cambia = False
+        for a, var in ris["sensibilita"].items():
+            o0 = ordine({k: ris["sim"][a]["orizzonti"][H].loc["Valore mediano", k] for k in ris["nomi"]})
+            cambia |= any(ordine({k: s["orizzonti"][H].loc["Valore mediano", k] for k in ris["nomi"]}) != o0 for _, s in var)
+        out.append("Cambiando il rendimento atteso la classifica sul valore finale mediano " + ("cambia: dipende dalle ipotesi." if cambia else "non cambia."))
+    return out
 
 
-def sezione_sensibilita(ris):
-    h = ""
-    cp = max(ris["cfg"]["checkpoint_anni"])
-    for a in "AB":
-        sc = [("3%", ris[f"sens_3_{a}"]), ("6% (base)", ris[f"base_{a}"]), ("9%", ris[f"sens_9_{a}"]), ("Settoriale (cyber 4%, big tech 5%, finanza 6%, ETF 6%)", ris[f"sens_settori_{a}"])]
-        righe, ords = [], []
-        for t, s in sc:
-            vals = {k: s["orizzonti"][cp].loc["Valore mediano", k] for k in ORD}
-            ords.append(ordine(vals))
-            righe.append([t] + [eur(vals[k]) for k in ORD] + [ords[-1]])
-        h += f"<h3>Valore mediano a {cp} anni – analisi {a}</h3>" + tabella(righe, [NOME[k].split(" /")[0].replace(" (ETF)", "") for k in ORD] + ["Classifica (dal più alto)"], classe="st")
-        h += f"<p class='nota'>{'La classifica sul valore finale non cambia.' if len(set(ords)) == 1 else 'La classifica sul valore finale cambia tra gli scenari: dipende dall’ipotesi di rendimento.'}</p>"
-    return h
+def sezioni(ris):
+    """Ritorna {scheda: [blocchi]}."""
+    cfg, n, nomi = ris["cfg"], ris["n"], ris["nomi"]
+    anal = [a for a in ris["sim"] if a != "C"]
+    H = cfg["orizzonte_anni"]
+    S = {k: [] for k in SCHEDE}
+    d = lambda t: t.strftime("%d/%m/%Y")
+
+    # ---- Sintesi
+    B = S["Sintesi"]
+    if n < 5000:
+        B.append(("warn", f"<b>Prova rapida:</b> solo {num_it(n)} simulazioni. I numeri sono indicativi."))
+    B.append(("box", sintesi(ris)))
+    B.append(("warn", testo_metodo(ris)))
+    ra = ris["rend_attesi"]
+    righe = [[k, num(ra.loc["Beta verso il benchmark", k], 2), pct(ra.loc["Rendimento atteso annuo", k]) if cfg["rendimento_atteso"]["metodo"] != "storico" else "storico",
+              pct(ra.loc["di cui costi ETF (TER)", k], 2)] for k in nomi]
+    B.append(("h3", "Rendimento atteso usato"))
+    B.append(T(["Beta", "Rendimento atteso annuo", "Costo ETF sottratto"], righe))
+    B.append(("h3", "Come leggere i termini"))
+    B.append(("box", [
+        "<b>Percentile</b>: il 5° percentile è il valore sotto cui finisce il 5% dei casi peggiori; il 95° quello sopra cui sta il 5% dei migliori.",
+        "<b>Volatilità</b>: quanto oscillano i prezzi in un anno. 30% = oscillazioni tipiche di ±30%.",
+        "<b>Max drawdown</b>: il calo massimo da un massimo al minimo successivo (da 10.000 a 4.000 € = −60%).",
+        "<b>Tempo sott'acqua</b>: il periodo più lungo passato sotto il massimo precedente.",
+        "<b>VaR 95% a 1 anno</b>: la perdita superata solo nel 5% dei casi in un anno. <b>Expected Shortfall (ES)</b>: la perdita media in quel 5% di casi peggiori.",
+        "<b>Volatility drag</b>: con le oscillazioni il risultato tipico resta sotto la media; più oscillazioni, più distacco.",
+        "<b>Bootstrap a blocchi</b>: si rimescolano pezzi di storia reale (circa 20 giorni di borsa ciascuno), così restano crisi, code e correlazioni.",
+        f"<b>Ribilanciamento ({cfg['ribilanciamento']})</b>: si riportano i titoli ai pesi scelti pagando il {pct(cfg['costo_ribilanciamento'], 1)} dell'importo movimentato."]))
+    B.append(("h3", "Dati e periodi analizzati"))
+    crisi = [("bolla dot-com 2000-2002", "2000-03-10", "2002-10-09"), ("crisi finanziaria 2008", "2007-10-09", "2009-03-09"),
+             ("debito europeo 2011", "2011-05-01", "2011-10-04"), ("Covid 2020", "2020-02-19", "2020-03-23"),
+             ("ribasso 2022", "2022-01-03", "2022-10-12"), ("crisi bancaria 2023", "2023-03-08", "2023-03-20")]
+    desc = {"A": "Periodo comune (tutti i titoli quotati)", "B": "Periodo lungo (titoli disponibili a ogni data, pesi ridistribuiti)",
+            "C": "Dal 1999 con proxy di settore per i titoli non ancora quotati"}
+    righe = []
+    for a, (i0, i1, ng) in ris["periodi"].items():
+        dentro = [c for c, x, y in crisi if pd.Timestamp(x) >= i0 and pd.Timestamp(y) <= i1]
+        righe.append([a, desc[a], f"{d(i0)} – {d(i1)}", num_it(ng), ", ".join(dentro) or "nessuna grande crisi"])
+    B.append(T(["Descrizione", "Periodo", "Giorni", "Crisi incluse"], righe, sx=True))
+    if "B" in ris["note"]:
+        B.append(("nota", ris["note"]["B"]))
+    b = cfg["benchmark"]
+    B.append(("nota", f"Prezzi Yahoo Finance (adjusted close, dividendi inclusi) aggiornati al {d(ris['ultimo_dato'])}, convertiti in EUR con il cambio giornaliero "
+                      f"(il rischio di cambio è incluso). Benchmark: {esc(b.get('descrizione') or b['nome'])} ({b['ticker']}{', ISIN ' + b['isin'] if b.get('isin') else ''}, TER {pct(b['ter'], 2)}); "
+                      f"prima della nascita dell'ETF uso l'indice {b.get('proxy_storico') or '–'} convertito in EUR meno il TER (proxy)."))
+    if "B" in ris["sim"]:
+        B.append(("nota", "Analisi B: quando un titolo non era ancora quotato, il suo peso è ridistribuito tra i titoli già disponibili dello stesso portafoglio."))
+    info = ris["dati_info"]
+    righe = []
+    for t, r in info.iterrows():
+        tt = BENCH if t == b["ticker"] else t
+        pi = (ris["proxy_info"] or {}).get(tt, {})
+        righe.append([t, esc(corto(r["nome"] or "", 30)), r["valuta"] or "", r["tipo"], d(pd.Timestamp(r["primo dato"])), num(r["anni di storia"]),
+                      num(ris["beta"].get(tt, np.nan), 2), pi.get("categoria", "–"), esc(pi.get("fonte", ""))])
+    B.append(("dettagli", "Titoli usati (valuta, storia, beta, settore)", [T(["Nome", "Valuta", "Tipo", "Primo dato", "Anni", "Beta", "Settore stress", "Come è stato riconosciuto"], righe, sx=True)]))
+    if ris["avvisi"]:
+        B.append(("warn", "<b>Avvisi sui dati:</b><br/>" + "<br/>".join(esc(x) for x in ris["avvisi"])))
+    if ris["estremi"]:
+        B.append(("dettagli", f"Movimenti giornalieri estremi (oltre ±30%): {len(ris['estremi'])}",
+                  [("lista", [esc(x) for x in ris["estremi"]]), ("nota", "Di solito sono eventi reali (risultati trimestrali, crisi). "
+                                                                       "Se vedi un −50% seguito da un +100%, potrebbe essere uno split non corretto da Yahoo.")]))
+
+    # ---- Risultati per orizzonte
+    B = S["Risultati per orizzonte"]
+    B.append(("nota", "Analisi A: periodo comune a tutti i titoli. " + ("Analisi B: periodo lungo. " if "B" in anal else "")
+              + "Max drawdown e tempo sott'acqua sono calcolati dall'inizio fino a quell'anno."))
+    for h in cfg["orizzonti"]:
+        B.append(("h3", f"Dopo {h} anni"))
+        if len(nomi) <= 4:
+            B.append(tab_orizzonte(ris, h, anal))
+        else:
+            for a in anal:
+                B.append(("nota", f"Analisi {a}"))
+                B.append(tab_orizzonte(ris, h, [a]))
+
+    # ---- Fan chart
+    B = S["Fan chart"]
+    B.append(("nota", "Fascia scura = 50% dei casi, fascia chiara = 90%. I puntini segnano 5°, 50° e 95° percentile agli orizzonti scelti; la linea tratteggiata è il totale versato."))
+    for a in anal:
+        B.append(("h3", f"Analisi {a}"))
+        B.append(("img", fan_chart(ris, a)))
+
+    # ---- Drawdown
+    B = S["Drawdown"]
+    B.append(("nota", "Distribuzione del calo massimo (max drawdown) che ogni portafoglio attraversa nell'intero orizzonte: più la curva sta a sinistra, più sono frequenti cali profondi."))
+    B.append(("img", istogrammi_mdd(ris)))
+    righe = []
+    for r in ["Max drawdown mediano", "Max drawdown peggiore (95%)", "Tempo sott'acqua max, mediano (anni)", "Tempo sott'acqua max, peggiore 95% (anni)"]:
+        righe.append([r] + [FMT[r](ris["sim"][a]["orizzonti"][H].loc[r, k]) for a in anal for k in nomi])
+    B.append(T([corto(k) for k in nomi] * len(anal), righe, [(f"Analisi {a}", len(nomi)) for a in anal] if len(anal) > 1 else None))
+
+    # ---- Rischio e correlazioni
+    B = S["Rischio e correlazioni"]
+    righe = []
+    for et, f in (("Volatilità annua storica", lambda a, k: pct(ris["storico"][a]["stat"][k]["vol"])),
+                  ("Volatilità annua simulata", lambda a, k: pct(ris["sim"][a]["vol_sim"][k])),
+                  ("Max drawdown storico", lambda a, k: pct(ris["storico"][a]["stat"][k]["mdd"])),
+                  ("VaR 95% a 1 anno", lambda a, k: pct(ris["sim"][a]["var_es"].loc["VaR 95% 1 anno", k])),
+                  ("Expected Shortfall 95% a 1 anno", lambda a, k: pct(ris["sim"][a]["var_es"].loc["Expected Shortfall 95% 1 anno", k])),
+                  ("Correlazione media tra i titoli", lambda a, k: num(ris["storico"][a]["corr_media"][k], 2) if k in ris["storico"][a]["corr_media"] else "–")):
+        righe.append([et] + [f(a, k) for a in anal for k in nomi])
+    B.append(T([corto(k) for k in nomi] * len(anal), righe, [(f"Analisi {a}", len(nomi)) for a in anal] if len(anal) > 1 else None))
+    g = grafico_rischio(ris, "A")
+    if g:
+        B.append(("h3", "Da dove arriva il rischio dentro ogni portafoglio (analisi A)"))
+        B.append(("img", g))
+    B.append(("h3", "Correlazione tra i portafogli"))
+    B.append(("nota", "1 = si muovono sempre insieme; 0 = indipendenti."))
+    B.append(("img", heatmap(ris)))
+
+    # ---- Stress test
+    B = S["Stress test"]
+    if ris["stress"]:
+        B.append(("nota", f"Lo shock colpisce il valore mediano simulato a metà orizzonte ({num(H / 2)} anni). Ogni titolo perde in base al suo settore "
+                          "(tech, finanza, altro/mercato); un portafoglio perde la media pesata. «Anni per tornare al versato» viene da una nuova "
+                          "simulazione dopo lo shock (mediana), con lo stesso rendimento atteso: è un'ipotesi ottimistica dopo una crisi. "
+                          "«Il titolo più pesante perde il 90%» non si applica agli ETF."))
+        sc = [("tech", "finanza", "altro")]
+        from metriche import SCENARI
+        B.append(T(["Tech", "Finanza", "Altro / mercato"], [[k] + [pct(v[c], 0) for c in sc[0]] for k, v in SCENARI.items()]))
+        for a, df in ris["stress"].items():
+            B.append(("h3", f"Analisi {a}"))
+            righe = []
+            for _, r in df.iterrows():
+                if not r["Scende sotto il versato"]:
+                    rec = "resta sopra il versato"
+                elif not np.isfinite(r["Anni per tornare al versato (mediana)"]):
+                    rec = "oltre 30 anni"
+                else:
+                    rec = num(r["Anni per tornare al versato (mediana)"])
+                righe.append([esc(r["Portafoglio"]), r["Scenario"], eur(r["Valore prima dello shock"]), eur(r["Valore dopo lo shock"]),
+                              f"{eur(r['Perdita (€)'])} ({pct(r['Perdita (%)'], 0)})", rec,
+                              "–" if not r["Scende sotto il versato"] else pct(r["Prob. di tornarci entro 10 anni"], 0)])
+            B.append(T(["Scenario", "Valore prima", "Valore dopo", "Perdita", f"Anni per tornare a {eur(df['Totale versato'].iloc[0])}", "Prob. entro 10 anni"], righe, sx=True))
+    else:
+        B.append(("p", "Modulo stress test non attivato."))
+
+    # ---- Robustezza
+    B = S["Robustezza"]
+    if ris["modelli"]:
+        B.append(("h3", "Confronto tra modelli"))
+        B.append(("nota", "Student-t: code grasse, nessun raggruppamento della volatilità. GARCH(1,1): volatilità che sale e scende nel tempo. "
+                          "Classifica = dal portafoglio più rischioso al meno rischioso."))
+        for a in ris["modelli"]:
+            righe = []
+            mod = [("Block bootstrap", ris["sim"][a])] + list(ris["modelli"][a].items())
+            rif = {m: ordine(v) for m, v in metriche_rischio(ris, ris["sim"][a]).items()}
+            for m in rif:
+                for nome, s in mod:
+                    o = ordine(metriche_rischio(ris, s)[m])
+                    righe.append([m, nome, esc(o), "sì" if o == rif[m] else "<b>NO</b>"])
+            B.append(("nota", f"Analisi {a}"))
+            B.append(T(["Modello", "Classifica (dal più rischioso)", "Uguale al bootstrap?"], righe, sx=True))
+    if ris["sensibilita"]:
+        B.append(("h3", "Sensibilità al rendimento atteso"))
+        for a, var in ris["sensibilita"].items():
+            righe = []
+            for et, s in [("scelta di base", ris["sim"][a])] + var:
+                vals = {k: s["orizzonti"][H].loc["Valore mediano", k] for k in nomi}
+                righe.append([et] + [eur(vals[k]) for k in nomi] + [esc(ordine(vals))])
+            B.append(("nota", f"Analisi {a} – valore mediano a {H} anni"))
+            B.append(T([corto(k) for k in nomi] + ["Classifica (dal più alto)"], righe))
+    if ris["idio"]:
+        rs = cfg["rischio_singolo_titolo"]
+        B.append(("h3", "Rischio sul singolo titolo"))
+        B.append(("nota", f"Ogni azione ha una probabilità del {pct(rs['probabilita_annua'])} l'anno di crollare dell'{pct(rs['perdita_min'], 0)}–{pct(rs['perdita_max'], 0)} "
+                          "in un giorno (fallimento, frode). Il rendimento medio resta uguale: cambia solo il rischio. Gli ETF non sono toccati."))
+        for a in ris["idio"]:
+            righe = []
+            for r in ["Prob. sotto il versato", "Max drawdown mediano", "Max drawdown peggiore (95%)", "5° percentile"]:
+                righe.append([r + " – senza crolli"] + [FMT[r](ris["sim"][a]["orizzonti"][H].loc[r, k]) for k in nomi])
+                righe.append([r + " – con crolli"] + [FMT[r](ris["idio"][a]["orizzonti"][H].loc[r, k]) for k in nomi])
+            B.append(("nota", f"Analisi {a}, a {H} anni"))
+            B.append(T([corto(k) for k in nomi], righe))
+    if "C" in ris["sim"]:
+        B.append(("h3", "Storia allungata dal 1999 con proxy (analisi C)"))
+        frac = ris["note"].get("C_proxy", {})
+        pi = ris["proxy_info"] or {}
+        sint = [f"{t} {pct(v, 0)} (proxy {pi.get(t, {}).get('proxy', '–')})" for t, v in frac.items() if v > 0.005 and t != BENCH]
+        B.append(("warn", "<b>Dati reali e dati proxy.</b> Per i giorni in cui un titolo non esisteva ho generato rendimenti sintetici: beta × rendimento del proxy "
+                          "di settore + residui ripescati da quelli reali del titolo (stessa volatilità e correlazione misurate quando il titolo esisteva). "
+                          "Non sono dati veri. Quota di giorni sintetici: " + (", ".join(sint) or "nessuno") + "."))
+        for h in cfg["orizzonti"]:
+            B.append(("nota", f"Dopo {h} anni – analisi C"))
+            B.append(tab_orizzonte(ris, h, ["C"]))
+        B.append(("img", fan_chart(ris, "C")))
+    if B:
+        B.insert(0, ("box", conclusioni_stabili(ris) + ["Il <b>livello</b> dei numeri dipende sempre dalle ipotesi (rendimento atteso, periodo storico); "
+                                                        "le <b>differenze di rischio</b> tra portafogli sono più solide."]))
+        B.insert(0, ("h3", "Quanto sono solide queste conclusioni?"))
+    else:
+        B.append(("p", "Nessun modulo di robustezza attivato (confronto tra modelli, analisi C)."))
+        if ris["idio"] or len(anal) > 1:
+            B.append(("box", conclusioni_stabili(ris)))
+
+    # ---- Limiti
+    S["Limiti dell'analisi"] = [("box", [
+        "<b>Storia breve</b>: i titoli quotati da pochi anni hanno pochi dati; il periodo comune (A) può non contenere grandi crisi.",
+        "<b>Rendimento atteso</b>: è un'ipotesi, non una previsione. Cambiandolo cambiano i valori finali.",
+        "<b>Survivorship bias</b>: chi sceglie oggi titoli che sono andati bene nel passato rischia di sopravvalutarli; le società fallite non compaiono nei dati.",
+        "<b>Concentrazione</b>: pochi titoli dello stesso settore possono essere colpiti tutti insieme da un singolo evento.",
+        "<b>Il futuro può essere diverso dal passato</b>: il modello rimescola eventi già avvenuti e non può inventare crisi di tipo nuovo.",
+        "<b>Costi e tasse</b>: inclusi solo il TER del benchmark e il costo di ribilanciamento; niente imposte, spread o commissioni.",
+        "<b>Dati</b>: Yahoo Finance può contenere errori; prima della nascita dell'ETF il benchmark è un indice (proxy)."]),
+        ("p", "<b>Questa analisi non è consulenza finanziaria</b> e non contiene raccomandazioni di acquisto o vendita.")]
+    return S
 
 
-def sezione_idio(ris):
-    h, cp = "", max(ris["cfg"]["checkpoint_anni"])
-    for a in "AB":
-        b, i = ris[f"base_{a}"], ris[f"idio_{a}"]
-        righe = []
-        for et, r, f in (("Prob. sotto il versato", "Prob. sotto il versato", pct), ("Max drawdown mediano", "Max drawdown mediano", pct), ("Max drawdown peggiore (95%)", "Max drawdown peggiore (95%)", pct), ("Valore mediano", "Valore mediano", eur), ("5° percentile", "5° percentile", eur)):
-            righe.append([et + " – senza crolli"] + [f(b["orizzonti"][cp].loc[r, k]) for k in ORD])
-            righe.append([et + " – con crolli"] + [f(i["orizzonti"][cp].loc[r, k]) for k in ORD])
-        h += f"<h3>A {cp} anni – analisi {a}</h3>" + tabella(righe, [NOME[k].split(" /")[0].replace(" (ETF)", "") for k in ORD], classe="st")
-    return h
-
-
-# ------------------------------------------------------------------ pagina
+# ------------------------------------------------------------------ HTML
 CSS = """
-:root{--bg:#fff;--fg:#1c1c1c;--mut:#666;--line:#ddd;--card:#f6f7f9;--warn:#fff4e5;--warnb:#e8a33d}
-@media(prefers-color-scheme:dark){:root{--bg:#16181c;--fg:#e8e8e8;--mut:#9aa0a6;--line:#363a40;--card:#1f2227;--warn:#33291a;--warnb:#c58a2b}}
-body{background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif;max-width:1080px;margin:0 auto;padding:16px}
-h1{font-size:1.7rem}h2{margin-top:2.2rem;border-bottom:1px solid var(--line);padding-bottom:4px}h3{margin-top:1.4rem}
-table{border-collapse:collapse;margin:10px 0;font-size:.85rem;width:100%}td,th{border:1px solid var(--line);padding:4px 7px;text-align:right}
-th{background:var(--card)}th.g{text-align:center}td.e{text-align:left;font-weight:600;background:var(--card)}table.st td{text-align:left}
-.sc{overflow-x:auto}img{max-width:100%;height:auto}.box{background:var(--card);padding:10px 16px;border-radius:8px}
-.warn{background:var(--warn);border-left:5px solid var(--warnb);padding:10px 16px;border-radius:6px;margin:12px 0}
-.nota{color:var(--mut);font-size:.9rem}details{margin:8px 0}summary{cursor:pointer;font-weight:600}
+:root{--bg:#fff;--fg:#1c1c1c;--mut:#666;--line:#ddd;--card:#f5f6f8;--warn:#fff4e5;--warnb:#e8a33d}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#16181c;--fg:#e8e8e8;--mut:#9aa0a6;--line:#363a40;--card:#1f2227;--warn:#33291a;--warnb:#c58a2b}}
+.rep{background:var(--bg);color:var(--fg);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}
+body.rep{max-width:1100px;margin:0 auto;padding:16px}
+.rep h1{font-size:1.7rem}.rep h2{margin-top:2.2rem;border-bottom:1px solid var(--line);padding-bottom:4px}.rep h3{margin-top:1.4rem}
+.rep table{border-collapse:collapse;margin:10px 0;font-size:.84rem;width:100%}.rep td,.rep th{border:1px solid var(--line);padding:4px 7px;text-align:right}
+.rep th{background:var(--card)}.rep th.g{text-align:center}.rep td.e{text-align:left;font-weight:600;background:var(--card)}.rep table.sx td{text-align:left}
+.rep .sc{overflow-x:auto}.rep img{max-width:100%;height:auto;background:#fff}.rep .box{background:var(--card);padding:10px 16px;border-radius:8px}
+.rep .warn{background:var(--warn);border-left:5px solid var(--warnb);padding:10px 16px;border-radius:6px;margin:12px 0}
+.rep .nota{color:var(--mut);font-size:.9rem}.rep details{margin:8px 0}.rep summary{cursor:pointer;font-weight:600}
 """
 
 
-def sc(x): return f'<div class="sc">{x}</div>'
+def _html_tab(t):
+    h = f'<div class="sc"><table class="{"sx" if t["sx"] else ""}">'
+    if t["gruppi"]:
+        h += "<tr><th></th>" + "".join(f'<th colspan="{n}" class="g">{esc(g)}</th>' for g, n in t["gruppi"]) + "</tr>"
+    h += "<tr><th></th>" + "".join(f"<th>{esc(c)}</th>" for c in t["intest"]) + "</tr>"
+    for r in t["righe"]:
+        h += f'<tr><td class="e">{r[0]}</td>' + "".join(f"<td>{c}</td>" for c in r[1:]) + "</tr>"
+    return h + "</table></div>"
 
 
-def scrivi_report(ris, out):
-    cfg, n = ris["cfg"], ris["n"]
-    cp = cfg["checkpoint_anni"]
-    sA, sB = ris["base_A"], ris["base_B"]
-    P = ris["periodi"]
-    d = lambda t: t.strftime("%d/%m/%Y")
-    b = cfg["benchmark"]
-    H = [f"<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>Confronto rischio portafogli</title><style>{CSS}</style></head><body>"]
-    H.append(f"<h1>Confronto del rischio di tre portafogli azionari</h1><p class='nota'>Simulazione Monte Carlo – {num_it(n)} simulazioni per scenario – capitale iniziale {eur(cfg['capitale_iniziale'])}, versamento mensile {eur(cfg['versamento_mensile'])}, orizzonte {cfg['orizzonte_anni']} anni – generato il {datetime.date.today().strftime('%d/%m/%Y')}</p>")
-    if n < 20000:
-        H.append(f"<div class='warn'><b>Versione di prova:</b> solo {n} simulazioni per scenario. I numeri sono indicativi.</div>")
-    H.append("<h2>Sintesi</h2><div class='box'>" + sintesi(ris) + "</div>")
-    H.append("""<div class='warn'><b>Cosa significa "rendimento atteso 6%".</b> Ho dato a tutti i portafogli lo stesso rendimento <i>medio</i> annuo del 6% (1 € vale in media 1,06 € dopo un anno). Con la volatilità, però, il risultato <i>tipico</i> (la mediana) è più basso della media: i pochi casi molto fortunati alzano la media, mentre la maggior parte dei percorsi resta sotto. Più un portafoglio è volatile, più la mediana scende. Se invece volessi che il 6% fosse il rendimento del caso tipico, i numeri sarebbero più alti per tutti.</div>""")
+def html_blocchi(blocchi):
+    out = []
+    for b in blocchi:
+        k = b[0]
+        if k in ("h2", "h3"):
+            out.append(f"<{k}>{esc(b[1])}</{k}>")
+        elif k == "p":
+            out.append(f"<p>{b[1]}</p>")
+        elif k == "nota":
+            out.append(f"<p class='nota'>{b[1]}</p>")
+        elif k == "warn":
+            out.append(f"<div class='warn'>{b[1]}</div>")
+        elif k == "box":
+            out.append("<div class='box'><ul>" + "".join(f"<li>{x}</li>" for x in b[1]) + "</ul></div>")
+        elif k == "lista":
+            out.append("<ul>" + "".join(f"<li>{x}</li>" for x in b[1]) + "</ul>")
+        elif k == "tab":
+            out.append(_html_tab(b[1]))
+        elif k == "img":
+            out.append(f'<img alt="grafico" src="data:image/png;base64,{base64.b64encode(b[1]).decode()}">')
+        elif k == "dettagli":
+            out.append(f"<details><summary>{esc(b[1])}</summary>{html_blocchi(b[2])}</details>")
+    return "".join(out)
 
-    H.append("<h2>Come leggere i termini</h2><div class='box'><ul>"
-             "<li><b>Percentile</b>: il 5° percentile è il valore sotto cui finisce il 5% dei casi peggiori; il 95° quello sopra cui sta il 5% dei casi migliori. Tra i due c'è il 90% dei futuri simulati.</li>"
-             "<li><b>Volatilità</b>: quanto oscillano i prezzi in un anno (deviazione standard dei rendimenti). 30% significa oscillazioni tipiche di ±30%.</li>"
-             "<li><b>Max drawdown</b>: il calo massimo dal massimo precedente al minimo successivo. Se un portafoglio passa da 10.000 a 4.000 €, il drawdown è −60%.</li>"
-             "<li><b>Tempo sott'acqua</b>: il periodo più lungo passato sotto il massimo precedente prima di tornare a toccarlo.</li>"
-             "<li><b>VaR 95% a 1 anno</b>: la perdita che in un anno viene superata solo nel 5% dei casi. <b>Expected Shortfall</b>: la perdita media in quel 5% di casi peggiori.</li>"
-             "<li><b>Bootstrap a blocchi</b>: invece di inventare una distribuzione, si rimescolano pezzi di storia reale (blocchi di circa 20 giorni di borsa, per tenere insieme crisi, volatilità a grappoli e correlazioni).</li>"
-             "<li><b>Ricentratura</b>: tolgo il rendimento medio storico di ogni titolo e metto quello scelto (6%), lasciando intatti volatilità, code e correlazioni. È necessaria perché i titoli sono stati scelti oggi tra quelli andati bene: usare il loro rendimento passato (<i>survivorship bias</i>) regalerebbe un vantaggio fittizio ai portafogli di azioni.</li>"
-             "<li><b>Ribilanciamento annuale</b>: una volta l'anno si riportano i titoli ai pesi uguali, pagando lo 0,1% dell'importo movimentato.</li></ul></div>")
 
-    H.append("<h2>Dati e periodi analizzati</h2>")
+def intestazione(ris):
+    cfg = ris["cfg"]
+    vers = f"{eur(cfg['versamento_mensile'])} al mese" if cfg["versamento_mensile"] else "nessun versamento mensile"
+    return (f"{num_it(ris['n'])} simulazioni – capitale iniziale {eur(cfg['capitale_iniziale'])}, {vers}, orizzonte {cfg['orizzonte_anni']} anni "
+            f"(risultati a {', '.join(str(h) for h in cfg['orizzonti'])} anni) – generato il {datetime.date.today():%d/%m/%Y}")
+
+
+def html_report(ris, S=None):
+    S = S or sezioni(ris)
+    titolo = f"Confronto portafogli – {esc(ris['cfg']['nome'])}"
+    corpo = "".join(f"<h2>{esc(k)}</h2>{html_blocchi(v)}" for k, v in S.items() if v)
+    return (f"<!doctype html><html lang='it'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
+            f"<title>{titolo}</title><style>{CSS}</style></head><body class='rep'><h1>{titolo}</h1><p class='nota'>{intestazione(ris)}</p>{corpo}</body></html>")
+
+
+# ------------------------------------------------------------------ PDF (reportlab, solo Python)
+def _font():
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    if "DejaVu" not in pdfmetrics.getRegisteredFontNames():
+        cartella = os.path.join(matplotlib.get_data_path(), "fonts", "ttf")
+        pdfmetrics.registerFont(TTFont("DejaVu", os.path.join(cartella, "DejaVuSans.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-B", os.path.join(cartella, "DejaVuSans-Bold.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-I", os.path.join(cartella, "DejaVuSans-Oblique.ttf")))
+        pdfmetrics.registerFont(TTFont("DejaVu-BI", os.path.join(cartella, "DejaVuSans-BoldOblique.ttf")))
+        from reportlab.lib.fonts import addMapping
+        addMapping("DejaVu", 0, 0, "DejaVu"); addMapping("DejaVu", 1, 0, "DejaVu-B")
+        addMapping("DejaVu", 0, 1, "DejaVu-I"); addMapping("DejaVu", 1, 1, "DejaVu-BI")
+
+
+def _rl(testo):
+    """Converte il mini-HTML dei blocchi nel markup di reportlab."""
+    t = re.sub(r"<br\s*/?>", "<br/>", str(testo))
+    t = re.sub(r"</?(?!b>|/b>|i>|/i>|br/>)[a-z][^>]*>", "", t)
+    return t
+
+
+def pdf_report(ris, S=None):
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.platypus import Image, KeepTogether, PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    _font()
+    S = S or sezioni(ris)
+    buf = io.BytesIO()
+    pag = landscape(A4)
+    doc = SimpleDocTemplate(buf, pagesize=pag, leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
+                            title=f"Confronto portafogli – {ris['cfg']['nome']}")
+    W = pag[0] - 24 * mm
+    st = {
+        "h1": ParagraphStyle("h1", fontName="DejaVu-B", fontSize=17, leading=21, spaceAfter=4),
+        "h2": ParagraphStyle("h2", fontName="DejaVu-B", fontSize=13.5, leading=17, spaceBefore=6, spaceAfter=6, textColor=colors.HexColor("#0b3d6b")),
+        "h3": ParagraphStyle("h3", fontName="DejaVu-B", fontSize=11, leading=14, spaceBefore=8, spaceAfter=4),
+        "p": ParagraphStyle("p", fontName="DejaVu", fontSize=9, leading=12.5, spaceAfter=4),
+        "nota": ParagraphStyle("nota", fontName="DejaVu", fontSize=8, leading=10.5, textColor=colors.HexColor("#555555"), spaceAfter=4),
+        "cell": ParagraphStyle("cell", fontName="DejaVu", fontSize=7, leading=8.6, alignment=2),
+        "cellsx": ParagraphStyle("cellsx", fontName="DejaVu", fontSize=7, leading=8.6),
+        "head": ParagraphStyle("head", fontName="DejaVu-B", fontSize=7, leading=8.6, alignment=1),
+    }
+
+    def riquadro(par, sfondo, bordo=None):
+        t = Table([[par]], colWidths=[W])
+        stile = [("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(sfondo)), ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                 ("RIGHTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]
+        if bordo:
+            stile.append(("LINEBEFORE", (0, 0), (0, -1), 3, colors.HexColor(bordo)))
+        t.setStyle(TableStyle(stile))
+        return t
+
+    def tabella(t):
+        nc = len(t["intest"]) + 1
+        prima = min(0.30, max(0.16, 1.6 / nc)) * W
+        altre = (W - prima) / (nc - 1)
+        dati = []
+        if t["gruppi"]:
+            riga = [""]
+            for g, n in t["gruppi"]:
+                riga += [Paragraph(_rl(g), st["head"])] + [""] * (n - 1)
+            dati.append(riga)
+        dati.append([""] + [Paragraph(_rl(c), st["head"]) for c in t["intest"]])
+        cs = st["cellsx"] if t["sx"] else st["cell"]
+        for r in t["righe"]:
+            dati.append([Paragraph("<b>" + _rl(r[0]) + "</b>", st["cellsx"])] + [Paragraph(_rl(c), cs) for c in r[1:]])
+        tb = Table(dati, colWidths=[prima] + [altre] * (nc - 1), repeatRows=1 + bool(t["gruppi"]))
+        stile = [("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cccccc")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                 ("BACKGROUND", (0, 0), (-1, 0 + bool(t["gruppi"])), colors.HexColor("#f0f2f5")),
+                 ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#f0f2f5")),
+                 ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2)]
+        if t["gruppi"]:
+            c = 1
+            for _, n in t["gruppi"]:
+                stile.append(("SPAN", (c, 0), (c + n - 1, 0))); c += n
+        tb.setStyle(TableStyle(stile))
+        return tb
+
+    def flow(blocchi):
+        out = []
+        for b in blocchi:
+            k = b[0]
+            if k in ("h2", "h3"):
+                out.append(Paragraph(_rl(b[1]), st[k]))
+            elif k in ("p", "nota"):
+                out.append(Paragraph(_rl(b[1]), st[k]))
+            elif k == "warn":
+                out += [riquadro(Paragraph(_rl(b[1]), st["p"]), "#fff4e5", "#e8a33d"), Spacer(1, 5)]
+            elif k in ("box", "lista"):
+                par = [Paragraph("• " + _rl(x), st["p"]) for x in b[1]]
+                out += [riquadro(par, "#f5f6f8") if k == "box" else KeepTogether(par), Spacer(1, 5)]
+            elif k == "tab":
+                out += [tabella(b[1]), Spacer(1, 5)]
+            elif k == "img":
+                from PIL import Image as PI
+                w, h = PI.open(io.BytesIO(b[1])).size
+                larg = min(W, w * 0.62)
+                alt = larg * h / w
+                if alt > pag[1] - 60 * mm:
+                    alt = pag[1] - 60 * mm; larg = alt * w / h
+                img = Image(io.BytesIO(b[1]), width=larg, height=alt)
+                if out and isinstance(out[-1], Paragraph):  # tiene insieme titolo/nota e grafico
+                    prec = [out.pop()]
+                    if out and isinstance(out[-1], Paragraph):
+                        prec.insert(0, out.pop())
+                    out.append(KeepTogether(prec + [img]))
+                else:
+                    out.append(img)
+                out.append(Spacer(1, 5))
+            elif k == "dettagli":
+                out.append(Paragraph(_rl(b[1]), st["h3"]))
+                out += flow(b[2])
+        return out
+
+    storia = [Paragraph(_rl(f"Confronto portafogli – {ris['cfg']['nome']}"), st["h1"]), Paragraph(_rl(intestazione(ris)), st["nota"])]
+    primo = True
+    for k, v in S.items():
+        if not v:
+            continue
+        if not primo:
+            storia.append(PageBreak())
+        primo = False
+        storia.append(Paragraph(_rl(k), st["h2"]))
+        storia += flow(v)
+
+    def piede(c, d):
+        c.saveState()
+        c.setFont("DejaVu", 7)
+        c.setFillColor(colors.HexColor("#777777"))
+        c.drawString(12 * mm, 6 * mm, "Non è consulenza finanziaria.")
+        c.drawRightString(pag[0] - 12 * mm, 6 * mm, f"pagina {d.page}")
+        c.restoreState()
+    doc.build(storia, onFirstPage=piede, onLaterPages=piede)
+    return buf.getvalue()
+
+
+# ------------------------------------------------------------------ CSV
+def tabelle_csv(ris):
+    """{nome_file: DataFrame} con i numeri del report."""
+    out = {}
     righe = []
-    crisi = {"A": "ribasso 2022, crisi bancaria 2023. Non contiene 2000, 2008 né 2020.",
-             "B": "crisi 2008, debito europeo 2011, Covid 2020, ribasso 2022. Per cyber i primi anni hanno pochi titoli (vedi sotto).",
-             "C": "bolla dot-com 2000-2002, 2008, Covid 2020, ribasso 2022 – con dati proxy per gli anni in cui i titoli non esistevano."}
-    for a in "ABC":
-        if a == "C" and "base_C" not in ris: continue
-        p = P[a]
-        righe.append([a, cfg["analisi"][a]["descrizione"], f"{d(p[0])} – {d(p[1])}", f"{p[2]:,}".replace(",", "."), crisi[a]])
-    H.append(sc(tabella(righe, ["Descrizione", "Periodo coperto", "Giorni", "Crisi incluse"], classe="st")))
-    H.append(f"<p class='nota'>Prezzi: Yahoo Finance (adjusted close, dividendi inclusi) convertiti in EUR con il cambio giornaliero (Yahoo dal 2003, FRED prima), quindi il rischio cambio è incluso. "
-             f"<b>Benchmark:</b> {b['nome']}, ticker Yahoo {b['ticker']}, ISIN {b['isin']}, TER {pct(b['ter'], 2)}, lanciato il 25/09/2009 (verificato su iShares/justETF). Prima di quella data uso l'indice MSCI World Net in USD convertito in EUR, meno il TER ({b['proxy_storico']}): è un <b>proxy</b>, non l'ETF vero.</p>")
-    H.append("<p class='nota'><b>Analisi B:</b> quando un titolo non è ancora quotato, prende il rendimento medio dei titoli disponibili nello stesso portafoglio (equivale a pesi uguali tra quelli disponibili). All'inizio del 2007 il portafoglio cyber contiene quindi solo F5 e Check Point; i finanziari hanno 6 titoli fino all'IPO di Blackstone (giugno 2007).</p>")
-    if ris["avvisi"]:
-        H.append("<details><summary>Controlli sui dati: movimenti giornalieri estremi (&gt;30%)</summary><ul>" + "".join(f"<li>{html.escape(a)}</li>" for a in ris["avvisi"]) + "</ul><p class='nota'>Sono tutti consistenti con eventi reali (risultati trimestrali, crisi del 2008, divieti di vendita allo scoperto); nessun buco né prezzo negativo. Gli split sono già corretti nei prezzi adjusted.</p></details>")
-    else:
-        H.append("<p class='nota'>Controlli sui dati: nessun buco, prezzo anomalo o split non gestito.</p>")
-
-    H.append("<h2>Risultati a 5, 10 e 15 anni</h2><p class='nota'>Valori con rendimento atteso ricentrato al 6%. A sinistra l'analisi A (periodo comune, circa 5 anni di storia), a destra la B (dal 2007).</p>")
-    for h in cp:
-        H.append(f"<h3>Dopo {h} anni</h3>" + sc(tab_orizzonti(sA, sB, h)))
-    H.append("<h3>Fan chart: come si sparpagliano i risultati nel tempo</h3><p class='nota'>La fascia scura contiene il 50% dei casi, quella chiara il 90%. I puntini segnano 5°, 50° e 95° percentile a 5, 10 e 15 anni; la linea tratteggiata è il totale versato.</p>")
-    H.append(fan_chart(sA, "Analisi A – periodo comune", cp))
-    H.append(fan_chart(sB, "Analisi B – dal 2007", cp))
-    H.append(f"<h3>Max drawdown a confronto</h3>" + istogrammi_mdd(sA, sB, cp[-1]))
-    H.append("<h2>Altre metriche di rischio</h2>" + sc(tab_altre(ris)))
-    H.append("<h3>Da dove arriva il rischio dentro ogni portafoglio</h3>" + grafico_rischio(ris["storico"]["A"]))
-    H.append("<h3>Correlazione tra i portafogli</h3><p class='nota'>1 = si muovono insieme sempre; 0 = indipendenti.</p>" + heatmap([
-        ("Storica – analisi A", ris["storico"]["A"]["corr"]), ("Storica – analisi B", ris["storico"]["B"]["corr"]),
-        ("Simulata – analisi A", sA["corr_sim"]), ("Simulata – analisi B", sB["corr_sim"])][:4]))
-
-    H.append("<h3>Senza ricentratura (rendimenti storici reali)</h3><div class='warn'><b>Attenzione:</b> questa versione proietta nel futuro il passato recente, che per questi titoli è stato eccezionalmente favorevole. I titoli sono stati scelti oggi, con il senno di poi: non va letta come una previsione.</div>")
-    for h in cp:
-        H.append(f"<details><summary>Dopo {h} anni (senza ricentratura)</summary>" + sc(tab_orizzonti(ris["nr_A"], ris["nr_B"], h)) + "</details>")
-
-    if "stress_A" in ris:
-        H.append("<h2>Stress test</h2><p class='nota'>Lo shock è applicato al valore mediano simulato a metà orizzonte (7,5 anni), senza versamenti. «Anni per tornare a 5.000 €» è la mediana di una nuova simulazione dopo lo shock, contata dalla fine del crollo; usa lo stesso rendimento atteso del 6% (ipotesi ottimistica dopo una crisi). «Singolo titolo» = il titolo con peso più alto perde il 90%; non applicabile all'ETF, che è già diversificato.</p>")
-        H.append(sc(sezione_stress(ris)))
-    if "base_C" in ris:
-        H.append("<h2>Robustezza 1 – Storia allungata dal 1999 con proxy (analisi C)</h2>")
-        fr = ris["frac_proxy"]
-        H.append("<div class='warn'><b>Cosa è dato reale e cosa è proxy.</b> Per i giorni in cui un titolo non era quotato ho generato rendimenti sintetici = (beta × rendimento del proxy: XLK per cyber e big tech, XLF per i finanziari) + residui ripescati dai residui reali del titolo, così volatilità e correlazione col proxy sono quelle misurate quando il titolo esisteva. Non sono dati veri: i titoli hanno avuto percorsi propri (es. PANW, CRWD, S, ZS, PLTR nel 2000-2002 non esistevano). Quota di giorni sintetici: "
-                 + ", ".join(f"{t} {pct(v, 0)}" for t, v in fr.items() if v > 0.005) + ". Il benchmark usa l'indice MSCI World vero.</div>")
-        sC = ris["base_C"]
-        for h in cp:
-            H.append(f"<h3>Dopo {h} anni – analisi C</h3>" + sc(tab_orizzonti(sC, None, h, "Analisi C")))
-        H.append(fan_chart(sC, "Analisi C – dal 1999 con proxy", cp))
-    if "mod_t_A" in ris:
-        H.append("<h2>Robustezza 2 – Confronto tra modelli</h2><p class='nota'>Student-t: code grasse ma nessun raggruppamento della volatilità. GARCH(1,1): volatilità che sale e scende nel tempo, con shock ripescati dallo storico. Classifica = dal portafoglio più rischioso al meno rischioso.</p>" + sc(solidita(ris)))
-        H.append("<h2>Robustezza 3 – Sensibilità al rendimento atteso</h2><p class='nota'>Scenario settoriale prudente: cyber 4% e big tech 5% (valutazioni di partenza elevate, quindi rendimenti futuri attesi più bassi), finanza e ETF 6%.</p>" + sc(sezione_sensibilita(ris)))
-        H.append(f"<h2>Robustezza 4 – Rischio sul singolo titolo</h2><p class='nota'>Ogni titolo ha una probabilità dell'{pct(cfg['idio_p_anno'])} l'anno di crollare dell'80-100% in un giorno (fallimento, frode, delisting). Il rendimento atteso medio resta invariato: cambia solo il rischio. L'ETF non è toccato.</p>" + sc(sezione_idio(ris)))
-        H.append("<h2>Quanto sono solide queste conclusioni?</h2><div class='box'>" + conclusioni_solidita(ris) + "</div>")
-
-    H.append("<h2>Limiti di questa analisi</h2><div class='box'><ul>"
-             "<li><b>Storia breve</b>: SentinelOne (2021), Palantir (2020), CrowdStrike (2019) e Zscaler (2018) hanno pochi anni di dati; l'analisi A usa solo circa cinque anni, tra cui il ribasso del 2022 ma non il 2008 né il 2000.</li>"
-             "<li><b>Rendimento atteso</b>: il 6% è un'ipotesi uguale per tutti, non una previsione. Cambiarlo cambia i valori finali (vedi robustezza 3).</li>"
-             "<li><b>Survivorship bias</b>: i titoli sono stati scelti oggi tra quelli che hanno avuto successo; le società fallite o scomparse non ci sono. Per questo il rendimento storico è stato sostituito.</li>"
-             "<li><b>Concentrazione</b>: i portafogli hanno 5-7 titoli dello stesso settore; un singolo evento (normativa, scandalo, bolla di settore) può colpirli tutti. Tecnologia USA e cyber sono molto legati tra loro.</li>"
-             "<li><b>Il futuro può essere diverso dal passato</b>: il modello rimescola eventi già avvenuti; non può inventare crisi di tipo nuovo, né prevedere cambi di regime, tassi o tasse.</li>"
-             "<li><b>Costi e tasse</b>: sono inclusi solo il TER dell'ETF e lo 0,1% di ribilanciamento; niente imposte, spread o commissioni di broker.</li>"
-             "<li><b>Proxy</b>: nel benchmark prima del 2009 e nell'analisi C alcuni dati non sono reali (vedi sopra).</li></ul>"
-             "<p><b>Questa analisi non è consulenza finanziaria</b> e non contiene raccomandazioni di acquisto o vendita.</p></div>")
-    H.append("</body></html>")
-    open(out, "w", encoding="utf-8").write("".join(H))
+    for a, s in ris["sim"].items():
+        for h, df in s["orizzonti"].items():
+            for m in df.index:
+                for k in df.columns:
+                    righe.append({"analisi": a, "orizzonte_anni": h, "metrica": m, "portafoglio": k, "valore": df.loc[m, k]})
+    out["risultati_orizzonti.csv"] = pd.DataFrame(righe)
+    righe = []
+    for a, s in ris["sim"].items():
+        for k in s["nomi"]:
+            b = s["bande"][k]
+            for j in range(b.shape[1]):
+                righe.append({"analisi": a, "portafoglio": k, "mese": j, "p5": b[0][j], "p25": b[1][j], "p50": b[2][j], "p75": b[3][j], "p95": b[4][j]})
+    out["fan_chart_percentili.csv"] = pd.DataFrame(righe)
+    righe = []
+    for a, s in ris["sim"].items():
+        for k in s["nomi"]:
+            righe.append({"analisi": a, "portafoglio": k, "vol_storica": ris["storico"][a]["stat"][k]["vol"], "vol_simulata": s["vol_sim"][k],
+                          "max_drawdown_storico": ris["storico"][a]["stat"][k]["mdd"], "VaR95_1anno": s["var_es"].loc["VaR 95% 1 anno", k],
+                          "ES95_1anno": s["var_es"].loc["Expected Shortfall 95% 1 anno", k],
+                          "corr_media_titoli": ris["storico"][a]["corr_media"].get(k, np.nan)})
+    out["altre_metriche.csv"] = pd.DataFrame(righe)
+    out["rendimenti_attesi.csv"] = ris["rend_attesi"].T.rename_axis("portafoglio").reset_index()
+    out["titoli.csv"] = ris["dati_info"].assign(beta=[ris["beta"].get(BENCH if t == ris["cfg"]["benchmark"]["ticker"] else t, np.nan) for t in ris["dati_info"].index]).reset_index()
+    if ris["stress"]:
+        out["stress_test.csv"] = pd.concat([df.assign(analisi=a) for a, df in ris["stress"].items()])
+    if ris["idio"]:
+        out["rischio_singolo_titolo.csv"] = pd.concat([df.T.assign(analisi=a, orizzonte_anni=h) for a, s in ris["idio"].items() for h, df in s["orizzonti"].items()]).rename_axis("portafoglio").reset_index()
+    if ris["modelli"]:
+        out["confronto_modelli.csv"] = pd.concat([df.T.assign(analisi=a, modello=m, orizzonte_anni=h) for a, mm in ris["modelli"].items()
+                                                  for m, s in mm.items() for h, df in s["orizzonti"].items()]).rename_axis("portafoglio").reset_index()
+    return out
 
 
-def conclusioni_solidita(ris):
-    cp = max(ris["cfg"]["checkpoint_anni"])
-    F = []
-    for a in "AB":
-        base = ris[f"base_{a}"]
-        mods = [ris[f"mod_t_{a}"], ris[f"mod_garch_{a}"]]
-        for m in ("ES 95% a 1 anno", "Max drawdown mediano a 15 anni", "Prob. sotto il versato a 15 anni"):
-            o0 = ordine(metriche_rischio(base)[m])
-            same = all(ordine(metriche_rischio(s)[m]) == o0 for s in mods)
-            F.append((a, m, o0, same))
-    stabili = [f for f in F if f[3]]
-    instabili = [f for f in F if not f[3]]
-    h = "<p><b>Resta stabile</b> (stessa classifica con bootstrap, Student-t e GARCH):</p><ul>"
-    h += "".join(f"<li>Analisi {a}, {m}: {o}</li>" for a, m, o, _ in stabili) or "<li>nessuna metrica</li>"
-    h += "</ul><p><b>Cambia con le ipotesi</b>:</p><ul>"
-    h += "".join(f"<li>Analisi {a}, {m}: l'ordine dipende dal modello</li>" for a, m, o, _ in instabili) or "<li>nessuna metrica nei tre modelli</li>"
-    ch = []
-    for a in "AB":
-        ords = {ordine({k: ris[x]["orizzonti"][cp].loc["Valore mediano", k] for k in ORD}) for x in (f"sens_3_{a}", f"base_{a}", f"sens_9_{a}", f"sens_settori_{a}")}
-        ch.append(f"analisi {a}: " + ("classifica del valore finale invariata" if len(ords) == 1 else "classifica del valore finale diversa tra gli scenari di rendimento"))
-    h += "<li>Sensibilità al rendimento atteso – " + "; ".join(ch) + "</li>"
-    oa = {m: ordine(v) for m, v in metriche_rischio(ris["base_A"]).items()}
-    ob = {m: ordine(v) for m, v in metriche_rischio(ris["base_B"]).items()}
-    if oa != ob:
-        h += "<li>Il confronto tra <i>banche d'investimento</i> e <i>big tech</i> dipende dal periodo storico: nell'analisi A (2021-2026, include il ribasso tech del 2022) i finanziari risultano meno rischiosi, nell'analisi B (dal 2007, include il 2008) lo sono la big tech.</li>"
-    dp = max(ris[f"idio_{a}"]["orizzonti"][cp].loc["Prob. sotto il versato", k] - ris[f"base_{a}"]["orizzonti"][cp].loc["Prob. sotto il versato", k] for a in "AB" for k in ORD[:3])
-    dd = max(ris[f"base_{a}"]["orizzonti"][cp].loc["Max drawdown mediano", k] - ris[f"idio_{a}"]["orizzonti"][cp].loc["Max drawdown mediano", k] for a in "AB" for k in ORD[:3])
-    h += f"<li>Rischio sul singolo titolo (crollo 80-100% con probabilità {pct(ris['cfg']['idio_p_anno'])} l'anno per titolo): l'effetto è <b>contenuto</b> rispetto alla volatilità normale di questi titoli, che già produce cali enormi. La probabilità di stare sotto il versato sale al massimo di {num(dp * 100)} punti percentuali e il max drawdown mediano peggiora al massimo di {num(dd * 100)} punti. Non cambia nessuna classifica.</li>"
-    h += "</ul><p>In ogni caso: il <b>livello</b> dei numeri (quanto vale la mediana, quanto è probabile perdere) dipende dal rendimento atteso e dal periodo storico scelto; la <b>distanza di rischio tra l'ETF diversificato e i portafogli di singole azioni</b> è ampia e si ripete in tutte le varianti: l'ETF è sempre il meno rischioso e ha sempre il valore mediano più alto.</p>"
-    return h
+def salva(ris, cartella, pdf=True, log=print):
+    """Scrive report.html, report.pdf e i CSV in `cartella`. Ritorna il percorso dell'HTML."""
+    os.makedirs(cartella, exist_ok=True)
+    S = sezioni(ris)
+    f = os.path.join(cartella, "report.html")
+    open(f, "w", encoding="utf-8").write(html_report(ris, S))
+    if pdf:
+        open(os.path.join(cartella, "report.pdf"), "wb").write(pdf_report(ris, S))
+    dcsv = os.path.join(cartella, "dati_csv")
+    os.makedirs(dcsv, exist_ok=True)
+    for nome, df in tabelle_csv(ris).items():
+        df.to_csv(os.path.join(dcsv, nome), index=False, sep=";", decimal=",", encoding="utf-8-sig")
+    from configurazione import in_yaml
+    open(os.path.join(cartella, "configurazione_usata.yaml"), "w", encoding="utf-8").write(in_yaml(ris["cfg"]))
+    return f

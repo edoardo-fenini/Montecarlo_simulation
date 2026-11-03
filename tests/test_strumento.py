@@ -126,3 +126,21 @@ def test_end_to_end_configurazione_piccola(cfg_piccola, finto_yahoo, tmp_path):
     # la seconda esecuzione usa la cache (nessun download)
     analisi.esegui(cfg, cartella_cache=str(tmp_path), scaricatore=lambda t: (_ for _ in ()).throw(AssertionError(t)),
                    log=lambda *a: None, n=100)
+
+
+def test_report_html_pdf_csv(cfg_piccola, finto_yahoo, tmp_path):
+    import report
+    cfg = copy.deepcopy(cfg_piccola)
+    cfg["portafogli"].append({"nome": "Satellite", "titoli": {"benchmark": 80, "Uno": 20}})
+    cfg["moduli"].update({"confronto_modelli": True, "analisi_C": True})
+    cfg["proxy"] = {"BBB.DE": "AAA.MI"}
+    cfg = C.prepara(cfg)
+    ris = analisi.esegui(cfg, cartella_cache=str(tmp_path / "cache"), scaricatore=finto_yahoo, log=lambda *a: None, n=150)
+    assert set(ris["sim"]) == {"A", "B", "C"} and ris["modelli"] and ris["sensibilita"]
+    f = report.salva(ris, str(tmp_path / "out"))
+    testo = open(f, encoding="utf-8").read()
+    for parola in ["Sintesi", "Dopo 2 anni", "Dopo 4 anni", "Stress test", "Quanto sono solide", "non è consulenza finanziaria", "Satellite"]:
+        assert parola in testo
+    assert (tmp_path / "out" / "report.pdf").read_bytes()[:4] == b"%PDF"
+    csv = pd.read_csv(tmp_path / "out" / "dati_csv" / "risultati_orizzonti.csv", sep=";", decimal=",")
+    assert set(csv["analisi"]) == {"A", "B", "C"} and set(csv["orizzonte_anni"]) == {2, 4}

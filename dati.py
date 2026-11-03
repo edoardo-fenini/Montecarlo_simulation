@@ -150,7 +150,7 @@ def serie_eur(arch, t, valuta_default=None, avvisi=None):
         fx = fx.reindex(fx.index.union(s.index)).ffill().reindex(s.index)
         prima = s.index[0]
         s = (s / fx).dropna()
-        if len(s) and avvisi is not None and (s.index[0] - prima).days > 365:
+        if len(s) and avvisi is not None and (s.index[0] - prima).days > 365 and s.index[0] > pd.Timestamp("2000-01-01"):
             avvisi.append(f"{t}: il cambio {valuta}/EUR è disponibile solo dal {s.index[0]:%d/%m/%Y}; i dati precedenti non sono usati.")
     if len(s) == 0:
         raise ErroreDati(f"«{t}»: nessun dato utilizzabile dopo la conversione in EUR.")

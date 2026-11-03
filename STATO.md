@@ -2,7 +2,7 @@
 
 ## Tappe
 - [x] 1. Motore generico e configurabile (`configurazione.py`, `dati.py`, `analisi.py`, `simula.py`, `metriche.py`) + test
-- [ ] 2. Script da riga di comando che produce il report (HTML, PDF, CSV)
+- [x] 2. Script da riga di comando `confronta.py --config ...` -> report/AAAA-MM-GG_nome/ (HTML, PDF con reportlab, CSV con ; e virgola decimale per Excel)
 - [ ] 3. App Streamlit
 - [ ] 4. Script di installazione e avvio per Mac
 - [ ] 5. README e release
@@ -22,3 +22,5 @@
 ## Come riprendere
 `python -m pytest -q tests` (offline). Esempio di configurazione: `configurazioni/esempio_tre_portafogli.yaml`.
 L'analisi iniziale (rendimento uguale 6%) è in `esempi/2026-11-03_analisi_iniziale_rendimento_uguale_6/`.
+- PDF generato con reportlab (solo Python, niente Chrome) e font DejaVu incluso in matplotlib.
+- Stress test: una sola simulazione di "crescita di 1 €" per portafoglio riusata per tutti gli scenari (veloce); 1.000 percorsi.
