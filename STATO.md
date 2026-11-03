@@ -19,7 +19,9 @@
       percentuali con un decimale, didascalie automatiche, zona sotto il capitale nei fan chart. PDF controllato pagina per pagina.
       Verifica fonti sul Mac di GitHub: yfinance OK, Yahoo diretto OK (ma con range=max dava dati mensili: corretto),
       BCE falliva per certificati SSL (corretto con certifi, anche per la FRED), Stooq non restituisce dati.
-- [ ] 3. Estetica app e grafici (tema, palette fissa, Plotly, card, pagina iniziale, aiuto, avanzamento, errori)
+- [x] 3. Estetica: tema (Streamlit 1.66 ha un solo [theme]: impostati solo colore principale #3366A3, angoli e palette, validi
+      in chiaro e scuro; con un tema personalizzato lo scuro si sceglie da ⋮ → Settings → Theme), stile.py, Plotly (fan chart,
+      cali), card, pagina iniziale, aiuto, avanzamento con stima, log.txt. Provata in browser headless in chiaro e scuro.
 - [ ] 4. Funzioni in più (analisi salvate, prova rapida dei pesi, Excel, configurazioni di esempio)
 - [ ] 5. Qualità e prestazioni (tempi, parallelismo, ruff, type hints, test, log)
 - [ ] 6. Release v1.1.0 (README con screenshot, CHANGELOG, riepilogo PDF, PR, release)

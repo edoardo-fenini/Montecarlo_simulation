@@ -21,6 +21,18 @@
 - Sotto ogni grafico una spiegazione automatica di cosa guardare.
 - Nei fan chart la zona sotto il capitale investito è colorata.
 
+### App più curata
+- Tema sobrio (blu notte come colore principale, angoli arrotondati) valido in modalità chiara e scura; i blocchi del
+  report nell'app usano colori neutri leggibili in entrambe.
+- Palette fissa e coerente in app, report e PDF (`stile.py`, Okabe-Ito, benchmark sempre grigio); il colore non è mai
+  l'unico segnale: tratteggi, motivi ed etichette diversi per ogni portafoglio.
+- Fan chart e distribuzione dei cali interattivi (Plotly): passando il mouse si leggono mediana, 5° e 95° percentile;
+  clic sulla legenda per nascondere un portafoglio. Nel PDF restano grafici statici con lo stesso stile.
+- Card riassuntive (valore mediano, probabilità di perdita, calo tipico, confronto col benchmark e livello di rischio).
+- Pagina iniziale in 3 passi con l'esempio pronto da lanciare; aiuto «?» su ogni opzione.
+- Barra di avanzamento con fase corrente e tempo stimato.
+- Tabelle grandi in sezioni espandibili; errori spiegati in modo semplice, dettagli tecnici solo in `log.txt`.
+
 ### Correzioni
 - Sul Mac le richieste dirette (FRED, BCE) fallivano con un errore di certificato SSL: ora si usano i certificati di
   `certifi`. Nella 1.0 il cambio del dollaro prima del 2003 (FRED) poteva mancare sul Mac: interessava solo l'analisi C.

@@ -1,7 +1,11 @@
-"""App per confrontare portafogli con una simulazione Monte Carlo.
+"""App per confrontare il rischio di portafogli con una simulazione Monte Carlo.
 Avvio:  streamlit run app.py   (oppure doppio clic su Avvia.command)"""
+from __future__ import annotations
+
 import copy
-import traceback
+import logging
+import re
+import time
 
 import pandas as pd
 import streamlit as st
@@ -10,32 +14,64 @@ import yaml
 import analisi
 import configurazione as C
 import dati as D
+import grafici_app as G
+import registro
 import report
 from dati import ErroreDati
 
+log = registro.configura()
 ESEMPIO = "configurazioni/esempio_tre_portafogli.yaml"
+
+AIUTO = {
+    "nome": "Serve a riconoscere il report: compare nel titolo e nel nome del file.",
+    "tabella": "Una riga per titolo. Ticker come su finance.yahoo.com. Peso in %: vuoto = pesi uguali. "
+               "Portafoglio misto: come ticker scrivi il nome di un altro portafoglio oppure «benchmark».",
+    "capitale": "Quanto investi all'inizio, in euro.",
+    "versamento": "Quanto aggiungi ogni mese (0 = solo l'investimento iniziale). I versamenti seguono i pesi del portafoglio.",
+    "orizzonte": "Per quanti anni simulare.",
+    "intermedi": "Anni intermedi in cui vedere i risultati, separati da virgola (es. 5, 10).",
+    "metodo": "Il rendimento atteso è la crescita media ipotizzata. Volatilità, cadute e correlazioni vengono sempre dalla storia; "
+              "con la «ricentratura» si cambia solo la media dei rendimenti storici, per non proiettare nel futuro il passato.",
+    "rf": "Rendimento di un investimento senza rischio (es. titoli di Stato a breve).",
+    "mrp": "Rendimento in più che il mercato azionario paga in media per il suo rischio.",
+    "uguale": "Stesso rendimento medio annuo per tutti i portafogli.",
+    "nsim": "Quanti futuri possibili simulare. Più sono, più i risultati sono stabili ma il calcolo è più lungo. "
+            "20.000 = risultati stabili (circa ±2%); 1.000 = prova veloce.",
+    "rib": "Ogni quanto riportare i titoli ai pesi scelti, pagando il costo di ribilanciamento.",
+    "costo": "Costo pagato sull'importo comprato e venduto a ogni ribilanciamento.",
+    "seed": "Numero di partenza delle estrazioni casuali: con lo stesso seed si ottengono gli stessi risultati.",
+    "b_ticker": "L'ETF di confronto. Default: iShares Core MSCI World (IWDA.AS).",
+    "b_proxy": "Indice usato per gli anni prima della nascita dell'ETF.",
+    "aggiorna": "Riscarica i prezzi anche se sono già salvati sul computer (per avere gli ultimi giorni).",
+}
 SPIEGA_METODO = {
-    "beta": "Rendimento atteso = tasso privo di rischio + beta × premio di mercato. Chi si muove di più con il mercato "
-            "rende di più in media; il rischio specifico del singolo titolo non è remunerato. **Consigliato.**",
-    "uguale": "Stesso rendimento medio per tutti i portafogli: le differenze dipendono solo dal rischio.",
-    "storico": "Rendimenti realmente ottenuti in passato. ⚠️ Proietta il passato nel futuro: troppo ottimistico per titoli scelti oggi perché sono andati bene.",
-    "personalizzato": "Scegli tu il rendimento medio annuo di ogni portafoglio.",
+    "beta": "**Beta (consigliato):** rendimento = tasso privo di rischio + beta × premio di mercato. Chi si muove di più con il "
+            "mercato rende di più in media; il rischio del singolo titolo non è premiato perché si può diversificare.",
+    "uguale": "**Uguale:** stesso rendimento medio per tutti: le differenze dipendono solo dal rischio.",
+    "storico": "**Storico:** i rendimenti del passato. ⚠️ Proietta il passato nel futuro: troppo ottimista se scegli titoli che sono già andati bene.",
+    "personalizzato": "**Personalizzato:** scegli tu il rendimento medio di ogni portafoglio.",
 }
-ETICHETTE_MODULI = {
-    "stress_test": "Stress test (crolli stile 2000 e 2008)",
-    "rischio_singolo_titolo": "Rischio sul singolo titolo (crollo improvviso)",
-    "confronto_modelli": "Confronto tra modelli e sensibilità (lento: tempo × 2,5 circa)",
-    "analisi_C": "Analisi C: storia dal 1999 con proxy di settore",
-    "verifica_convergenza": "Le simulazioni bastano? (ripete il calcolo con 3 seed: tempo +50% circa)",
+MODULI = {
+    "stress_test": ("Stress test", "Crolli stile 2000-2002 e 2008 e un titolo che perde il 90%: quanto si perde e in quanto tempo si recupera."),
+    "rischio_singolo_titolo": ("Rischio sul singolo titolo", "Aggiunge la piccola probabilità che un'azione crolli dell'80-100% (fallimento, frode)."),
+    "verifica_convergenza": ("Le simulazioni bastano?", "Ripete il calcolo con 3 seed e controlla che i risultati cambino poco (tempo +50% circa)."),
+    "confronto_modelli": ("Confronto tra modelli", "Rifà i conti con altri due modelli (Student-t e GARCH) e varia il rendimento atteso. Lento."),
+    "analisi_C": ("Storia dal 1999 (analisi C)", "Allunga la storia fino al 1999 usando ETF di settore per i titoli non ancora quotati. Lento."),
 }
 
-st.set_page_config(page_title="Confronto portafogli", page_icon="📊", layout="wide")
-# barra laterale più larga, così la tabella dei portafogli si legge per intero
-st.markdown("<style>section[data-testid='stSidebar']{width:480px !important;min-width:480px}</style>", unsafe_allow_html=True)
+st.set_page_config(page_title="Confronto portafogli", page_icon="📊", layout="wide", initial_sidebar_state="expanded")
+st.markdown("""<style>
+section[data-testid='stSidebar']{width:470px !important;min-width:470px}
+.block-container{padding-top:2.2rem;padding-bottom:3rem;max-width:1400px}
+h1{font-weight:700 !important;letter-spacing:-.01em}
+div[data-testid='stMetricValue']{font-size:1.45rem}
+.badge{display:inline-block;color:#fff;border-radius:6px;padding:2px 9px;font-size:.82rem;font-weight:600}
+.passo{font-size:2rem;font-weight:700;color:#3366A3;line-height:1}
+</style>""", unsafe_allow_html=True)
 
 
-# ------------------------------------------------------------------ stato
-def tabella_da_cfg(raw):
+# ------------------------------------------------------------------ stato (configurazione <-> controlli)
+def tabella_da_cfg(raw: dict) -> pd.DataFrame:
     righe = []
     for p in raw.get("portafogli", []):
         tit = p.get("titoli") or []
@@ -48,7 +84,7 @@ def tabella_da_cfg(raw):
     return pd.DataFrame(righe, columns=["Portafoglio", "Ticker", "Peso (%)"])
 
 
-def applica_cfg(raw):
+def applica_cfg(raw: dict) -> None:
     """Porta una configurazione (dizionario come nel file YAML) nei controlli dell'app."""
     cfg = C._unisci(C.DEFAULT, raw)
     ss = st.session_state
@@ -62,9 +98,7 @@ def applica_cfg(raw):
     ss.intermedi = ", ".join(str(x) for x in cfg["orizzonti_intermedi"])
     ra = cfg["rendimento_atteso"]
     ss.metodo = ra["metodo"]
-    ss.rf = ra["tasso_privo_rischio"] * 100
-    ss.mrp = ra["premio_mercato"] * 100
-    ss.uguale = ra["valore_uguale"] * 100
+    ss.rf, ss.mrp, ss.uguale = ra["tasso_privo_rischio"] * 100, ra["premio_mercato"] * 100, ra["valore_uguale"] * 100
     ss.personalizzato = {str(k): float(v) * 100 for k, v in (ra.get("personalizzato") or {}).items()}
     for k in C.DEFAULT["moduli"]:
         ss[f"mod_{k}"] = bool(cfg["moduli"][k])
@@ -76,16 +110,16 @@ def applica_cfg(raw):
     ss.b_nome, ss.b_ticker, ss.b_ter, ss.b_proxy = b["nome"], b["ticker"], float(b["ter"]) * 100, b.get("proxy_storico") or ""
 
 
-def cfg_da_stato(tabella):
+def cfg_da_stato(tabella: pd.DataFrame) -> dict:
     """Costruisce la configurazione (dizionario) dai controlli dell'app."""
     ss = st.session_state
     raw = copy.deepcopy(ss.raw)
-    portafogli = {}
+    portafogli: dict[str, dict] = {}
     for _, r in tabella.iterrows():
         nome, tick = str(r["Portafoglio"] or "").strip(), str(r["Ticker"] or "").strip()
-        if not nome and not tick:
+        if nome in ("", "None") and tick in ("", "None"):
             continue
-        if not nome or not tick:
+        if nome in ("", "None") or tick in ("", "None"):
             raise C.ErroreConfig("Nella tabella dei portafogli ogni riga deve avere sia il nome del portafoglio sia il ticker.")
         peso = r["Peso (%)"]
         portafogli.setdefault(nome, {})[tick] = None if pd.isna(peso) else float(peso)
@@ -98,8 +132,7 @@ def cfg_da_stato(tabella):
                 "orizzonte_anni": int(ss.orizzonte), "orizzonti_intermedi": inter, "n_simulazioni": int(ss.nsim),
                 "seed": int(ss.seed), "ribilanciamento": ss.rib, "costo_ribilanciamento": ss.costo / 100})
     raw["rendimento_atteso"] = {"metodo": ss.metodo, "tasso_privo_rischio": ss.rf / 100, "premio_mercato": ss.mrp / 100,
-                                "valore_uguale": ss.uguale / 100,
-                                "personalizzato": {k: v / 100 for k, v in ss.personalizzato.items()}}
+                                "valore_uguale": ss.uguale / 100, "personalizzato": {k: v / 100 for k, v in ss.personalizzato.items()}}
     raw["moduli"] = {k: bool(ss[f"mod_{k}"]) for k in C.DEFAULT["moduli"]}
     raw["benchmark"] = {**(raw.get("benchmark") or {}), "nome": ss.b_nome, "ticker": ss.b_ticker.strip(),
                         "ter": ss.b_ter / 100, "proxy_storico": ss.b_proxy.strip() or None}
@@ -111,15 +144,15 @@ if "raw" not in st.session_state:
 ss = st.session_state
 
 
-def pesi_uguali():
+def pesi_uguali() -> None:
     t = ss.tabella_corrente.copy()
-    t = t[t["Ticker"].astype(str).str.strip() != ""]
+    t = t[~t["Ticker"].astype(str).str.strip().isin(["", "None"])]
     t["Peso (%)"] = t.groupby("Portafoglio")["Ticker"].transform(lambda x: round(100 / len(x), 4))
     ss.tabella = t.reset_index(drop=True)
     ss.versione += 1
 
 
-def carica_file():
+def carica_file() -> None:
     f = ss.get("file_cfg")
     if f is None:
         return
@@ -132,8 +165,13 @@ def carica_file():
         ss.msg_caricamento = ("errore", f"Non riesco a caricare «{f.name}»: {e}")
 
 
+def carica_esempio() -> None:
+    applica_cfg(yaml.safe_load(open(ESEMPIO, encoding="utf-8")))
+    ss.pop("ris", None)
+
+
 @st.cache_data(show_spinner=False, ttl=3600)
-def verifica_cache(t):
+def verifica_cache(t: str):
     """Scheda del ticker (scarica e mette in cache i prezzi se mancano). Ritorna un messaggio se non esiste."""
     try:
         return D.verifica_ticker(D.Archivio(log=lambda *a: None), t)
@@ -141,33 +179,101 @@ def verifica_cache(t):
         return str(e).split(".")[0]
 
 
-def carica_esempio():
-    applica_cfg(yaml.safe_load(open(ESEMPIO, encoding="utf-8")))
-    ss.pop("ris", None)
+# ------------------------------------------------------------------ rendering dei blocchi del report
+def md(testo: str) -> str:
+    """Mini-HTML dei blocchi -> markdown di Streamlit."""
+    t = str(testo).replace("<b>", "**").replace("</b>", "**").replace("<i>", "*").replace("</i>", "*")
+    return re.sub(r"<br\s*/?>", "  \n", t)
+
+
+def tabella_html(t: dict) -> None:
+    righe = len(t["righe"])
+    contenuto = f"<style>{report.CSS_APP}</style><div class='rep'>{report._html_tab(t)}</div>"
+    if righe > 12:
+        with st.expander(f"Mostra la tabella ({righe} righe)"):
+            st.html(contenuto)
+    else:
+        st.html(contenuto)
+
+
+def schede_native(d: dict) -> None:
+    """Card per portafoglio: livello di rischio (numero, nome, quadratini, colore) e numeri chiave rispetto al benchmark."""
+    schede = d["schede"]
+    bench = next((s for s in schede if s["benchmark"]), None)
+    for i in range(0, len(schede), 4):
+        colonne = st.columns(4)
+        for col, s in zip(colonne, schede[i:i + 4]):
+            with col.container(border=True):
+                st.markdown(f"<span style='color:{s['colore']};font-size:1.3rem'>■</span> **{s['nome']}**", unsafe_allow_html=True)
+                st.markdown(f"<span class='badge' style='background:{s['livello_colore']}'>Rischio {s['livello']}/5 · {s['livello_nome']}</span>"
+                            f" &nbsp;{report.quadratini(s['livello'])}", unsafe_allow_html=True)
+                diff = None if (s["benchmark"] or bench is None) else s["valore_mediano"] - bench["valore_mediano"]
+                st.metric(f"Valore mediano a {d['orizzonte']} anni", report.eur(s["valore_mediano"]),
+                          delta=None if diff is None else f"{report.eur(diff)} vs benchmark")
+                dp = None if (s["benchmark"] or bench is None) else s["prob_perdita"] - bench["prob_perdita"]
+                st.metric("Probabilità di perdita", report.pct(s["prob_perdita"]),
+                          delta=None if dp is None else f"{report.num(dp * 100)} punti vs benchmark", delta_color="inverse")
+                st.metric("Calo massimo tipico", report.pct(s["mdd"]))
+                st.caption(f"Volatilità annua {report.pct(s['vol'])}" + ("" if s["benchmark"] else f" · {report.num(s['vol_vs_bench'])} volte il benchmark"))
+
+
+def mostra_blocchi(blocchi: list) -> None:
+    for b in blocchi:
+        k = b[0]
+        if k in ("h2", "h3"):
+            st.subheader(b[1])
+        elif k == "sottotitolo":
+            st.markdown(f"**{b[1]}**")
+        elif k == "p":
+            st.markdown(md(b[1]), unsafe_allow_html=True)
+        elif k == "nota":
+            st.caption(md(b[1]), unsafe_allow_html=True)
+        elif k == "didascalia":
+            st.caption("💡 " + md(b[1]), unsafe_allow_html=True)
+        elif k == "warn":
+            st.warning(md(b[1]))
+        elif k == "box":
+            with st.container(border=True):
+                st.markdown("\n".join(f"- {md(x)}" for x in b[1]), unsafe_allow_html=True)
+        elif k == "lista":
+            st.markdown("\n".join(f"- {md(x)}" for x in b[1]), unsafe_allow_html=True)
+        elif k == "tab":
+            tabella_html(b[1])
+        elif k == "schede":
+            schede_native(b[1])
+        elif k == "img":
+            st.image(b[1], width="stretch")
+        elif k == "dettagli":
+            with st.expander(b[1]):
+                mostra_blocchi(b[2])
+
+
+def senza_immagini(blocchi: list) -> list:
+    return [b for b in blocchi if b[0] not in ("img", "didascalia")]
 
 
 # ------------------------------------------------------------------ barra laterale
 with st.sidebar:
-    st.header("Impostazioni")
-    st.text_input("Nome del confronto", key="nome")
-    st.subheader("Portafogli")
-    st.caption("Una riga per titolo. Ticker come su finance.yahoo.com (es. AAPL, ENI.MI, SAP.DE, IWDA.AS). "
-               "Peso in %: lascialo vuoto (compare «None») per pesi uguali. Per un portafoglio **misto** scrivi come ticker il nome di un altro "
-               "portafoglio oppure `benchmark` (es. 80 benchmark + 20 Cyber security).")
+    st.title("📊 Impostazioni")
+    st.text_input("Nome del confronto", key="nome", help=AIUTO["nome"])
+
+    st.header("1 · Portafogli", divider="gray")
+    st.caption("Una riga per titolo. Peso vuoto (compare «None») = pesi uguali. Portafoglio misto: come ticker il nome di un altro "
+               "portafoglio oppure `benchmark`.")
     tab = st.data_editor(ss.tabella, key=f"editor_{ss.versione}", num_rows="dynamic", width="stretch", hide_index=True,
-                         column_config={"Portafoglio": st.column_config.TextColumn(width="medium"),
-                                        "Ticker": st.column_config.TextColumn(width="small"),
-                                        "Peso (%)": st.column_config.NumberColumn(min_value=0.0, max_value=100.0, format="%.2f", width="small")})
+                         column_config={"Portafoglio": st.column_config.TextColumn(width="medium", help="Nome del portafoglio"),
+                                        "Ticker": st.column_config.TextColumn(width="small", help=AIUTO["tabella"]),
+                                        "Peso (%)": st.column_config.NumberColumn(min_value=0.0, max_value=100.0, format="%.2f", width="small",
+                                                                                  help="Peso in percentuale; vuoto = pesi uguali")})
     ss.tabella_corrente = tab
     c1, c2 = st.columns(2)
-    c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch")
-    c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch")
+    c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch", help="Imposta pesi uguali dentro ogni portafoglio.")
+    c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch", help="Torna ai tre portafogli di esempio.")
 
-    # ---- controllo dei ticker: nome, borsa, valuta e storia, per accorgersi subito di un errore
     riferimenti = {str(x).strip().lower() for x in tab["Portafoglio"]} | {"benchmark"}
     ticker_tab = list(dict.fromkeys(str(t).strip().upper() for t in tab["Ticker"]
-                                    if str(t).strip() and str(t).strip().lower() not in riferimenti and str(t) != "None"))
-    with st.expander("🔎 Controllo dei ticker", expanded=False):
+                                    if str(t).strip() not in ("", "None") and str(t).strip().lower() not in riferimenti))
+    with st.expander("🔎 Controllo dei ticker"):
         arch_v = D.Archivio(log=lambda *a: None)
         nuovi = [t for t in ticker_tab if not arch_v.in_cache(t)]
         automatico = len(nuovi) <= 3 or ss.get("verifica_tutti", False)  # pochi ticker nuovi: li controllo subito
@@ -190,63 +296,62 @@ with st.sidebar:
             st.dataframe(pd.DataFrame(righe_v), hide_index=True, width="stretch")
             st.caption("Controlla che il nome corrisponda all'azienda che intendevi: un ticker sbagliato può indicare un'altra società.")
 
-    with st.expander("📄 Carica prezzi da file", expanded=False):
-        st.caption("Se le fonti online non funzionano, scarica i prezzi a mano (es. da Yahoo Finance → Historical data → Download) "
-                   "e caricali qui. Formato: una colonna con la data e una con il prezzo; vedi esempi/prezzi_esempio.csv.")
+    with st.expander("📄 Carica prezzi da file"):
+        st.caption("Se le fonti online non funzionano, scarica i prezzi a mano (es. Yahoo Finance → Historical data → Download) e "
+                   "caricali qui. Formato: una colonna con la data e una con il prezzo; vedi esempi/prezzi_esempio.csv.")
         f_csv = st.file_uploader("File CSV dei prezzi", type=["csv", "txt"], key="file_prezzi")
         c1, c2 = st.columns(2)
         t_csv = c1.text_input("Ticker", key="ticker_csv", help="Il nome con cui userai questo titolo nella tabella dei portafogli.")
-        v_csv = c2.selectbox("Valuta dei prezzi", ["EUR", "USD", "GBP", "GBp", "CHF", "JPY", "SEK", "DKK", "NOK", "CAD"], key="valuta_csv")
+        v_csv = c2.selectbox("Valuta dei prezzi", ["EUR", "USD", "GBP", "GBp", "CHF", "JPY", "SEK", "DKK", "NOK", "CAD"], key="valuta_csv",
+                             help="La valuta in cui sono espressi i prezzi del file (GBp = pence).")
         tipo_csv = st.radio("Tipo", ["EQUITY", "ETF"], horizontal=True, key="tipo_csv", format_func=lambda x: "Azione" if x == "EQUITY" else "ETF")
         if st.button("Importa i prezzi", width="stretch", disabled=f_csv is None or not t_csv.strip()):
             try:
                 s_imp = D.Archivio(log=lambda *a: None).importa_csv(t_csv, f_csv.getvalue(), v_csv, tipo_csv)
                 verifica_cache.clear()
-                st.success(f"Importati {len(s_imp)} prezzi per {t_csv.strip().upper()} dal {s_imp.index[0]:%d/%m/%Y} al {s_imp.index[-1]:%d/%m/%Y}. "
-                           "Ora puoi usare questo ticker nella tabella.")
+                st.success(f"Importati {len(s_imp)} prezzi per {t_csv.strip().upper()} dal {s_imp.index[0]:%d/%m/%Y} al "
+                           f"{s_imp.index[-1]:%d/%m/%Y}. Ora puoi usare questo ticker nella tabella.")
             except ErroreDati as e:
                 st.error(str(e))
 
-    st.subheader("Capitale e orizzonte")
-    st.number_input("Capitale iniziale (€)", min_value=0.0, step=500.0, key="capitale")
-    st.number_input("Versamento mensile (€)", min_value=0.0, step=50.0, key="versamento")
-    st.number_input("Orizzonte (anni)", min_value=1, max_value=50, step=1, key="orizzonte")
-    st.text_input("Orizzonti intermedi (anni)", key="intermedi", help="Separati da virgola, es. 5, 10")
+    st.header("2 · Capitale e orizzonte", divider="gray")
+    c1, c2 = st.columns(2)
+    c1.number_input("Capitale iniziale (€)", min_value=0.0, step=500.0, key="capitale", help=AIUTO["capitale"])
+    c2.number_input("Versamento mensile (€)", min_value=0.0, step=50.0, key="versamento", help=AIUTO["versamento"])
+    c1.number_input("Orizzonte (anni)", min_value=1, max_value=50, step=1, key="orizzonte", help=AIUTO["orizzonte"])
+    c2.text_input("Orizzonti intermedi", key="intermedi", help=AIUTO["intermedi"])
 
-    st.subheader("Rendimento atteso")
-    st.radio("Metodo", list(SPIEGA_METODO), key="metodo", horizontal=True)
+    st.header("3 · Rendimento atteso", divider="gray")
+    st.radio("Metodo", list(SPIEGA_METODO), key="metodo", horizontal=True, help=AIUTO["metodo"])
     st.caption(SPIEGA_METODO[ss.metodo])
     if ss.metodo == "beta":
         c1, c2 = st.columns(2)
-        c1.number_input("Tasso privo di rischio (%)", step=0.25, key="rf")
-        c2.number_input("Premio di mercato (%)", step=0.25, key="mrp")
+        c1.number_input("Tasso privo di rischio (%)", step=0.25, key="rf", help=AIUTO["rf"])
+        c2.number_input("Premio di mercato (%)", step=0.25, key="mrp", help=AIUTO["mrp"])
     elif ss.metodo == "uguale":
-        st.number_input("Rendimento medio annuo per tutti (%)", step=0.5, key="uguale")
+        st.number_input("Rendimento medio annuo per tutti (%)", step=0.5, key="uguale", help=AIUTO["uguale"])
     elif ss.metodo == "personalizzato":
-        nomi = list(dict.fromkeys(str(x).strip() for x in tab["Portafoglio"] if str(x).strip())) + ["benchmark"]
+        nomi = list(dict.fromkeys(str(x).strip() for x in tab["Portafoglio"] if str(x).strip() not in ("", "None"))) + ["benchmark"]
         dfp = pd.DataFrame({"Portafoglio": nomi, "Rendimento (%)": [ss.personalizzato.get(n, ss.uguale) for n in nomi]})
         modp = st.data_editor(dfp, key=f"pers_{ss.versione}", hide_index=True, disabled=["Portafoglio"], width="stretch")
         ss.personalizzato = dict(zip(modp["Portafoglio"], modp["Rendimento (%)"].astype(float)))
 
-    st.subheader("Moduli")
-    for k, et in ETICHETTE_MODULI.items():
-        st.checkbox(et, key=f"mod_{k}")
-
-    st.subheader("Simulazione")
-    st.number_input("Numero di simulazioni", min_value=500, max_value=100000, step=1000, key="nsim",
-                    help="20.000 (default) = risultati stabili, circa 3-5 minuti. Per una prova veloce usa 1.000.")
+    st.header("4 · Moduli e simulazione", divider="gray")
+    for k, (et, aiuto) in MODULI.items():
+        st.checkbox(et, key=f"mod_{k}", help=aiuto)
+    st.number_input("Numero di simulazioni", min_value=500, max_value=100000, step=1000, key="nsim", help=AIUTO["nsim"])
     with st.expander("Benchmark e impostazioni avanzate"):
         st.text_input("Nome del benchmark", key="b_nome")
-        st.text_input("Ticker del benchmark", key="b_ticker")
-        st.number_input("TER del benchmark (%)", min_value=0.0, max_value=3.0, step=0.01, key="b_ter")
-        st.text_input("Indice usato prima della nascita dell'ETF", key="b_proxy", help="Lascia vuoto se non serve.")
-        st.selectbox("Ribilanciamento", list(C.RIBILANCIAMENTO_MESI), key="rib")
-        st.number_input("Costo di ribilanciamento (%)", min_value=0.0, max_value=5.0, step=0.05, key="costo")
-        st.number_input("Seed (stesso numero = stessi risultati)", min_value=0, step=1, key="seed")
-    aggiorna = st.checkbox("Aggiorna i dati (riscarica i prezzi)", value=False)
+        st.text_input("Ticker del benchmark", key="b_ticker", help=AIUTO["b_ticker"])
+        st.number_input("TER del benchmark (%)", min_value=0.0, max_value=3.0, step=0.01, key="b_ter", help="Costo annuo dell'ETF.")
+        st.text_input("Indice prima della nascita dell'ETF", key="b_proxy", help=AIUTO["b_proxy"])
+        st.selectbox("Ribilanciamento", list(C.RIBILANCIAMENTO_MESI), key="rib", help=AIUTO["rib"])
+        st.number_input("Costo di ribilanciamento (%)", min_value=0.0, max_value=5.0, step=0.05, key="costo", help=AIUTO["costo"])
+        st.number_input("Seed", min_value=0, step=1, key="seed", help=AIUTO["seed"])
+    aggiorna = st.checkbox("Aggiorna i dati (riscarica i prezzi)", value=False, help=AIUTO["aggiorna"])
     avvia = st.button("▶ Avvia simulazione", type="primary", width="stretch")
 
-    st.subheader("Salva / carica configurazione")
+    st.header("Salva / carica", divider="gray")
     try:
         yaml_corrente = yaml.safe_dump(cfg_da_stato(tab), allow_unicode=True, sort_keys=False)
     except C.ErroreConfig:
@@ -260,49 +365,121 @@ with st.sidebar:
         (st.success if tipo == "ok" else st.error)(testo)
 
 
-# ------------------------------------------------------------------ pagina principale
-st.title("📊 Confronto del rischio di portafogli")
+# ------------------------------------------------------------------ esecuzione
+def fase(messaggio: str, n: int) -> str:
+    m = messaggio.lower()
+    if "dati" in m:
+        return "Scarico i prezzi…"
+    if "stress" in m:
+        return "Calcolo gli stress test…"
+    if "seed" in m or "verifica" in m:
+        return "Controllo che le simulazioni bastino…"
+    if "completato" in m:
+        return "Preparo il report…"
+    analisi_x = re.search(r"analisi ([abc])", m)
+    return f"Simulo {report.num_it(n)} scenari" + (f" (analisi {analisi_x.group(1).upper()})" if analisi_x else "") + "…"
 
-if avvia:
+
+def mmss(secondi: float) -> str:
+    secondi = max(0, int(round(secondi)))
+    return f"{secondi // 60} min {secondi % 60:02d} s" if secondi >= 60 else f"{secondi} s"
+
+
+def esegui_simulazione(contenitore) -> None:
     ss.pop("ris", None)
-    barra = st.progress(0.0, text="Preparo la simulazione...")
+    t0 = time.time()
+    barra = contenitore.progress(0.0, text="Preparo la simulazione…")
+
+    def progresso(f: float, messaggio: str) -> None:
+        f = min(max(f, 0.0), 1.0)
+        trascorso = time.time() - t0
+        stima = f" · circa {mmss(trascorso * (1 - f) / f)} rimanenti" if f > 0.04 else ""
+        barra.progress(f, text=f"{fase(messaggio, int(ss.nsim))} {f * 100:.0f}%{stima}")
+
     try:
         cfg = C.prepara(cfg_da_stato(tab))
-        ris = analisi.esegui(cfg, aggiorna_dati=aggiorna, log=lambda *a: None,
-                             progresso=lambda f, m: barra.progress(min(max(f, 0.0), 1.0), text=f"{m} ({f * 100:.0f}%)"))
-        barra.progress(1.0, text="Preparo il report...")
+        log.info("Avvio simulazione «%s»: %d portafogli, %d simulazioni", cfg["nome"], len(cfg["portafogli"]), cfg["n_simulazioni"])
+        ris = analisi.esegui(cfg, aggiorna_dati=aggiorna, log=lambda m: log.info(m.strip()), progresso=progresso)
+        barra.progress(1.0, text="Preparo il report…")
         S = report.sezioni(ris)
         ss.ris, ss.sezioni = ris, S
         ss.html = report.html_report(ris, S)
         ss.pdf = report.pdf_report(ris, S)
+        log.info("Simulazione completata in %.0f s", time.time() - t0)
         barra.empty()
-    except (C.ErroreConfig, ErroreDati) as e:
+    except C.ErroreConfig as e:
         barra.empty()
-        st.error(f"**Non posso completare la simulazione.** {e}")
-    except Exception as e:  # errore imprevisto: messaggio chiaro + dettagli per chi vuole
+        contenitore.error(f"**C'è un problema nelle impostazioni.** {e}\n\nCorreggi il valore indicato nella barra a sinistra e riprova.")
+    except ErroreDati as e:
         barra.empty()
-        st.error("**Si è verificato un errore imprevisto.** Controlla i ticker e la connessione a internet, poi riprova. "
-                 "Se il problema resta, salva la configurazione e i dettagli qui sotto.")
-        with st.expander("Dettagli tecnici"):
-            st.code("".join(traceback.format_exception(e)))
+        contenitore.error(f"**Non riesco a ottenere i dati.** {e}")
+    except Exception:  # errore imprevisto: messaggio chiaro a schermo, dettagli tecnici solo nel file di log
+        barra.empty()
+        log.exception("Errore imprevisto durante la simulazione")
+        contenitore.error("**Si è verificato un errore imprevisto.** Controlla i ticker e la connessione a internet, poi riprova. "
+                          "Se il problema resta, mandami il file **log.txt** che trovi nella cartella del programma "
+                          f"(`{registro.FILE_LOG}`) insieme alla configurazione (pulsante «Scarica configurazione»).")
 
-if "ris" not in ss:
-    st.markdown(
-        "Questa app simula migliaia di futuri possibili per i tuoi portafogli e ne confronta il **rischio** "
-        "(quanto possono scendere, quanto è probabile perdere, quanto tempo serve per recuperare).\n\n"
-        "1. Nella barra a sinistra scrivi i portafogli (è precaricato un esempio con tre portafogli e l'MSCI World).\n"
-        "2. Scegli capitale, versamento, orizzonte e metodo del rendimento atteso.\n"
-        "3. Premi **▶ Avvia simulazione**. Al termine trovi i risultati in schede e puoi scaricare il report in HTML e PDF.\n\n"
-        "_Questo strumento non è consulenza finanziaria._")
-else:
-    ris = ss.ris
+
+st.title("Confronto del rischio di portafogli")
+zona_messaggi = st.container()
+avvia = avvia or ss.pop("avvia_ora", False)  # pulsante della pagina iniziale (il callback gira prima dello script)
+
+if "ris" not in ss and not avvia:
+    st.markdown("Simula migliaia di futuri possibili per i tuoi portafogli e ne confronta il **rischio**: quanto possono "
+                "scendere, quanto è probabile perdere, quanto tempo serve per recuperare. Tutto in euro, con dati reali di borsa.")
+    passi = [("1", "Definisci i portafogli", "Nella barra a sinistra: titoli e pesi. C'è già un esempio con tre portafogli e l'MSCI World."),
+             ("2", "Scegli capitale e orizzonte", "Capitale iniziale, versamento mensile, anni e metodo del rendimento atteso."),
+             ("3", "Avvia", "Premi «Avvia simulazione». In pochi minuti hai i risultati e il report in HTML e PDF.")]
+    for col, (n, titolo, testo) in zip(st.columns(3), passi):
+        with col.container(border=True):
+            st.markdown(f"<div class='passo'>{n}</div>", unsafe_allow_html=True)
+            st.markdown(f"**{titolo}**")
+            st.caption(testo)
+    nomi_pf = list(dict.fromkeys(str(x).strip() for x in tab["Portafoglio"] if str(x).strip() not in ("", "None")))
+    st.markdown("**Pronto da lanciare:** " + " · ".join(nomi_pf + [ss.b_nome]) +
+                f" — {report.eur(ss.capitale)} iniziali, {ss.orizzonte} anni, {report.num_it(int(ss.nsim))} simulazioni.")
+    st.button("▶ Avvia la simulazione con queste impostazioni", type="primary", on_click=lambda: ss.update(avvia_ora=True))
+    st.caption("Questo strumento non è consulenza finanziaria.")
+
+if avvia:
+    esegui_simulazione(zona_messaggi)
+
+if "ris" in ss:
+    ris, S = ss.ris, ss.sezioni
     st.caption("📅 " + report.intestazione(ris))
     c1, c2, _ = st.columns([1, 1, 3])
     nome_file = f"report_{(ris['cfg']['nome'] or 'confronto').replace(' ', '_')}"
     c1.download_button("⬇️ Report HTML", ss.html, file_name=f"{nome_file}.html", mime="text/html", width="stretch")
     c2.download_button("⬇️ Report PDF", ss.pdf, file_name=f"{nome_file}.pdf", mime="application/pdf", width="stretch")
     schede = st.tabs(report.SCHEDE)
+    anal = [a for a in ris["sim"] if a != "C"]
     for scheda, nome in zip(schede, report.SCHEDE):
         with scheda:
-            blocchi = ss.sezioni.get(nome) or [("p", "Niente da mostrare: modulo non attivato.")]
-            st.html(f"<style>{report.CSS_APP}</style><div class='rep'>{report.html_blocchi(blocchi)}</div>")
+            blocchi = S.get(nome) or []
+            if nome == "Sintesi":
+                d = report.dati_schede(ris)
+                bench = next(s for s in d if s["benchmark"])
+                for col, s in zip(st.columns(len(d)), d):
+                    diff = None if s["benchmark"] else s["valore_mediano"] - bench["valore_mediano"]
+                    col.metric(s["nome"], report.eur(s["valore_mediano"]), delta=None if diff is None else f"{report.eur(diff)} vs benchmark",
+                               help=f"Valore mediano a {ris['cfg']['orizzonte_anni']} anni; probabilità di perdita {report.pct(s['prob_perdita'])}")
+                mostra_blocchi(blocchi)
+            elif nome == "Fan chart":
+                st.caption("Passa il mouse sul grafico per leggere mediana, 5° e 95° percentile di ogni anno; clicca su un nome nella "
+                           "legenda per nasconderlo. La zona rossa è sotto il capitale investito.")
+                fasce = st.toggle("Mostra le fasce 5°–95°", value=True)
+                for a in anal:
+                    st.subheader(report.NOME_ANALISI[a])
+                    st.plotly_chart(G.fan_chart(ris, a, fasce), width="stretch", theme="streamlit")
+                    st.caption("💡 " + report.didascalia_fan(ris, a))
+            elif nome == "Drawdown":
+                for a in anal:
+                    st.subheader(f"{report.NOME_ANALISI[a]}: calo massimo nei {ris['cfg']['orizzonte_anni']} anni")
+                    st.plotly_chart(G.istogramma_mdd(ris, a), width="stretch", theme="streamlit")
+                st.caption("💡 " + report.didascalia_mdd(ris))
+                mostra_blocchi(senza_immagini(blocchi))
+            elif blocchi:
+                mostra_blocchi(blocchi)
+            else:
+                st.info("Niente da mostrare: modulo non attivato.")

@@ -9,15 +9,15 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
+import stile
 from configurazione import BENCH
 from metriche import RIGHE_ORIZZONTE, SINGOLO
 
 SCHEDE = ["In una pagina", "Sintesi", "Risultati per orizzonte", "Fan chart", "Drawdown", "Rischio e correlazioni",
           "Stress test", "Robustezza", "Limiti dell'analisi"]
-PALETTE = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#882255", "#117733"]
-GRIGIO = "#555555"
+PALETTE, GRIGIO = stile.PALETTE, stile.GRIGIO
 NOME_ANALISI = {"A": "Analisi A – periodo comune", "B": "Analisi B – periodo lungo", "C": "Analisi C – dal 1999 con proxy"}
-ROSSO_SOTTO = "#C62828"  # zona sotto il capitale investito
+ROSSO_SOTTO = stile.ROSSO_SOTTO  # zona sotto il capitale investito
 
 # Indicatore di rischio a 5 livelli, in base alla volatilità annua simulata (ispirato alla scala SRI europea).
 # colori scuri: il testo bianco sopra resta leggibile (contrasto >= 4,5:1)
@@ -53,13 +53,8 @@ def esc(s): return html.escape(str(s), quote=False)
 
 
 def colori(ris):
-    c, i = {}, 0
-    for k in ris["nomi"]:
-        if k == ris["bench_nome"]:
-            c[k] = GRIGIO
-        else:
-            c[k] = PALETTE[i % len(PALETTE)]; i += 1
-    return c
+    """Colori fissi dei portafogli (gli stessi in app, report e PDF): vedi stile.py."""
+    return stile.colori(ris["nomi"], ris["bench_nome"])
 
 
 def corto(k, n=22):
@@ -122,8 +117,12 @@ def istogrammi_mdd(ris):
     fig, axs = plt.subplots(1, len(anal), figsize=(5.5 * len(anal), 3.9), sharey=True, squeeze=False)
     for ax, a in zip(axs[0], anal):
         s = ris["sim"][a]
+        idx = stile.indice(s["nomi"], ris["bench_nome"])
         for k in s["nomi"]:
-            ax.hist(s["mdd_fin"][k] * 100, bins=np.linspace(-100, 0, 41), alpha=0.45, color=col[k], label=corto(k, 30), density=True)
+            ax.hist(s["mdd_fin"][k] * 100, bins=np.linspace(-100, 0, 41), alpha=0.35, color=col[k], density=True,
+                    hatch=stile.MOTIVI_MPL[idx[k]], edgecolor=col[k], linewidth=0)
+            ax.hist(s["mdd_fin"][k] * 100, bins=np.linspace(-100, 0, 41), histtype="step", color=col[k], density=True,
+                    linestyle=stile.TRATTI_MPL[idx[k]], linewidth=1.6, label=corto(k, 30))
         ax.set_title(f"Analisi {a}: calo massimo nei {h} anni")
         ax.set_xlabel("max drawdown (%)")
         ax.grid(alpha=0.25)
@@ -660,7 +659,13 @@ body.rep{max-width:1100px;margin:0 auto;padding:16px 20px}
 """
 
 
-CSS_APP = re.sub(r"@media\(prefers-color-scheme:dark\)[^\n]*\n", "", CSS)  # nell'app i blocchi del report restano chiari
+# Nell'app: colori neutri (trasparenze) che vanno bene sia con il tema chiaro sia con quello scuro
+CSS_APP = """
+.rep{color:inherit;font:inherit}.rep table{border-collapse:collapse;margin:6px 0 12px;font-size:.88rem;width:100%}
+.rep td,.rep th{border:1px solid rgba(128,128,128,.32);padding:5px 8px;text-align:right}
+.rep th{background:rgba(128,128,128,.12)}.rep td.e{text-align:left;font-weight:600;background:rgba(128,128,128,.07)}
+.rep table.sx td{text-align:left}.rep .sc{overflow-x:auto}
+"""
 
 
 def quadratini(n):

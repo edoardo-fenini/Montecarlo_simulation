@@ -1,8 +1,16 @@
+# Tema dell'app. Funziona sia in modalità chiara sia scura (Menu ⋮ → Settings → Theme):
+# si impostano solo colori e forme validi in entrambe le modalità.
 [theme]
-base = "light"
+primaryColor = "#3366A3"
+baseRadius = "0.6rem"
+showSidebarBorder = true
+chartCategoricalColors = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#882255", "#117733"]
 
 [browser]
 gatherUsageStats = false
 
 [server]
 maxUploadSize = 5
+
+[client]
+toolbarMode = "minimal"

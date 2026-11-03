@@ -7,3 +7,5 @@ cache_prezzi/
 report/
 .streamlit/secrets.toml
 .DS_Store
+log.txt
+log.txt.*
