@@ -147,7 +147,7 @@ def sezione_stress(ris):
         righe = []
         for _, r in d.iterrows():
             rec = "non scende sotto il versato" if not r["Scende sotto il versato"] else (
-                "oltre 30 anni" if not np.isfinite(r["Anni per tornare al versato (mediana)"]) else num(r["Anni per tornare al versato (mediana)"]))
+                "oltre 30 anni (in più di metà dei casi)" if not np.isfinite(r["Anni per tornare al versato (mediana)"]) else num(r["Anni per tornare al versato (mediana)"]))
             righe.append([NOME[r["Portafoglio"]], r["Scenario"], eur(r["Valore a metà orizzonte"]), eur(r["Valore dopo lo shock"]),
                           f'{eur(r["Perdita massima (€)"])} ({pct(r["Perdita massima (%)"], 0)})', rec,
                           "–" if not r["Scende sotto il versato"] else pct(r["Prob. ritorno entro 10 anni"], 0)])
