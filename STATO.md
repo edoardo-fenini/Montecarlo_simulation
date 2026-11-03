@@ -6,7 +6,7 @@
 - [x] 3. App Streamlit `app.py` (verificata in headless: simulazione completa, schede, download, errori chiari)
 - [x] 4. `Installa.command` (uv + Python 3.12 dentro la cartella: .uv, .python, .venv) e `Avvia.command` (porta libera, solo 127.0.0.1, apre il browser) — provati su Linux in una copia pulita senza uv
 - [x] 5. README passo passo, GitHub Action `.github/workflows/zip-release.yml` (zip allegato alla release), esempio `esempi/2026-11-03_tre_portafogli_metodo_beta/`
-- [ ] Release v1.0.0: da creare dal sito di GitHub (Claude non ha lo strumento per creare release; istruzioni nel README)
+- [ ] Release v1.0.0: vedi sotto (tappa 5)
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
@@ -18,8 +18,11 @@
       e si ferma. Nota sulla quarantena (xattr) nel README.
 - [x] 3. Ramo `main` creato con tutto il lavoro (fast-forward da claude/new-session-extdst). Il ramo predefinito va
       impostato dal sito: Settings → General → Default branch → ⇄ → main → Update (Claude non ha lo strumento per farlo).
-- [ ] 5. Release v1.0.0
-- [ ] 6. Riepilogo finale
+- [ ] 5. Release v1.0.0: **da creare dal sito** (la GitHub CLI qui è solo per ricerche e gli strumenti GitHub non creano release).
+      Note in `RELEASE_NOTES.md`. Passaggi: Releases → Draft a new release → tag v1.0.0 (Create new tag on publish) → Target main
+      → incolla RELEASE_NOTES.md → Publish release. Poi controllare in Actions che «Zip per la release» alleghi lo zip (non verificabile da qui).
+- [x] 6. Riepilogo PDF aggiornato (convergenza, prova su Mac, ramo main, TER, release) inviato in chat.
+- Prove su Mac successive: run 2 (ramo di lavoro) e 3 (main) riuscite anche con actions/checkout@v5 e upload-artifact@v5.
 
 ### Risultati della convergenza (metodo beta, analisi A, 15 anni)
 - Array: storia 1.342 giorni x 20 colonne; per ogni blocco di calcolo indici 1.000 percorsi x 3.780 giorni,
