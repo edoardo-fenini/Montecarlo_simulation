@@ -236,6 +236,8 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
         Mr = prepara_M(cfg, M, colonne, mu, tipi)
         b = cfg["blocco_medio_giorni"]
         ris["sim"][a] = corri(Bootstrap(Mr, b), porte, f"base_{a}", f"Analisi {a}: simulazione principale")
+        if a == "A":
+            ris["matrici"] = {"A": (Mr, porte)}  # per la prova rapida dei pesi nell'app
         if a == "A" and n_seed > 1:
             # stessa simulazione con seed diversi: se i risultati cambiano poco, le simulazioni bastano
             somm = [ris["sim"][a]] + [corri(Bootstrap(Mr, b), porte, f"conv{j}", f"Verifica: stessa simulazione con il seed n. {j + 1}",
@@ -269,6 +271,27 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
     ris["durata"] = time.time() - t0
     log(f"4/4  Fatto in {ris['durata']:.0f} secondi")
     return ris
+
+
+def prova_pesi(ris, satellite, quota_benchmark, n=2000):
+    """Prova rapida: portafoglio misto «quota_benchmark» di benchmark + resto nel portafoglio «satellite», simulato con poche
+    simulazioni (risultato approssimato). Ritorna i numeri chiave a fine orizzonte."""
+    cfg = ris["cfg"]
+    M, porte = ris["matrici"]["A"]
+    cb, wb = porte[ris["bench_nome"]]
+    cs, ws = porte[satellite]
+    q = float(quota_benchmark)
+    colonne = np.concatenate([cb, cs])
+    pesi = np.concatenate([wb * q, ws * (1 - q)])
+    tieni = pesi > 0
+    mix = {"Mix": (colonne[tieni], pesi[tieni] / pesi[tieni].sum())}
+    res = simula(Bootstrap(M, cfg["blocco_medio_giorni"]), mix, n, cfg["orizzonte_anni"], cfg["capitale_iniziale"],
+                 cfg["versamento_mensile"], cfg["costo_ribilanciamento"], cfg["orizzonti"], cfg["seed"], 252,
+                 rib_mesi=cfg["ribilanciamento_mesi"])
+    s = metriche.sommario(res, cfg, n)
+    o = s["orizzonti"][cfg["orizzonte_anni"]]["Mix"]
+    return {"valore_mediano": o["Valore mediano"], "p5": o["5° percentile"], "prob_perdita": o["Prob. sotto il versato"],
+            "mdd": o["Max drawdown mediano"], "vol": s["vol_sim"]["Mix"], "n": n}
 
 
 def confronto_seed(cfg, sommari, n):

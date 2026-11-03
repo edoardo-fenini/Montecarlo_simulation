@@ -1,7 +1,7 @@
 """Report: costruisce le sezioni (blocchi di testo, tabelle e grafici) e le scrive in HTML, PDF e CSV.
 
 Le stesse sezioni sono mostrate come schede nell'app Streamlit."""
-import base64, datetime, html, io, os, re
+import base64, datetime, html, io, json, os, re
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -1011,18 +1011,148 @@ def tabelle_csv(ris):
     return out
 
 
-def salva(ris, cartella, pdf=True, log=print):
-    """Scrive report.html, report.pdf e i CSV in `cartella`. Ritorna il percorso dell'HTML."""
+# ------------------------------------------------------------------ Excel
+def excel_report(ris) -> bytes:
+    """Risultati in Excel (.xlsx): una scheda per orizzonte, più sintesi, metriche, stress test e titoli.
+    Numeri veri (non testo) con formati leggibili: Excel li mostra con le impostazioni italiane del computer."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    wb = Workbook()
+    blu, grigio = PatternFill("solid", fgColor="1F3A5F"), PatternFill("solid", fgColor="EEF1F5")
+    FMT_X = {"€": '#,##0 "€"', "%": "0.0%", "anni": "0.0", "x": "0.00", "": "General"}
+
+    def tipo(metrica):
+        if metrica.startswith("Prob") or metrica.startswith("Max drawdown") or "VaR" in metrica or "Shortfall" in metrica \
+                or ("Volatilità" in metrica and "volte" not in metrica) or "Perdita (%)" in metrica or "TER" in metrica \
+                or "Rendimento atteso" in metrica:
+            return "%"
+        if "anni" in metrica.lower():
+            return "anni"
+        if "Beta" in metrica or "Correlazione" in metrica:
+            return "x"
+        return "€"
+
+    def scrivi(ws, riga, titolo, df, fmt_righe=None):
+        ws.cell(riga, 1, titolo).font = Font(bold=True, size=12, color="1F3A5F")
+        riga += 1
+        ws.cell(riga, 1, "").fill = grigio
+        for j, c in enumerate(df.columns, start=2):
+            x = ws.cell(riga, j, str(c))
+            x.font, x.fill, x.alignment = Font(bold=True, color="FFFFFF"), blu, Alignment(wrap_text=True, horizontal="center")
+        for i, (nome, r) in enumerate(df.iterrows(), start=riga + 1):
+            x = ws.cell(i, 1, str(nome))
+            x.font, x.fill = Font(bold=True), grigio
+            for j, v in enumerate(r.values, start=2):
+                v = None if isinstance(v, float) and not np.isfinite(v) else v
+                c = ws.cell(i, j, v.item() if hasattr(v, "item") else v)
+                c.number_format = FMT_X[(fmt_righe or tipo)(str(nome))]
+        return riga + len(df) + 2
+
+    def larghezze(ws, prima=42, altre=20):
+        ws.column_dimensions["A"].width = prima
+        for j in range(2, ws.max_column + 1):
+            ws.column_dimensions[get_column_letter(j)].width = altre
+        ws.freeze_panes = "B3"
+
+    ws = wb.active
+    ws.title = "Sintesi"
+    ws.cell(1, 1, f"Confronto portafogli – {ris['cfg']['nome']}").font = Font(bold=True, size=14, color="1F3A5F")
+    ws.cell(2, 1, intestazione(ris))
+    sch = pd.DataFrame({s["nome"]: {"Valore mediano a fine orizzonte": s["valore_mediano"], "Totale versato": s["versato"],
+                                    "Probabilità di perdita": s["prob_perdita"], "Max drawdown mediano": s["mdd"],
+                                    "Volatilità annua": s["vol"], "Volatilità rispetto al benchmark (volte)": s["vol_vs_bench"],
+                                    "Livello di rischio (1-5)": s["livello"]} for s in dati_schede(ris)})
+    scrivi(ws, 4, "Numeri chiave (analisi A)", sch, lambda m: "x" if "volte" in m else ("" if "Livello" in m else tipo(m)))
+    larghezze(ws)
+    for h in ris["cfg"]["orizzonti"]:
+        ws = wb.create_sheet(f"{h} anni")
+        riga = 1
+        for a, s in ris["sim"].items():
+            riga = scrivi(ws, riga, f"{NOME_ANALISI[a]} – dopo {h} anni", s["orizzonti"][h])
+        larghezze(ws)
+    ws = wb.create_sheet("Altre metriche")
+    riga = 1
+    for a in ris["sim"]:
+        st_a = ris["storico"][a]
+        df = pd.DataFrame({k: {"Volatilità annua storica": st_a["stat"][k]["vol"], "Volatilità annua simulata": ris["sim"][a]["vol_sim"][k],
+                               "Max drawdown storico": st_a["stat"][k]["mdd"],
+                               "VaR 95% a 1 anno": ris["sim"][a]["var_es"].loc["VaR 95% 1 anno", k],
+                               "Expected Shortfall 95% a 1 anno": ris["sim"][a]["var_es"].loc["Expected Shortfall 95% 1 anno", k]}
+                           for k in ris["sim"][a]["nomi"]})
+        riga = scrivi(ws, riga, NOME_ANALISI[a], df)
+    larghezze(ws)
+    if ris["stress"]:
+        ws = wb.create_sheet("Stress test")
+        riga = 1
+        for a, df in ris["stress"].items():
+            d = df.set_index(df["Portafoglio"] + " – " + df["Scenario"])[["Valore prima dello shock", "Valore dopo lo shock", "Perdita (€)",
+                                                                          "Perdita (%)", "Anni per tornare al versato (mediana)",
+                                                                          "Prob. di tornarci entro 10 anni"]]
+            riga = scrivi(ws, riga, NOME_ANALISI[a], d.T)  # righe = misure, colonne = portafoglio e scenario
+        larghezze(ws, 40, 30)
+    ws = wb.create_sheet("Rendimenti attesi")
+    scrivi(ws, 1, "Beta e rendimento atteso", ris["rend_attesi"])
+    larghezze(ws)
+    ws = wb.create_sheet("Titoli")
+    info = ris["dati_info"].copy()
+    info["beta"] = [ris["beta"].get(BENCH if t == ris["cfg"]["benchmark"]["ticker"] else t, np.nan) for t in info.index]
+    for c in ("primo dato", "ultimo dato"):
+        if c in info:
+            info[c] = info[c].astype(str)
+    scrivi(ws, 1, "Titoli usati", info, lambda m: "")
+    larghezze(ws, 16, 16)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+# ------------------------------------------------------------------ storico delle analisi
+def riassunto(ris) -> dict:
+    """Numeri chiave in forma semplice (JSON) per l'elenco «Analisi salvate» e il confronto tra due analisi."""
+    cfg = ris["cfg"]
+    return {"nome": cfg["nome"], "creato": datetime.datetime.now().isoformat(timespec="seconds"), "simulazioni": ris["n"],
+            "orizzonte": cfg["orizzonte_anni"], "capitale": cfg["capitale_iniziale"], "versamento": cfg["versamento_mensile"],
+            "metodo": cfg["rendimento_atteso"]["metodo"], "dati_al": f"{ris['ultimo_dato']:%Y-%m-%d}",
+            "portafogli": [{k: (float(v) if isinstance(v, (float, np.floating)) else v) for k, v in s.items()} for s in dati_schede(ris)]}
+
+
+def cartella_storico(nome: str, base: str = "report") -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", (nome or "confronto").lower()).strip("-") or "confronto"
+    return os.path.join(base, f"{datetime.datetime.now():%Y-%m-%d_%H%M%S}_{slug}")
+
+
+def elenco_analisi(base: str = "report") -> list[dict]:
+    """Analisi salvate (cartelle con riassunto.json), dalla più recente."""
+    out = []
+    if not os.path.isdir(base):
+        return out
+    for d in sorted(os.listdir(base), reverse=True):
+        f = os.path.join(base, d, "riassunto.json")
+        if os.path.exists(f):
+            try:
+                r = json.load(open(f, encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            r["cartella"] = os.path.join(base, d)
+            out.append(r)
+    return out
+
+
+def salva(ris, cartella, pdf=True, log=print, S=None, pdf_bytes=None):
+    """Scrive report.html, report.pdf, report.xlsx, i CSV e riassunto.json in `cartella`. Ritorna il percorso dell'HTML."""
     os.makedirs(cartella, exist_ok=True)
-    S = sezioni(ris)
+    S = S or sezioni(ris)
     f = os.path.join(cartella, "report.html")
     open(f, "w", encoding="utf-8").write(html_report(ris, S))
     if pdf:
-        open(os.path.join(cartella, "report.pdf"), "wb").write(pdf_report(ris, S))
+        open(os.path.join(cartella, "report.pdf"), "wb").write(pdf_bytes or pdf_report(ris, S))
     dcsv = os.path.join(cartella, "dati_csv")
     os.makedirs(dcsv, exist_ok=True)
     for nome, df in tabelle_csv(ris).items():
         df.to_csv(os.path.join(dcsv, nome), index=False, sep=";", decimal=",", encoding="utf-8-sig")
     from configurazione import in_yaml
     open(os.path.join(cartella, "configurazione_usata.yaml"), "w", encoding="utf-8").write(in_yaml(ris["cfg"]))
+    open(os.path.join(cartella, "report.xlsx"), "wb").write(excel_report(ris))
+    json.dump(riassunto(ris), open(os.path.join(cartella, "riassunto.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     return f

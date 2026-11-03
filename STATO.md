@@ -22,7 +22,9 @@
 - [x] 3. Estetica: tema (Streamlit 1.66 ha un solo [theme]: impostati solo colore principale #3366A3, angoli e palette, validi
       in chiaro e scuro; con un tema personalizzato lo scuro si sceglie da ⋮ → Settings → Theme), stile.py, Plotly (fan chart,
       cali), card, pagina iniziale, aiuto, avanzamento con stima, log.txt. Provata in browser headless in chiaro e scuro.
-- [ ] 4. Funzioni in più (analisi salvate, prova rapida dei pesi, Excel, configurazioni di esempio)
+- [x] 4. Funzioni in più: analisi salvate (report/AAAA-MM-GG_HHMMSS_nome con riassunto.json) e confronto tra due,
+      prova rapida dei pesi (analisi.prova_pesi, 2.000 simulazioni), Excel (openpyxl), configurazioni core_satellite_80_20 ed
+      etf_europei (ETF verificati su Yahoo; TER lasciati al default 0,20% perché non verificati).
 - [ ] 5. Qualità e prestazioni (tempi, parallelismo, ruff, type hints, test, log)
 - [ ] 6. Release v1.1.0 (README con screenshot, CHANGELOG, riepilogo PDF, PR, release)
 

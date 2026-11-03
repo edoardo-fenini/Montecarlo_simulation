@@ -405,6 +405,14 @@ def esegui_simulazione(contenitore) -> None:
         ss.ris, ss.sezioni = ris, S
         ss.html = report.html_report(ris, S)
         ss.pdf = report.pdf_report(ris, S)
+        ss.xlsx = report.excel_report(ris)
+        ss.prove_pesi = {}
+        try:  # ogni analisi viene salvata in report/ e compare in «Analisi salvate»
+            ss.cartella = report.cartella_storico(cfg["nome"])
+            report.salva(ris, ss.cartella, S=S, pdf_bytes=ss.pdf)
+        except OSError as e:
+            log.warning("Non riesco a salvare l'analisi: %s", e)
+            ss.cartella = None
         log.info("Simulazione completata in %.0f s", time.time() - t0)
         barra.empty()
     except C.ErroreConfig as e:
@@ -421,65 +429,155 @@ def esegui_simulazione(contenitore) -> None:
                           f"(`{registro.FILE_LOG}`) insieme alla configurazione (pulsante «Scarica configurazione»).")
 
 
+def prova_rapida_pesi(ris: dict) -> None:
+    """Cursore benchmark/satellite con un ricalcolo veloce (poche simulazioni)."""
+    if "matrici" not in ris:
+        return
+    satelliti = [k for k in ris["nomi"] if k != ris["bench_nome"]]
+    with st.container(border=True):
+        st.markdown(f"**🎚️ Prova rapida dei pesi: quanto {ris['bench_nome']} e quanto satellite?**")
+        c1, c2 = st.columns([2, 3])
+        sat = c1.selectbox("Portafoglio satellite", satelliti, key="prova_sat", help="Il portafoglio da affiancare al benchmark.")
+        quota = c2.slider(f"Quota di {ris['bench_nome']}", 0, 100, 80, 5, format="%d%%", key="prova_quota",
+                          help="0% = tutto nel satellite; 100% = tutto nel benchmark.")
+        chiave = (sat, quota)
+        if chiave not in ss.setdefault("prove_pesi", {}):
+            with st.spinner("Ricalcolo veloce..."):
+                ss.prove_pesi[chiave] = analisi.prova_pesi(ris, sat, quota / 100, n=2000)
+        p = ss.prove_pesi[chiave]
+        H = ris["cfg"]["orizzonte_anni"]
+        o = ris["sim"]["A"]["orizzonti"][H]
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric(f"Valore mediano a {H} anni", report.eur(p["valore_mediano"]),
+                  delta=f"{report.eur(p['valore_mediano'] - o.loc['Valore mediano', sat])} vs solo satellite")
+        m2.metric("Probabilità di perdita", report.pct(p["prob_perdita"]),
+                  delta=f"{report.num((p['prob_perdita'] - o.loc['Prob. sotto il versato', sat]) * 100)} punti vs solo satellite", delta_color="inverse")
+        m3.metric("Calo massimo tipico", report.pct(p["mdd"]))
+        m4.metric("Volatilità annua", report.pct(p["vol"]))
+        st.caption(f"⚠️ Risultato approssimato: {report.num_it(p['n'])} simulazioni sull'analisi A. Per numeri definitivi crea un portafoglio "
+                   f"misto (es. benchmark {quota} + {sat} {100 - quota}) e rilancia la simulazione completa.")
+
+
+def mostra_salvate() -> None:
+    elenco = report.elenco_analisi()
+    if not elenco:
+        st.info("Non ci sono ancora analisi salvate. Ogni simulazione completata viene salvata qui automaticamente, nella cartella «report».")
+        return
+    tab_el = pd.DataFrame([{"Data": r["creato"].replace("T", " ")[:16], "Nome": r["nome"], "Portafogli": ", ".join(p["nome"] for p in r["portafogli"]),
+                            "Simulazioni": r["simulazioni"], "Anni": r["orizzonte"], "Metodo": r["metodo"], "Dati al": r["dati_al"]} for r in elenco])
+    st.dataframe(tab_el, hide_index=True, width="stretch")
+    etichette = [f"{r['creato'].replace('T', ' ')[:16]} – {r['nome']}" for r in elenco]
+    st.subheader("Apri un'analisi")
+    scelta = st.selectbox("Analisi", range(len(elenco)), format_func=lambda i: etichette[i], key="salvata_scelta")
+    r = elenco[scelta]
+    cols = st.columns(4)
+    for col, (file, et, mime) in zip(cols, [("report.html", "⬇️ HTML", "text/html"), ("report.pdf", "⬇️ PDF", "application/pdf"),
+                                           ("report.xlsx", "⬇️ Excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+                                           ("configurazione_usata.yaml", "⬇️ Configurazione", "text/yaml")]):
+        percorso = f"{r['cartella']}/{file}"
+        try:
+            col.download_button(et, open(percorso, "rb").read(), file_name=file, mime=mime, width="stretch", key=f"dl_{scelta}_{file}")
+        except OSError:
+            col.caption(f"{file} non disponibile")
+    if st.toggle("Mostra il report qui", key="salvata_mostra"):
+        try:
+            import streamlit.components.v1 as components
+            components.html(open(f"{r['cartella']}/report.html", encoding="utf-8").read(), height=900, scrolling=True)
+        except OSError:
+            st.warning("Il file report.html non c'è più.")
+    st.subheader("Confronta due analisi")
+    due = st.multiselect("Scegli due analisi", range(len(elenco)), format_func=lambda i: etichette[i], max_selections=2, key="salvate_confronto",
+                         placeholder="Scegli due analisi da mettere a confronto")
+    if len(due) == 2:
+        for col, i in zip(st.columns(2), due):
+            with col.container(border=True):
+                ri = elenco[i]
+                st.markdown(f"**{etichette[i]}**  \n{report.num_it(ri['simulazioni'])} simulazioni · {ri['orizzonte']} anni · metodo {ri['metodo']}")
+                st.dataframe(pd.DataFrame([{"Portafoglio": p["nome"], f"Mediana a {ri['orizzonte']} anni": report.eur(p["valore_mediano"]),
+                                            "Prob. perdita": report.pct(p["prob_perdita"]), "Calo tipico": report.pct(p["mdd"]),
+                                            "Rischio": f"{p['livello']}/5 {p['livello_nome']}"} for p in ri["portafogli"]]),
+                             hide_index=True, width="stretch")
+        a1, a2 = (elenco[i] for i in due)
+        comuni = [p["nome"] for p in a1["portafogli"] if p["nome"] in {q["nome"] for q in a2["portafogli"]}]
+        if comuni:
+            d1 = {p["nome"]: p for p in a1["portafogli"]}
+            d2 = {p["nome"]: p for p in a2["portafogli"]}
+            st.caption("Differenze per i portafogli presenti in entrambe (seconda meno prima):")
+            st.dataframe(pd.DataFrame([{"Portafoglio": k, "Mediana": report.eur(d2[k]["valore_mediano"] - d1[k]["valore_mediano"]),
+                                        "Prob. perdita (punti)": report.num((d2[k]["prob_perdita"] - d1[k]["prob_perdita"]) * 100),
+                                        "Calo tipico (punti)": report.num((d2[k]["mdd"] - d1[k]["mdd"]) * 100)} for k in comuni]),
+                         hide_index=True, width="stretch")
+
+
 st.title("Confronto del rischio di portafogli")
-zona_messaggi = st.container()
+scheda_sim, scheda_salvate = st.tabs(["🧮 Simulazione", "🗂️ Analisi salvate"])
+zona_messaggi = scheda_sim.container()
 avvia = avvia or ss.pop("avvia_ora", False)  # pulsante della pagina iniziale (il callback gira prima dello script)
 
-if "ris" not in ss and not avvia:
-    st.markdown("Simula migliaia di futuri possibili per i tuoi portafogli e ne confronta il **rischio**: quanto possono "
-                "scendere, quanto è probabile perdere, quanto tempo serve per recuperare. Tutto in euro, con dati reali di borsa.")
-    passi = [("1", "Definisci i portafogli", "Nella barra a sinistra: titoli e pesi. C'è già un esempio con tre portafogli e l'MSCI World."),
-             ("2", "Scegli capitale e orizzonte", "Capitale iniziale, versamento mensile, anni e metodo del rendimento atteso."),
-             ("3", "Avvia", "Premi «Avvia simulazione». In pochi minuti hai i risultati e il report in HTML e PDF.")]
-    for col, (n, titolo, testo) in zip(st.columns(3), passi):
-        with col.container(border=True):
-            st.markdown(f"<div class='passo'>{n}</div>", unsafe_allow_html=True)
-            st.markdown(f"**{titolo}**")
-            st.caption(testo)
-    nomi_pf = list(dict.fromkeys(str(x).strip() for x in tab["Portafoglio"] if str(x).strip() not in ("", "None")))
-    st.markdown("**Pronto da lanciare:** " + " · ".join(nomi_pf + [ss.b_nome]) +
-                f" — {report.eur(ss.capitale)} iniziali, {ss.orizzonte} anni, {report.num_it(int(ss.nsim))} simulazioni.")
-    st.button("▶ Avvia la simulazione con queste impostazioni", type="primary", on_click=lambda: ss.update(avvia_ora=True))
-    st.caption("Questo strumento non è consulenza finanziaria.")
+with scheda_sim:
+    if "ris" not in ss and not avvia:
+        st.markdown("Simula migliaia di futuri possibili per i tuoi portafogli e ne confronta il **rischio**: quanto possono "
+                    "scendere, quanto è probabile perdere, quanto tempo serve per recuperare. Tutto in euro, con dati reali di borsa.")
+        passi = [("1", "Definisci i portafogli", "Nella barra a sinistra: titoli e pesi. C'è già un esempio con tre portafogli e l'MSCI World."),
+                 ("2", "Scegli capitale e orizzonte", "Capitale iniziale, versamento mensile, anni e metodo del rendimento atteso."),
+                 ("3", "Avvia", "Premi «Avvia simulazione». In pochi minuti hai i risultati e il report in HTML e PDF.")]
+        for col, (n, titolo, testo) in zip(st.columns(3), passi):
+            with col.container(border=True):
+                st.markdown(f"<div class='passo'>{n}</div>", unsafe_allow_html=True)
+                st.markdown(f"**{titolo}**")
+                st.caption(testo)
+        nomi_pf = list(dict.fromkeys(str(x).strip() for x in tab["Portafoglio"] if str(x).strip() not in ("", "None")))
+        st.markdown("**Pronto da lanciare:** " + " · ".join(nomi_pf + [ss.b_nome]) +
+                    f" — {report.eur(ss.capitale)} iniziali, {ss.orizzonte} anni, {report.num_it(int(ss.nsim))} simulazioni.")
+        st.button("▶ Avvia la simulazione con queste impostazioni", type="primary", on_click=lambda: ss.update(avvia_ora=True))
+        st.caption("Questo strumento non è consulenza finanziaria.")
 
-if avvia:
-    esegui_simulazione(zona_messaggi)
+    if avvia:
+        esegui_simulazione(zona_messaggi)
 
-if "ris" in ss:
-    ris, S = ss.ris, ss.sezioni
-    st.caption("📅 " + report.intestazione(ris))
-    c1, c2, _ = st.columns([1, 1, 3])
-    nome_file = f"report_{(ris['cfg']['nome'] or 'confronto').replace(' ', '_')}"
-    c1.download_button("⬇️ Report HTML", ss.html, file_name=f"{nome_file}.html", mime="text/html", width="stretch")
-    c2.download_button("⬇️ Report PDF", ss.pdf, file_name=f"{nome_file}.pdf", mime="application/pdf", width="stretch")
-    schede = st.tabs(report.SCHEDE)
-    anal = [a for a in ris["sim"] if a != "C"]
-    for scheda, nome in zip(schede, report.SCHEDE):
-        with scheda:
-            blocchi = S.get(nome) or []
-            if nome == "Sintesi":
-                d = report.dati_schede(ris)
-                bench = next(s for s in d if s["benchmark"])
-                for col, s in zip(st.columns(len(d)), d):
-                    diff = None if s["benchmark"] else s["valore_mediano"] - bench["valore_mediano"]
-                    col.metric(s["nome"], report.eur(s["valore_mediano"]), delta=None if diff is None else f"{report.eur(diff)} vs benchmark",
-                               help=f"Valore mediano a {ris['cfg']['orizzonte_anni']} anni; probabilità di perdita {report.pct(s['prob_perdita'])}")
-                mostra_blocchi(blocchi)
-            elif nome == "Fan chart":
-                st.caption("Passa il mouse sul grafico per leggere mediana, 5° e 95° percentile di ogni anno; clicca su un nome nella "
-                           "legenda per nasconderlo. La zona rossa è sotto il capitale investito.")
-                fasce = st.toggle("Mostra le fasce 5°–95°", value=True)
-                for a in anal:
-                    st.subheader(report.NOME_ANALISI[a])
-                    st.plotly_chart(G.fan_chart(ris, a, fasce), width="stretch", theme="streamlit")
-                    st.caption("💡 " + report.didascalia_fan(ris, a))
-            elif nome == "Drawdown":
-                for a in anal:
-                    st.subheader(f"{report.NOME_ANALISI[a]}: calo massimo nei {ris['cfg']['orizzonte_anni']} anni")
-                    st.plotly_chart(G.istogramma_mdd(ris, a), width="stretch", theme="streamlit")
-                st.caption("💡 " + report.didascalia_mdd(ris))
-                mostra_blocchi(senza_immagini(blocchi))
-            elif blocchi:
-                mostra_blocchi(blocchi)
-            else:
-                st.info("Niente da mostrare: modulo non attivato.")
+    if "ris" in ss:
+        ris, S = ss.ris, ss.sezioni
+        st.caption("📅 " + report.intestazione(ris))
+        c1, c2, c3, _ = st.columns([1, 1, 1, 2])
+        nome_file = f"report_{(ris['cfg']['nome'] or 'confronto').replace(' ', '_')}"
+        c1.download_button("⬇️ Report HTML", ss.html, file_name=f"{nome_file}.html", mime="text/html", width="stretch")
+        c2.download_button("⬇️ Report PDF", ss.pdf, file_name=f"{nome_file}.pdf", mime="application/pdf", width="stretch")
+        c3.download_button("⬇️ Excel", ss.xlsx, file_name=f"{nome_file}.xlsx", width="stretch",
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        if ss.get("cartella"):
+            st.caption(f"Analisi salvata in `{ss.cartella}`: la ritrovi nella scheda «Analisi salvate».")
+        schede = st.tabs(report.SCHEDE)
+        anal = [a for a in ris["sim"] if a != "C"]
+        for scheda, nome in zip(schede, report.SCHEDE):
+            with scheda:
+                blocchi = S.get(nome) or []
+                if nome == "Sintesi":
+                    d = report.dati_schede(ris)
+                    bench = next(s for s in d if s["benchmark"])
+                    for col, s in zip(st.columns(len(d)), d):
+                        diff = None if s["benchmark"] else s["valore_mediano"] - bench["valore_mediano"]
+                        col.metric(s["nome"], report.eur(s["valore_mediano"]), delta=None if diff is None else f"{report.eur(diff)} vs benchmark",
+                                   help=f"Valore mediano a {ris['cfg']['orizzonte_anni']} anni; probabilità di perdita {report.pct(s['prob_perdita'])}")
+                    prova_rapida_pesi(ris)
+                    mostra_blocchi(blocchi)
+                elif nome == "Fan chart":
+                    st.caption("Passa il mouse sul grafico per leggere mediana, 5° e 95° percentile di ogni anno; clicca su un nome nella "
+                               "legenda per nasconderlo. La zona rossa è sotto il capitale investito.")
+                    fasce = st.toggle("Mostra le fasce 5°–95°", value=True)
+                    for a in anal:
+                        st.subheader(report.NOME_ANALISI[a])
+                        st.plotly_chart(G.fan_chart(ris, a, fasce), width="stretch", theme="streamlit")
+                        st.caption("💡 " + report.didascalia_fan(ris, a))
+                elif nome == "Drawdown":
+                    for a in anal:
+                        st.subheader(f"{report.NOME_ANALISI[a]}: calo massimo nei {ris['cfg']['orizzonte_anni']} anni")
+                        st.plotly_chart(G.istogramma_mdd(ris, a), width="stretch", theme="streamlit")
+                    st.caption("💡 " + report.didascalia_mdd(ris))
+                    mostra_blocchi(senza_immagini(blocchi))
+                elif blocchi:
+                    mostra_blocchi(blocchi)
+                else:
+                    st.info("Niente da mostrare: modulo non attivato.")
+
+with scheda_salvate:
+    mostra_salvate()

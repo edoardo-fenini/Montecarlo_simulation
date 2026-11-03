@@ -1,0 +1,23 @@
+# Esempio "core + satellite": 80% ETF mondiale (core) + 20% di un portafoglio tematico (satellite).
+# Confronta la quota satellite con i satelliti da soli e con il solo MSCI World.
+#   python confronta.py --config configurazioni/core_satellite_80_20.yaml
+
+nome: core e satellite 80-20
+capitale_iniziale: 10000
+versamento_mensile: 100
+orizzonte_anni: 15
+orizzonti_intermedi: [5, 10]
+rendimento_atteso:
+  metodo: beta
+n_simulazioni: 20000
+settori: {AMZN: tech, GOOGL: tech}
+
+portafogli:
+  - nome: Cyber security
+    titoli: [PANW, FTNT, FFIV, CHKP, CRWD, S, ZS]
+  - nome: Big tech USA
+    titoli: [PLTR, AAPL, MSFT, GOOGL, AMZN]
+  - nome: Core 80 + cyber 20
+    titoli: {benchmark: 80, Cyber security: 20}     # "benchmark" = l'ETF MSCI World
+  - nome: Core 80 + big tech 20
+    titoli: {benchmark: 80, Big tech USA: 20}

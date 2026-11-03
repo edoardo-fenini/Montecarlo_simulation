@@ -33,6 +33,15 @@
 - Barra di avanzamento con fase corrente e tempo stimato.
 - Tabelle grandi in sezioni espandibili; errori spiegati in modo semplice, dettagli tecnici solo in `log.txt`.
 
+### Funzioni in più
+- «Analisi salvate»: ogni simulazione dell'app viene salvata in `report/` (HTML, PDF, Excel, CSV, configurazione e
+  `riassunto.json`); la scheda elenca le analisi, le riapre e ne confronta due affiancate.
+- Prova rapida dei pesi nella scheda Sintesi: cursore benchmark/satellite con ricalcolo veloce (2.000 simulazioni,
+  risultato approssimato e indicato come tale).
+- Esportazione Excel (`report.xlsx`): una scheda per orizzonte più sintesi, metriche, stress test, rendimenti attesi e
+  titoli; numeri veri con formati € e %.
+- Configurazioni di esempio: `core_satellite_80_20.yaml` e `etf_europei.yaml` (oltre ai tre portafogli).
+
 ### Correzioni
 - Sul Mac le richieste dirette (FRED, BCE) fallivano con un errore di certificato SSL: ora si usano i certificati di
   `certifi`. Nella 1.0 il cambio del dollaro prima del 2003 (FRED) poteva mancare sul Mac: interessava solo l'analisi C.
