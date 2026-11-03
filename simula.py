@@ -109,13 +109,15 @@ class ConCrolli:
         self.base.prepara(n, T, rng)
 
     def blocco(self, m):
-        r = self.base.blocco(m).copy()
+        r = self.base.blocco(m)
         sub = r[:, :, self.col]
         ev = self.rng.random(sub.shape) < self.pg
-        L = self.rng.uniform(*self.perd, sub.shape)
-        sub = np.where(ev, (1 + sub) * (1 - L) - 1, sub)
+        k = int(ev.sum())
+        if k:  # numeri casuali solo per i (rari) crolli
+            L = self.rng.uniform(*self.perd, k)
+            sub[ev] = (1 + sub[ev]) * (1 - L) - 1
         if self.comp:
-            sub = sub + self.pg * np.mean(self.perd)
+            sub += self.pg * np.mean(self.perd)
         r[:, :, self.col] = sub
         return r
 

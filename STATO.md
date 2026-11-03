@@ -3,7 +3,7 @@
 ## Tappe
 - [x] 1. Motore generico e configurabile (`configurazione.py`, `dati.py`, `analisi.py`, `simula.py`, `metriche.py`) + test
 - [x] 2. Script da riga di comando `confronta.py --config ...` -> report/AAAA-MM-GG_nome/ (HTML, PDF con reportlab, CSV con ; e virgola decimale per Excel)
-- [ ] 3. App Streamlit
+- [x] 3. App Streamlit `app.py` (verificata in headless: simulazione completa, schede, download, errori chiari)
 - [ ] 4. Script di installazione e avvio per Mac
 - [ ] 5. README e release
 
@@ -24,3 +24,4 @@
 L'analisi iniziale (rendimento uguale 6%) è in `esempi/2026-11-03_analisi_iniziale_rendimento_uguale_6/`.
 - PDF generato con reportlab (solo Python, niente Chrome) e font DejaVu incluso in matplotlib.
 - Stress test: una sola simulazione di "crescita di 1 €" per portafoglio riusata per tutti gli scenari (veloce); 1.000 percorsi.
+- App: tema chiaro fisso (`.streamlit/config.toml`); le schede mostrano gli stessi blocchi del report HTML; default 10.000 simulazioni.

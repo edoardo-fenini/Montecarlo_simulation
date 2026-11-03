@@ -505,6 +505,9 @@ body.rep{max-width:1100px;margin:0 auto;padding:16px}
 """
 
 
+CSS_APP = re.sub(r"@media\(prefers-color-scheme:dark\)[^\n]*\n", "", CSS)  # nell'app il tema è sempre chiaro
+
+
 def _html_tab(t):
     h = f'<div class="sc"><table class="{"sx" if t["sx"] else ""}">'
     if t["gruppi"]:
