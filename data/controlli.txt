@@ -1,0 +1,21 @@
+CONTROLLI DATI
+Calendario: 1998-12-23 -> 2026-11-03
+Analisi A: 2021-07-02 -> 2026-11-03, 1341 giorni, 20 serie, NaN: 0
+Analisi B: 2007-01-03 -> 2026-11-03, 4990 giorni, 20 serie, NaN: 0
+Analisi C: 1999-01-05 -> 2026-11-03, 7000 giorni, 20 serie, NaN: 0
+Avvisi:
+AAPL: rendimento giornaliero -52% il 2000-09-29 (verificare: split o evento reale?)
+AMZN: rendimento giornaliero +33% il 2001-04-09 (verificare: split o evento reale?)
+AMZN: rendimento giornaliero +34% il 2001-11-26 (verificare: split o evento reale?)
+BX: rendimento giornaliero +35% il 2008-11-24 (verificare: split o evento reale?)
+FFIV: rendimento giornaliero +30% il 1999-06-30 (verificare: split o evento reale?)
+FFIV: rendimento giornaliero +33% il 1999-07-15 (verificare: split o evento reale?)
+FFIV: rendimento giornaliero +39% il 1999-10-27 (verificare: split o evento reale?)
+FFIV: rendimento giornaliero +38% il 2001-04-19 (verificare: split o evento reale?)
+MS: rendimento giornaliero +84% il 2008-10-13 (verificare: split o evento reale?)
+PLTR: rendimento giornaliero +31% il 2024-02-06 (verificare: split o evento reale?)
+S: rendimento giornaliero -36% il 2023-06-02 (verificare: split o evento reale?)
+UBS: rendimento giornaliero +30% il 2008-09-19 (verificare: split o evento reale?)
+UBS: rendimento giornaliero +32% il 2014-11-26 (verificare: split o evento reale?)
+ZS: rendimento giornaliero -32% il 2026-05-27 (verificare: split o evento reale?)
+Frazione di giorni sintetici (proxy) in analisi C: PANW 49%, FTNT 39%, FFIV 2%, CHKP 0%, CRWD 73%, S 81%, ZS 69%, GS 1%, JPM 0%, MS 0%, BLK 3%, BX 30%, HSBC 2%, UBS 5%, PLTR 78%, AAPL 0%, MSFT 0%, GOOGL 20%, AMZN 0%
