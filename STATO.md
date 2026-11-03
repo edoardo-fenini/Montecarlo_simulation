@@ -8,6 +8,15 @@
 - [x] 5. README passo passo, GitHub Action `.github/workflows/zip-release.yml` (zip allegato alla release), esempio `esempi/2026-11-03_tre_portafogli_metodo_beta/`
 - [ ] Release v1.0.0: vedi sotto (tappa 5)
 
+## Versione 1.1 (ramo `v1.1`, poi pull request verso main)
+- [x] 0. Rete di sicurezza: 17 test verdi; test di non regressione (1.236 numeri, dati sintetici, seed fisso)
+- [ ] 1. Dati più affidabili (retry, fonte alternativa, CSV manuale, offline, freschezza, validazione ticker)
+- [ ] 2. Report più leggibile (tabelle che entrano, copertina e indice, "In una pagina", formati, spiegazioni, zona sotto il capitale)
+- [ ] 3. Estetica app e grafici (tema, palette fissa, Plotly, card, pagina iniziale, aiuto, avanzamento, errori)
+- [ ] 4. Funzioni in più (analisi salvate, prova rapida dei pesi, Excel, configurazioni di esempio)
+- [ ] 5. Qualità e prestazioni (tempi, parallelismo, ruff, type hints, test, log)
+- [ ] 6. Release v1.1.0 (README con screenshot, CHANGELOG, riepilogo PDF, PR, release)
+
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
       modulo «Le simulazioni bastano?» (attivo, 3 seed); test sul numero di percorsi.
