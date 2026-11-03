@@ -16,7 +16,8 @@
       prima esecuzione **riuscita** (run 41713088802, circa 1 minuto e 15 secondi): Installa.command --non-interattivo
       (Python 3.12.16 arm64 in .python), 17 test ok, confronta.py --veloce con dati Yahoo reali, app headless risponde
       e si ferma. Nota sulla quarantena (xattr) nel README.
-- [ ] 3. Ramo main
+- [x] 3. Ramo `main` creato con tutto il lavoro (fast-forward da claude/new-session-extdst). Il ramo predefinito va
+      impostato dal sito: Settings → General → Default branch → ⇄ → main → Update (Claude non ha lo strumento per farlo).
 - [ ] 5. Release v1.0.0
 - [ ] 6. Riepilogo finale
 
