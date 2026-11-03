@@ -1,5 +1,6 @@
 """Motore di simulazione Monte Carlo. Tre generatori di rendimenti (bootstrap, Student-t, GARCH)
 più un involucro per eventi idiosincratici, e un motore che simula i portafogli mese per mese."""
+
 import numpy as np
 
 GG = 21  # giorni di borsa in un mese (12 mesi = 252 giorni)
@@ -25,6 +26,7 @@ def ricentra(M, rend_annui, costi_annui=None, giorni=252):
 class Bootstrap:
     """Stationary block bootstrap: si pescano blocchi di giorni consecutivi di lunghezza casuale
     (geometrica, media `blocco`) dallo storico, tenendo insieme tutti i titoli dello stesso giorno."""
+
     def __init__(self, M, blocco=20):
         self.M, self.p = np.asarray(M, float), 1.0 / blocco
 
@@ -38,11 +40,12 @@ class Bootstrap:
         self.idx = (np.take_along_axis(start, ultimo, axis=1) + (t - ultimo)) % L
 
     def blocco(self, m):
-        return self.M[self.idx[:, m * GG:(m + 1) * GG]]
+        return self.M[self.idx[:, m * GG : (m + 1) * GG]]
 
 
 class StudentT:
     """Rendimenti i.i.d. da una t multivariata (code grasse) con stessa media e covarianza dello storico."""
+
     def __init__(self, M, gdl=5):
         M = np.asarray(M, float)
         self.mu, self.gdl = M.mean(0), gdl
@@ -60,8 +63,10 @@ class StudentT:
 class Garch:
     """GARCH(1,1) per ogni titolo; gli shock standardizzati sono ripescati (bootstrap) tenendo
     insieme lo stesso giorno per tutti i titoli, così si conservano le correlazioni."""
+
     def __init__(self, M):
         from arch import arch_model
+
         M = np.asarray(M, float)
         self.mu = M.mean(0)
         N = M.shape[1]
@@ -72,7 +77,8 @@ class Garch:
             f = arch_model(r, mean="Zero", vol="GARCH", p=1, q=1, dist="normal").fit(disp="off")
             om, al, be = f.params["omega"], f.params["alpha[1]"], f.params["beta[1]"]
             if al + be > 0.995:  # troppo persistente: riporta a un valore stazionario
-                k = 0.995 / (al + be); al, be = al * k, be * k
+                k = 0.995 / (al + be)
+                al, be = al * k, be * k
             par[j] = (om, al, be)
             z = f.resid / f.conditional_volatility
             Z[:, j] = (z - z.mean()) / z.std()
@@ -91,7 +97,7 @@ class Garch:
             self.h = om + al * self.eps2 + be * self.h
             z = self.Z[self.rng.integers(0, len(self.Z), self.n)]
             eps = np.sqrt(self.h) * z
-            self.eps2 = eps ** 2
+            self.eps2 = eps**2
             out[:, g, :] = self.mu + eps / 100.0
         return out
 
@@ -100,6 +106,7 @@ class ConCrolli:
     """Aggiunge a un generatore la possibilità che un singolo titolo crolli dell'80-100% in un giorno
     (probabilità annua p_anno per titolo). Se compensa=True si rimette il rendimento medio perso,
     così cambia il rischio ma non il rendimento atteso."""
+
     def __init__(self, base, colonne, p_anno=0.015, perdita=(0.8, 1.0), compensa=True, giorni=252):
         self.base, self.col = base, list(colonne)
         self.pg, self.perd, self.comp = p_anno / giorni, perdita, compensa
@@ -131,8 +138,7 @@ def ribilancia(H, w, costo_rb):
     return target * ((tot - costo) / tot)[:, None]
 
 
-def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni, seed,
-           giorni=252, chunk=1000, rib_mesi=12, progresso=None):
+def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni, seed, giorni=252, chunk=1000, rib_mesi=12, progresso=None):
     """porte: {nome: (colonne, pesi)}. Ritorna dict con, per portafoglio, i valori a fine mese
     (n x mesi+1), max drawdown e tempo sott'acqua massimo ai checkpoint, più volatilità e correlazioni.
     rib_mesi: ogni quanti mesi si ribilancia (0 = mai). progresso: funzione(frazione completata)."""
@@ -141,9 +147,14 @@ def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni,
     mesi, nomi = anni * 12, list(porte)
     P = len(nomi)
     cpm = {int(h * 12): h for h in checkpoint_anni}
-    out = {k: {"mensile": np.empty((n, mesi + 1), np.float32),
-               "mdd": {h: np.empty(n, np.float32) for h in checkpoint_anni},
-               "uw": {h: np.empty(n, np.float32) for h in checkpoint_anni}} for k in nomi}
+    out = {
+        k: {
+            "mensile": np.empty((n, mesi + 1), np.float32),
+            "mdd": {h: np.empty(n, np.float32) for h in checkpoint_anni},
+            "uw": {h: np.empty(n, np.float32) for h in checkpoint_anni},
+        }
+        for k in nomi
+    }
     s1, cross, cnt = np.zeros(P), np.zeros((P, P)), 0
     fatti = 0
     while fatti < n:
@@ -153,8 +164,13 @@ def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni,
         st = {}
         for k in nomi:
             w = np.asarray(porte[k][1], float)
-            st[k] = dict(H=np.tile(capitale * w, (nn, 1)), runmax=np.full(nn, float(capitale)),
-                         mdd=np.zeros(nn), last=np.zeros(nn, int), uw=np.zeros(nn, int))
+            st[k] = dict(
+                H=np.tile(capitale * w, (nn, 1)),
+                runmax=np.full(nn, float(capitale)),
+                mdd=np.zeros(nn),
+                last=np.zeros(nn, int),
+                uw=np.zeros(nn, int),
+            )
             out[k]["mensile"][sl, 0] = capitale
         for m in range(mesi):
             blocco = gen.blocco(m)
@@ -184,7 +200,9 @@ def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni,
                     out[k]["mdd"][h][sl] = s["mdd"]
                     out[k]["uw"][h][sl] = s["uw"] / giorni  # in anni
             R = np.stack(rets, axis=2).reshape(-1, P)
-            s1 += R.sum(0); cross += R.T @ R; cnt += len(R)
+            s1 += R.sum(0)
+            cross += R.T @ R
+            cnt += len(R)
         fatti += nn
         if progresso:
             progresso(fatti / n)

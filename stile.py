@@ -2,13 +2,14 @@
 
 Palette Okabe-Ito (distinguibile anche da chi ha difficoltà con i colori); il benchmark è sempre grigio.
 Il colore non è mai l'unico segnale: nei grafici ogni portafoglio ha anche un tratteggio o un motivo diverso e un'etichetta."""
+
 from __future__ import annotations
 
 PALETTE = ["#0072B2", "#D55E00", "#009E73", "#CC79A7", "#E69F00", "#56B4E9", "#882255", "#117733"]
 GRIGIO = "#666666"
-BLU_NOTTE = "#1F3A5F"       # titoli e intestazioni
-PRIMARIO = "#3366A3"        # colore principale dell'app (contrasto sufficiente su sfondo chiaro e scuro)
-ROSSO_SOTTO = "#C62828"     # zona sotto il capitale investito
+BLU_NOTTE = "#1F3A5F"  # titoli e intestazioni
+PRIMARIO = "#3366A3"  # colore principale dell'app (contrasto sufficiente su sfondo chiaro e scuro)
+ROSSO_SOTTO = "#C62828"  # zona sotto il capitale investito
 TRATTI_MPL = ["-", "--", "-.", ":", (0, (5, 1)), (0, (3, 1, 1, 1, 1, 1)), (0, (1, 1)), (0, (5, 3))]
 TRATTI_PLOTLY = ["solid", "dash", "dashdot", "dot", "longdash", "longdashdot", "solid", "dash"]
 MOTIVI_PLOTLY = ["", "/", "\\", "x", ".", "+", "-", "|"]

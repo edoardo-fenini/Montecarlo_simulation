@@ -1,11 +1,19 @@
 """Verifica quali fonti di prezzi rispondono davvero da questo computer (o dal server di GitHub Actions).
 Uso:  python strumenti/verifica_fonti.py"""
-import os, sys, time
+
+import os
+import sys
+import time
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import fonti
 
-PROVE = {"Yahoo Finance": ["AAPL", "SAP.DE", "ENI.MI", "HSBA.L"], "Yahoo Finance (API diretta)": ["AAPL", "SAP.DE", "ENI.MI", "HSBA.L"],
-         "Stooq": ["AAPL", "SAP.DE", "HSBA.L", "EURUSD=X"], "Banca Centrale Europea": ["EURUSD=X", "EURGBP=X", "EURCHF=X"]}
+PROVE = {
+    "Yahoo Finance": ["AAPL", "SAP.DE", "ENI.MI", "HSBA.L"],
+    "Yahoo Finance (API diretta)": ["AAPL", "SAP.DE", "ENI.MI", "HSBA.L"],
+    "Stooq": ["AAPL", "SAP.DE", "HSBA.L", "EURUSD=X"],
+    "Banca Centrale Europea": ["EURUSD=X", "EURGBP=X", "EURCHF=X"],
+}
 FUNZ = dict(fonti.FONTI_CAMBI)
 
 

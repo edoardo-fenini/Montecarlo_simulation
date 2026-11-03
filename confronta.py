@@ -6,7 +6,13 @@ Esempi:
   python confronta.py --config configurazioni/mio_portafoglio.yaml --simulazioni 20000 --aggiorna-dati
 
 Il report va in report/AAAA-MM-GG_nome-configurazione/ (report.html, report.pdf, dati_csv/)."""
-import argparse, datetime, os, re, sys, time
+
+import argparse
+import datetime
+import os
+import re
+import sys
+import time
 
 import analisi
 import registro

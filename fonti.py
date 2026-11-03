@@ -3,6 +3,7 @@
 Ordine per i titoli:  1) Yahoo Finance tramite yfinance  2) Yahoo Finance, API diretta (senza yfinance)  3) Stooq
 Ordine per i cambi EURxxx=X:  le stesse, più la Banca Centrale Europea (tassi di riferimento, dal 1999).
 """
+
 from __future__ import annotations
 
 import io
@@ -19,14 +20,13 @@ import pandas as pd
 log = logging.getLogger("confronta")
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
-TIMEOUT = 25            # secondi per ogni richiesta
-TENTATIVI = 3           # tentativi per fonte in caso di errore di rete
-ATTESA_INIZIALE = 1.5   # secondi; raddoppia a ogni tentativo (1,5 – 3 – 6)
+TIMEOUT = 25  # secondi per ogni richiesta
+TENTATIVI = 3  # tentativi per fonte in caso di errore di rete
+ATTESA_INIZIALE = 1.5  # secondi; raddoppia a ogni tentativo (1,5 – 3 – 6)
 AGENTE = "confronta-portafogli/1.1 (strumento personale di analisi; python-urllib)"
 
 # suffisso Yahoo -> (suffisso Stooq, valuta dei prezzi Stooq)
-STOOQ = {"": (".us", "USD"), ".DE": (".de", "EUR"), ".F": (".de", "EUR"), ".L": (".uk", "GBp"),
-         ".T": (".jp", "JPY"), ".HK": (".hk", "HKD")}
+STOOQ = {"": (".us", "USD"), ".DE": (".de", "EUR"), ".F": (".de", "EUR"), ".L": (".uk", "GBp"), ".T": (".jp", "JPY"), ".HK": (".hk", "HKD")}
 
 
 class ErroreRete(Exception):
@@ -52,6 +52,7 @@ def _contesto_ssl():
     (errore CERTIFICATE_VERIFY_FAILED, visto sul Mac di GitHub Actions con la BCE e la FRED)."""
     try:
         import certifi
+
         return ssl.create_default_context(cafile=certifi.where())
     except ImportError:
         return ssl.create_default_context()
@@ -78,13 +79,14 @@ def con_tentativi(funzione, *args, tentativi: int = TENTATIVI, attesa: float = A
         except ErroreRete:
             if i == tentativi - 1:
                 raise
-            time.sleep(attesa * 2 ** i)
+            time.sleep(attesa * 2**i)
 
 
 # ------------------------------------------------------------------ fonti
 def yahoo_yfinance(ticker: str):
     """Adjusted close (dividendi inclusi) tramite la libreria yfinance."""
     import yfinance as yf
+
     tk = yf.Ticker(ticker)
     try:
         h = tk.history(period="max", auto_adjust=False, actions=False, timeout=TIMEOUT)
@@ -93,16 +95,22 @@ def yahoo_yfinance(ticker: str):
     if h is None or h.empty or "Adj Close" not in h:
         return vuota()
     md = tk.history_metadata or {}
-    return _pulisci(h["Adj Close"]), {"valuta": md.get("currency"), "tipo": md.get("instrumentType"),
-                                      "nome": md.get("longName") or md.get("shortName"),
-                                      "borsa": md.get("fullExchangeName") or md.get("exchangeName")}
+    return _pulisci(h["Adj Close"]), {
+        "valuta": md.get("currency"),
+        "tipo": md.get("instrumentType"),
+        "nome": md.get("longName") or md.get("shortName"),
+        "borsa": md.get("fullExchangeName") or md.get("exchangeName"),
+    }
 
 
 def yahoo_diretto(ticker: str):
     """Stessi dati di Yahoo, chiesti direttamente all'API dei grafici (utile quando yfinance smette di funzionare)."""
     # con range=max Yahoo restituisce dati mensili: servono le date esplicite per avere i prezzi giornalieri
-    url = ("https://query2.finance.yahoo.com/v8/finance/chart/" + urllib.parse.quote(ticker) +
-           f"?period1=0&period2={int(time.time())}&interval=1d&events=div%2Csplit&includeAdjustedClose=true")
+    url = (
+        "https://query2.finance.yahoo.com/v8/finance/chart/"
+        + urllib.parse.quote(ticker)
+        + f"?period1=0&period2={int(time.time())}&interval=1d&events=div%2Csplit&includeAdjustedClose=true"
+    )
     raw = _scarica_url(url)
     if not raw:
         return vuota()
@@ -121,8 +129,12 @@ def yahoo_diretto(ticker: str):
     if len(s) > 20 and s.index.to_series().diff().dt.days.median() > 4:
         log.warning("%s: Yahoo diretto ha restituito dati non giornalieri, li scarto", ticker)
         return vuota()
-    return s, {"valuta": md.get("currency"), "tipo": md.get("instrumentType"),
-               "nome": md.get("longName") or md.get("shortName"), "borsa": md.get("fullExchangeName") or md.get("exchangeName")}
+    return s, {
+        "valuta": md.get("currency"),
+        "tipo": md.get("instrumentType"),
+        "nome": md.get("longName") or md.get("shortName"),
+        "borsa": md.get("fullExchangeName") or md.get("exchangeName"),
+    }
 
 
 def simbolo_stooq(ticker: str):
@@ -154,8 +166,13 @@ def stooq(ticker: str):
     df = pd.read_csv(io.BytesIO(raw), index_col="Date", parse_dates=True)
     if "Close" not in df or df.empty:
         return vuota()
-    return _pulisci(df["Close"]), {"valuta": sv[1], "tipo": "CURRENCY" if ticker.endswith("=X") else None,
-                                   "nome": None, "borsa": "Stooq", "nota": "prezzi senza dividendi"}
+    return _pulisci(df["Close"]), {
+        "valuta": sv[1],
+        "tipo": "CURRENCY" if ticker.endswith("=X") else None,
+        "nome": None,
+        "borsa": "Stooq",
+        "nota": "prezzi senza dividendi",
+    }
 
 
 def bce(ticker: str):

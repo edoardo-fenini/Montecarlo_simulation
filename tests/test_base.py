@@ -1,7 +1,10 @@
-import sys, pathlib
+import pathlib
+import sys
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 import numpy as np
-from simula import Bootstrap, ricentra, simula, ribilancia, GG
+
+from simula import GG, Bootstrap, ribilancia, ricentra, simula
 
 CAP, ANNI = 5000.0, 2
 
@@ -23,10 +26,11 @@ def test_zero_rendimento_nessun_versamento_valore_invariato():
 
 def test_titolo_singolo_ha_le_metriche_del_titolo():
     M = rand_M()
-    res = run(M, {"solo": (np.array([1]), np.array([1.0])), "altro": (np.array([0, 2]), np.array([.5, .5]))})
+    res = run(M, {"solo": (np.array([1]), np.array([1.0])), "altro": (np.array([0, 2]), np.array([0.5, 0.5]))})
     # stessa estrazione del generatore, calcolata a mano
     rng = np.random.default_rng(1)
-    g = Bootstrap(M, 20); g.prepara(40, ANNI * 252, rng)
+    g = Bootstrap(M, 20)
+    g.prepara(40, ANNI * 252, rng)
     v = CAP * np.cumprod(1 + M[g.idx, 1], axis=1)
     cm = np.maximum.accumulate(np.concatenate([np.full((40, 1), CAP), v], 1), axis=1)[:, 1:]
     mdd = (v / cm - 1).min(1)
@@ -58,9 +62,9 @@ def test_ribilanciamento_riporta_ai_pesi_target():
     for costo in (0.0, 0.001):
         N = ribilancia(H, w, costo)
         assert np.allclose(N / N.sum(1, keepdims=True), w)
-    assert np.allclose(ribilancia(H, w, 0.0).sum(1), H.sum(1))        # senza costi non si perde nulla
-    assert (ribilancia(H, w, 0.001).sum(1) < H.sum(1)).all()          # con costi sì
-    assert np.allclose(ribilancia(np.array([[100.0, 100.0]]), np.array([.5, .5]), 0.001), 100.0)  # già a target: nessun costo
+    assert np.allclose(ribilancia(H, w, 0.0).sum(1), H.sum(1))  # senza costi non si perde nulla
+    assert (ribilancia(H, w, 0.001).sum(1) < H.sum(1)).all()  # con costi sì
+    assert np.allclose(ribilancia(np.array([[100.0, 100.0]]), np.array([0.5, 0.5]), 0.001), 100.0)  # già a target: nessun costo
 
 
 def test_numero_di_percorsi_generati():
@@ -75,5 +79,5 @@ def test_numero_di_percorsi_generati():
             assert res[k]["mdd"][2].shape == (n,)
     g = Bootstrap(M, 20)
     g.prepara(50, ANNI * 252, np.random.default_rng(0))
-    assert g.idx.shape == (50, ANNI * 252)            # percorsi x giorni
-    assert g.blocco(0).shape == (50, GG, 3)           # percorsi x giorni del mese x titoli
+    assert g.idx.shape == (50, ANNI * 252)  # percorsi x giorni
+    assert g.blocco(0).shape == (50, GG, 3)  # percorsi x giorni del mese x titoli

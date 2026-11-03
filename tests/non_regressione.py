@@ -3,22 +3,37 @@
 Rigenerare il riferimento SOLO per una modifica intenzionale al calcolo (da spiegare in CHANGELOG.md):
     python tests/non_regressione.py --aggiorna
 """
-import copy, json, math, os, sys, tempfile
+
+import copy
+import json
+import math
+import os
+import sys
+import tempfile
 
 QUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(QUI))
 sys.path.insert(0, QUI)
-import numpy as np  # noqa: E402
 
 RIFERIMENTO = os.path.join(QUI, "riferimento_non_regressione.json")
 
 CONFIG = {
-    "nome": "non regressione", "capitale_iniziale": 1000, "versamento_mensile": 20, "orizzonte_anni": 4,
-    "orizzonti_intermedi": [2], "n_simulazioni": 400, "seed": 4242,
+    "nome": "non regressione",
+    "capitale_iniziale": 1000,
+    "versamento_mensile": 20,
+    "orizzonte_anni": 4,
+    "orizzonti_intermedi": [2],
+    "n_simulazioni": 400,
+    "seed": 4242,
     "benchmark": {"nome": "Benchmark test", "ticker": "BMK.AS", "ter": 0.002, "proxy_storico": "^IDX"},
     "analisi": {"inizio_B": "2012-06-01", "inizio_C": "2012-06-01"},
-    "moduli": {"stress_test": True, "rischio_singolo_titolo": True, "confronto_modelli": True, "analisi_C": True,
-               "verifica_convergenza": True},
+    "moduli": {
+        "stress_test": True,
+        "rischio_singolo_titolo": True,
+        "confronto_modelli": True,
+        "analisi_C": True,
+        "verifica_convergenza": True,
+    },
     "verifica_convergenza": {"numero_seed": 2},
     "settori": {"AAA.MI": "tech", "BBB.DE": "finanza", "CCC": "altro"},
     "proxy": {"BBB.DE": "AAA.MI"},
@@ -31,9 +46,11 @@ CONFIG = {
 
 
 def calcola():
+    from dati_finti import crea_finto_yahoo
+
     import analisi
     import configurazione as C
-    from dati_finti import crea_finto_yahoo
+
     cfg = C.prepara(copy.deepcopy(CONFIG))
     with tempfile.TemporaryDirectory() as d:
         return analisi.esegui(cfg, cartella_cache=d, scaricatore=crea_finto_yahoo(), log=lambda *a: None)
@@ -105,7 +122,13 @@ if __name__ == "__main__":
     if "--aggiorna" in sys.argv:
         n = numeri_chiave(calcola())
         with open(RIFERIMENTO, "w", encoding="utf-8") as f:
-            json.dump({k: ("inf" if isinstance(v, float) and math.isinf(v) else v) for k, v in n.items()}, f, indent=1, ensure_ascii=False, sort_keys=True)
+            json.dump(
+                {k: ("inf" if isinstance(v, float) and math.isinf(v) else v) for k, v in n.items()},
+                f,
+                indent=1,
+                ensure_ascii=False,
+                sort_keys=True,
+            )
         print(f"Riferimento salvato: {len(n)} numeri in {RIFERIMENTO}")
     else:
         d = confronta(carica_riferimento(), numeri_chiave(calcola()))

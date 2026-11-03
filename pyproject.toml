@@ -1,0 +1,15 @@
+# Configurazione degli strumenti di qualità del codice (solo per sviluppo: `pip install -r requirements-dev.txt`).
+[tool.ruff]
+line-length = 140
+target-version = "py312"
+extend-exclude = [".venv", ".python", ".uv", ".uv-cache", "cache_prezzi", "report", "esempi"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "E731", "B905", "UP031", "B008"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["analisi", "configurazione", "dati", "fonti", "grafici_app", "metriche", "registro", "report", "simula", "stile"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

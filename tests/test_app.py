@@ -1,8 +1,12 @@
 """L'app Streamlit si avvia senza errori (senza internet: all'avvio non scarica nulla)."""
-import sys, pathlib, os
+
+import os
+import pathlib
+import sys
+
 RADICE = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RADICE))
-from streamlit.testing.v1 import AppTest
+from streamlit.testing.v1 import AppTest  # noqa: E402
 
 
 def test_app_si_avvia_con_esempio_precaricato():

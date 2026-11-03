@@ -1,8 +1,16 @@
 """Dati: download da Yahoo Finance con cache su disco, conversione in EUR, controlli,
 classificazione automatica del settore (per stress test e proxy dell'analisi C)."""
-import datetime, io, json, logging, os, re, urllib.request, warnings
-import numpy as np
+
+import datetime
+import io
+import json
+import logging
+import os
+import re
+import warnings
+
 import pandas as pd
+
 import fonti
 from configurazione import BENCH
 
@@ -11,13 +19,30 @@ logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 
 CARTELLA_CACHE = "cache_prezzi"
 # ETF settoriali USA (storia dal dicembre 1998): usati per riconoscere il settore e come proxy
-ETF_SETTORE = {"XLK": "tech", "XLF": "finanza", "XLV": "altro", "XLE": "altro", "XLI": "altro",
-               "XLP": "altro", "XLU": "altro", "XLB": "altro", "XLY": "altro"}
-SETTORE_YAHOO = {"Technology": ("tech", "XLK"), "Communication Services": ("tech", "XLK"),
-                 "Financial Services": ("finanza", "XLF"), "Real Estate": ("finanza", "XLF"),
-                 "Healthcare": ("altro", "XLV"), "Energy": ("altro", "XLE"), "Industrials": ("altro", "XLI"),
-                 "Consumer Defensive": ("altro", "XLP"), "Utilities": ("altro", "XLU"),
-                 "Basic Materials": ("altro", "XLB"), "Consumer Cyclical": ("altro", "XLY")}
+ETF_SETTORE = {
+    "XLK": "tech",
+    "XLF": "finanza",
+    "XLV": "altro",
+    "XLE": "altro",
+    "XLI": "altro",
+    "XLP": "altro",
+    "XLU": "altro",
+    "XLB": "altro",
+    "XLY": "altro",
+}
+SETTORE_YAHOO = {
+    "Technology": ("tech", "XLK"),
+    "Communication Services": ("tech", "XLK"),
+    "Financial Services": ("finanza", "XLF"),
+    "Real Estate": ("finanza", "XLF"),
+    "Healthcare": ("altro", "XLV"),
+    "Energy": ("altro", "XLE"),
+    "Industrials": ("altro", "XLI"),
+    "Consumer Defensive": ("altro", "XLP"),
+    "Utilities": ("altro", "XLU"),
+    "Basic Materials": ("altro", "XLB"),
+    "Consumer Cyclical": ("altro", "XLY"),
+}
 VALUTE_MINORI = {"GBp": ("GBP", 100), "GBX": ("GBP", 100), "ZAc": ("ZAR", 100), "ILA": ("ILS", 100)}
 
 
@@ -33,6 +58,7 @@ def settore_yahoo(ticker):
     """Settore secondo Yahoo (può non essere disponibile: in quel caso None)."""
     try:
         import yfinance as yf
+
         return (yf.Ticker(ticker).info or {}).get("sector")
     except Exception:
         return None
@@ -101,16 +127,20 @@ class Archivio:
                     self.fatti.add(t)
                     s = None
                 else:
-                    raise ErroreDati(f"Non riesco a scaricare «{t}»: nessuna fonte online risponde (Yahoo Finance, Stooq). "
-                                     "Controlla la connessione a internet e riprova tra qualche minuto, oppure carica i prezzi "
-                                     "da un file CSV (pulsante «Carica prezzi da file» nell'app).") from e
+                    raise ErroreDati(
+                        f"Non riesco a scaricare «{t}»: nessuna fonte online risponde (Yahoo Finance, Stooq). "
+                        "Controlla la connessione a internet e riprova tra qualche minuto, oppure carica i prezzi "
+                        "da un file CSV (pulsante «Carica prezzi da file» nell'app)."
+                    ) from e
             if s is not None:
                 if len(s) == 0:
                     if self.in_cache(t):
                         self.avvisi.append(f"{t}: le fonti online non lo trovano più, uso i prezzi salvati.")
                     else:
-                        raise ErroreDati(f"Il ticker «{t}» non esiste su Yahoo Finance (né sulle fonti alternative) o non ha dati. "
-                                         "Scrivilo come compare su finance.yahoo.com (es. AAPL, ENI.MI, SAP.DE, IWDA.AS).")
+                        raise ErroreDati(
+                            f"Il ticker «{t}» non esiste su Yahoo Finance (né sulle fonti alternative) o non ha dati. "
+                            "Scrivilo come compare su finance.yahoo.com (es. AAPL, ENI.MI, SAP.DE, IWDA.AS)."
+                        )
                 else:
                     s.rename("prezzo").to_csv(base + ".csv", index_label="Date")
                     vecchio = self._meta(t)
@@ -135,8 +165,14 @@ class Archivio:
             raise ErroreDati(f"Non riesco a leggere il file di prezzi per «{t}»: {e}.") from e
         base = self._base(t)
         s.rename("prezzo").to_csv(base + ".csv", index_label="Date")
-        meta = {"valuta": valuta.strip(), "tipo": tipo, "nome": nome or f"{t} (prezzi da file)", "borsa": "file",
-                "fonte": FONTE_MANUALE, "scaricato_il": datetime.date.today().isoformat()}
+        meta = {
+            "valuta": valuta.strip(),
+            "tipo": tipo,
+            "nome": nome or f"{t} (prezzi da file)",
+            "borsa": "file",
+            "fonte": FONTE_MANUALE,
+            "scaricato_il": datetime.date.today().isoformat(),
+        }
         json.dump(meta, open(base + ".json", "w"))
         self.memoria.pop(t, None)
         return s
@@ -230,8 +266,7 @@ def costruisci(cfg, arch):
     if b.get("proxy_storico"):
         proxy, _ = serie_eur(arch, b["proxy_storico"], valuta_default="USD", avvisi=avvisi)
     cal = calendario_comune(eur if eur else {b["ticker"]: etf})
-    inizio_cal = min(min(s.index[0] for s in eur.values()) if eur else etf.index[0],
-                     proxy.index[0] if proxy is not None else etf.index[0])
+    inizio_cal = min(min(s.index[0] for s in eur.values()) if eur else etf.index[0], proxy.index[0] if proxy is not None else etf.index[0])
     # il calendario parte dal primo dato disponibile; prima del primo titolo uso i giorni del benchmark
     extra = (proxy if proxy is not None else etf).index
     cal = cal.union(extra[(extra >= inizio_cal) & (extra < cal[0])])
@@ -257,12 +292,24 @@ def costruisci(cfg, arch):
             nome, primo, m = t, s.index[0], info[t]
         anni = (s.index[-1] - primo).days / 365.25
         ultimo = (etf if t == BENCH else eur[t]).index[-1]
-        righe.append({"ticker": nome, "nome": m.get("nome") or "", "valuta": m.get("valuta"), "tipo": m.get("tipo") or "",
-                      "primo dato": primo.date(), "anni di storia": round(anni, 1), "ultimo dato": ultimo.date(),
-                      "borsa": m.get("borsa") or "", "fonte": m.get("fonte") or "Yahoo Finance",  # cache della 1.0: solo Yahoo
-                      "scaricato il": m.get("scaricato_il") or ""})
+        righe.append(
+            {
+                "ticker": nome,
+                "nome": m.get("nome") or "",
+                "valuta": m.get("valuta"),
+                "tipo": m.get("tipo") or "",
+                "primo dato": primo.date(),
+                "anni di storia": round(anni, 1),
+                "ultimo dato": ultimo.date(),
+                "borsa": m.get("borsa") or "",
+                "fonte": m.get("fonte") or "Yahoo Finance",  # cache della 1.0: solo Yahoo
+                "scaricato il": m.get("scaricato_il") or "",
+            }
+        )
         if m.get("fonte") == "Stooq":
-            avvisi.append(f"{nome}: prezzi da Stooq (Yahoo non disponibile), senza dividendi reinvestiti: il rendimento storico è un po' sottostimato.")
+            avvisi.append(
+                f"{nome}: prezzi da Stooq (Yahoo non disponibile), senza dividendi reinvestiti: il rendimento storico è un po' sottostimato."
+            )
         if (R.index[-1] - ultimo).days > 7:
             avvisi.append(f"{nome}: l'ultimo prezzo disponibile è del {ultimo:%d/%m/%Y}, più vecchio degli altri titoli.")
         if anni < 3:
@@ -270,17 +317,31 @@ def costruisci(cfg, arch):
         for d, v in s[s.abs() > 0.30].items():
             estremi.append(f"{nome}: {v:+.0%} il {d:%d/%m/%Y}")
     avvisi = list(dict.fromkeys(arch.avvisi + avvisi))
-    return {"R": R, "info": pd.DataFrame(righe).set_index("ticker"), "avvisi": avvisi, "estremi": estremi,
-            "ultimo_dato": R.index[-1], "calendario": cal}
+    return {
+        "R": R,
+        "info": pd.DataFrame(righe).set_index("ticker"),
+        "avvisi": avvisi,
+        "estremi": estremi,
+        "ultimo_dato": R.index[-1],
+        "calendario": cal,
+    }
 
 
 def verifica_ticker(arch, t):
     """Scheda di un ticker per controllarlo prima della simulazione: nome, borsa, valuta, anni di storia, fonte.
     Scarica il ticker se non è in cache (così la simulazione dopo è più veloce)."""
     s, m = arch.prezzi(t)
-    return {"ticker": t, "nome": m.get("nome") or "", "borsa": m.get("borsa") or "", "valuta": m.get("valuta") or "",
-            "tipo": m.get("tipo") or "", "dal": s.index[0].date(), "al": s.index[-1].date(),
-            "anni": round((s.index[-1] - s.index[0]).days / 365.25, 1), "fonte": m.get("fonte") or "Yahoo Finance"}
+    return {
+        "ticker": t,
+        "nome": m.get("nome") or "",
+        "borsa": m.get("borsa") or "",
+        "valuta": m.get("valuta") or "",
+        "tipo": m.get("tipo") or "",
+        "dal": s.index[0].date(),
+        "al": s.index[-1].date(),
+        "anni": round((s.index[-1] - s.index[0]).days / 365.25, 1),
+        "fonte": m.get("fonte") or "Yahoo Finance",
+    }
 
 
 def importa_da_configurazione(cfg, arch):

@@ -1,4 +1,5 @@
 """Funzioni 1.1: analisi salvate, esportazione Excel, prova rapida dei pesi, configurazioni di esempio."""
+
 import glob
 import io
 import json
@@ -17,11 +18,21 @@ QUI = os.path.dirname(os.path.abspath(__file__))
 @pytest.fixture(scope="module")
 def ris(tmp_path_factory):
     from dati_finti import crea_finto_yahoo
-    cfg = {"nome": "funzioni nuove", "capitale_iniziale": 1000, "orizzonte_anni": 4, "orizzonti_intermedi": [2], "n_simulazioni": 300,
-           "benchmark": {"nome": "Benchmark test", "ticker": "BMK.AS", "proxy_storico": "^IDX"}, "analisi": {"inizio_B": "2012-06-01"},
-           "settori": {"AAA.MI": "tech", "BBB.DE": "finanza", "CCC": "altro"},
-           "portafogli": [{"nome": "Uno", "titoli": ["AAA.MI", "BBB.DE"]}, {"nome": "Due", "titoli": ["CCC"]}]}
-    return analisi.esegui(C.prepara(cfg), cartella_cache=str(tmp_path_factory.mktemp("c")), scaricatore=crea_finto_yahoo(), log=lambda *a: None)
+
+    cfg = {
+        "nome": "funzioni nuove",
+        "capitale_iniziale": 1000,
+        "orizzonte_anni": 4,
+        "orizzonti_intermedi": [2],
+        "n_simulazioni": 300,
+        "benchmark": {"nome": "Benchmark test", "ticker": "BMK.AS", "proxy_storico": "^IDX"},
+        "analisi": {"inizio_B": "2012-06-01"},
+        "settori": {"AAA.MI": "tech", "BBB.DE": "finanza", "CCC": "altro"},
+        "portafogli": [{"nome": "Uno", "titoli": ["AAA.MI", "BBB.DE"]}, {"nome": "Due", "titoli": ["CCC"]}],
+    }
+    return analisi.esegui(
+        C.prepara(cfg), cartella_cache=str(tmp_path_factory.mktemp("c")), scaricatore=crea_finto_yahoo(), log=lambda *a: None
+    )
 
 
 def test_salva_e_storico(ris, tmp_path):
@@ -50,7 +61,7 @@ def test_excel_con_formati(ris):
     for i in range(1, ws.max_row + 1):
         righe.setdefault(ws.cell(i, 1).value, i)  # prima occorrenza = analisi A
     r_med, r_prob = righe["Valore mediano"], righe["Prob. sotto il versato"]
-    assert isinstance(ws.cell(r_med, 2).value, float) and "€" in ws.cell(r_med, 2).number_format   # numeri veri, non testo
+    assert isinstance(ws.cell(r_med, 2).value, float) and "€" in ws.cell(r_med, 2).number_format  # numeri veri, non testo
     assert ws.cell(r_prob, 2).number_format == "0.0%" and 0 <= ws.cell(r_prob, 2).value <= 1
     assert ws.cell(r_med, 2).value == pytest.approx(ris["sim"]["A"]["orizzonti"][4].loc["Valore mediano", "Uno"])
 
@@ -72,7 +83,9 @@ def test_configurazioni_di_esempio_valide(percorso):
 
 def test_file_di_log(tmp_path):
     import logging
+
     import registro
+
     f = tmp_path / "log.txt"
     log = registro.configura(percorso=str(f))
     log.error("prova di scrittura nel log")

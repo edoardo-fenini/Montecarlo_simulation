@@ -2,6 +2,7 @@
 
 Uso:  ris = esegui(cfg, aggiorna_dati=False, progresso=funzione(frazione, messaggio), log=print)
 """
+
 import logging
 import multiprocessing as mp
 import os
@@ -17,7 +18,7 @@ import pandas as pd
 import dati as D
 import metriche
 from configurazione import BENCH
-from simula import Bootstrap, StudentT, Garch, ConCrolli, ricentra, simula
+from simula import Bootstrap, ConCrolli, Garch, StudentT, ricentra, simula
 
 registro_log = logging.getLogger("confronta")
 
@@ -128,13 +129,15 @@ def periodi(cfg, R, proxy_info, arch, log):
     inizio_A = max(R[t].first_valid_index() for t in titoli)
     A = R.loc[inizio_A:].dropna()
     if len(A) < 252:
-        raise D.ErroreDati(f"Il periodo comune a tutti i titoli è troppo breve ({len(A)} giorni di borsa, dal {inizio_A:%d/%m/%Y}). "
-                           "Servono almeno 12 mesi: togli o sostituisci i titoli quotati più di recente.")
+        raise D.ErroreDati(
+            f"Il periodo comune a tutti i titoli è troppo breve ({len(A)} giorni di borsa, dal {inizio_A:%d/%m/%Y}). "
+            "Servono almeno 12 mesi: togli o sostituisci i titoli quotati più di recente."
+        )
     out["A"] = A
     inizio_B = pd.Timestamp(cfg["analisi"]["inizio_B"])
     if inizio_A > inizio_B + pd.Timedelta(days=365):
         primi = [min(R[t].first_valid_index() for t in pesi) for pesi in cfg["composizione"].values()]
-        out["B"] = R.loc[max([inizio_B] + primi):]
+        out["B"] = R.loc[max([inizio_B] + primi) :]
     else:
         note["B"] = "Tutti i titoli hanno una storia lunga: il periodo comune (A) copre già il periodo lungo, quindi l'analisi B non serve."
     if cfg["moduli"]["analisi_C"]:
@@ -179,8 +182,9 @@ class Avanzamento:
 @dataclass
 class Lavoro:
     """Una simulazione indipendente (ha il suo seed): si può eseguire in un altro processo con risultati identici."""
+
     chiave: str
-    tipo: str          # bootstrap | crolli | t | garch | stress
+    tipo: str  # bootstrap | crolli | t | garch | stress
     messaggio: str
     peso: float
     M: np.ndarray
@@ -203,18 +207,39 @@ def _generatore(lav: Lavoro, cfg: dict):
 
 def esegui_lavoro(lav: Lavoro, cfg: dict, n: int, coda=None, callback=None):
     """Esegue un lavoro. L'avanzamento va a `coda` (processo separato) oppure a `callback` (stesso processo)."""
+
     def prog(f):
         if coda is not None:
             coda.put((lav.chiave, f))
         elif callback is not None:
             callback(f)
+
     if lav.tipo == "stress":
         e = lav.extra
-        return lav.chiave, metriche.stress_test(Bootstrap(lav.M, cfg["blocco_medio_giorni"]), lav.porte, cfg, e["sommario"],
-                                                e["categorie"], e["singolo"], n_rec=min(n, 1000), progresso=prog)
-    res = simula(_generatore(lav, cfg), lav.porte, n, cfg["orizzonte_anni"], cfg["capitale_iniziale"], cfg["versamento_mensile"],
-                 cfg["costo_ribilanciamento"], cfg["orizzonti"], cfg["seed"] + lav.seed_extra, 252,
-                 rib_mesi=cfg["ribilanciamento_mesi"], progresso=prog)
+        return lav.chiave, metriche.stress_test(
+            Bootstrap(lav.M, cfg["blocco_medio_giorni"]),
+            lav.porte,
+            cfg,
+            e["sommario"],
+            e["categorie"],
+            e["singolo"],
+            n_rec=min(n, 1000),
+            progresso=prog,
+        )
+    res = simula(
+        _generatore(lav, cfg),
+        lav.porte,
+        n,
+        cfg["orizzonte_anni"],
+        cfg["capitale_iniziale"],
+        cfg["versamento_mensile"],
+        cfg["costo_ribilanciamento"],
+        cfg["orizzonti"],
+        cfg["seed"] + lav.seed_extra,
+        252,
+        rib_mesi=cfg["ribilanciamento_mesi"],
+        progresso=prog,
+    )
     return lav.chiave, metriche.sommario(res, cfg, n)
 
 
@@ -262,8 +287,9 @@ def esegui_lavori(lavori: list, cfg: dict, n: int, av: Avanzamento, log=print) -
     return risultati
 
 
-def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D.CARTELLA_CACHE, scaricatore=None, n=None,
-           solo=None, seed=None):
+def esegui(
+    cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D.CARTELLA_CACHE, scaricatore=None, n=None, solo=None, seed=None
+):
     """solo: lista di analisi da fare (es. ["A"]); seed: sostituisce quello della configurazione."""
     t0 = time.time()
     tempi = {}
@@ -290,11 +316,28 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
     tempi["dati"] = time.time() - t0
 
     tipi = dati["info"]["tipo"].to_dict()
-    ris = {"cfg": cfg, "n": n, "dati_info": dati["info"], "avvisi": dati["avvisi"], "estremi": dati["estremi"],
-           "ultimo_dato": dati["ultimo_dato"], "nomi": list(cfg["composizione"]), "bench_nome": cfg["benchmark"]["nome"],
-           "beta": beta, "rend_attesi": spiega_rendimenti(cfg, beta, tipi), "proxy_info": proxy_info, "note": note,
-           "periodi": {}, "storico": {}, "sim": {}, "stress": {}, "idio": {}, "modelli": {}, "sensibilita": {},
-           "convergenza": None}
+    ris = {
+        "cfg": cfg,
+        "n": n,
+        "dati_info": dati["info"],
+        "avvisi": dati["avvisi"],
+        "estremi": dati["estremi"],
+        "ultimo_dato": dati["ultimo_dato"],
+        "nomi": list(cfg["composizione"]),
+        "bench_nome": cfg["benchmark"]["nome"],
+        "beta": beta,
+        "rend_attesi": spiega_rendimenti(cfg, beta, tipi),
+        "proxy_info": proxy_info,
+        "note": note,
+        "periodi": {},
+        "storico": {},
+        "sim": {},
+        "stress": {},
+        "idio": {},
+        "modelli": {},
+        "sensibilita": {},
+        "convergenza": None,
+    }
 
     # ---- piano dei lavori: le simulazioni indipendenti tra loro (ognuna con il suo seed)
     lavori, stress_da_fare, nomi_sens = [], {}, {}
@@ -307,12 +350,16 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
         if a == "A":
             ris["matrici"] = {"A": (Mr, porte)}  # per la prova rapida dei pesi nell'app
             for j in range(1, n_seed):  # stessa simulazione con seed diversi: verifica che le simulazioni bastino
-                lavori.append(Lavoro(f"conv{j}", "bootstrap", f"Verifica: stessa simulazione con il seed n. {j + 1}", 1.0, Mr, porte, 1000 * j))
+                lavori.append(
+                    Lavoro(f"conv{j}", "bootstrap", f"Verifica: stessa simulazione con il seed n. {j + 1}", 1.0, Mr, porte, 1000 * j)
+                )
         if a == "C":
             continue
         if mod["rischio_singolo_titolo"]:
             azioni = [i for i, (_, t) in enumerate(colonne) if t != BENCH and str(tipi.get(t, "")).upper() != "ETF"]
-            lavori.append(Lavoro(f"idio_{a}", "crolli", f"Analisi {a}: rischio sul singolo titolo", 1.2, Mr, porte, extra={"azioni": azioni}))
+            lavori.append(
+                Lavoro(f"idio_{a}", "crolli", f"Analisi {a}: rischio sul singolo titolo", 1.2, Mr, porte, extra={"azioni": azioni})
+            )
         if mod["stress_test"]:
             cat = {p: [proxy_info[colonne[i][1]]["categoria"] for i in c] for p, (c, _) in porte.items()}
             singolo = {}
@@ -338,9 +385,18 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
     tempi["simulazioni"] = time.time() - t1
     if stress_da_fare:  # gli stress test usano il valore mediano della simulazione principale: vengono dopo
         t1 = time.time()
-        lavori_s = [Lavoro(f"stress_{a}", "stress", f"Analisi {a}: stress test", 0.4, Mr, porte,
-                           extra={"sommario": risultati[f"base_{a}"], "categorie": cat, "singolo": singolo})
-                    for a, (Mr, porte, cat, singolo) in stress_da_fare.items()]
+        lavori_s = [
+            Lavoro(
+                f"stress_{a}",
+                "stress",
+                f"Analisi {a}: stress test",
+                0.4,
+                Mr,
+                porte,
+                extra={"sommario": risultati[f"base_{a}"], "categorie": cat, "singolo": singolo},
+            )
+            for a, (Mr, porte, cat, singolo) in stress_da_fare.items()
+        ]
         risultati.update(esegui_lavori(lavori_s, cfg, n, av, log))
         tempi["stress test"] = time.time() - t1
 
@@ -378,13 +434,29 @@ def prova_pesi(ris, satellite, quota_benchmark, n=2000):
     pesi = np.concatenate([wb * q, ws * (1 - q)])
     tieni = pesi > 0
     mix = {"Mix": (colonne[tieni], pesi[tieni] / pesi[tieni].sum())}
-    res = simula(Bootstrap(M, cfg["blocco_medio_giorni"]), mix, n, cfg["orizzonte_anni"], cfg["capitale_iniziale"],
-                 cfg["versamento_mensile"], cfg["costo_ribilanciamento"], cfg["orizzonti"], cfg["seed"], 252,
-                 rib_mesi=cfg["ribilanciamento_mesi"])
+    res = simula(
+        Bootstrap(M, cfg["blocco_medio_giorni"]),
+        mix,
+        n,
+        cfg["orizzonte_anni"],
+        cfg["capitale_iniziale"],
+        cfg["versamento_mensile"],
+        cfg["costo_ribilanciamento"],
+        cfg["orizzonti"],
+        cfg["seed"],
+        252,
+        rib_mesi=cfg["ribilanciamento_mesi"],
+    )
     s = metriche.sommario(res, cfg, n)
     o = s["orizzonti"][cfg["orizzonte_anni"]]["Mix"]
-    return {"valore_mediano": o["Valore mediano"], "p5": o["5° percentile"], "prob_perdita": o["Prob. sotto il versato"],
-            "mdd": o["Max drawdown mediano"], "vol": s["vol_sim"]["Mix"], "n": n}
+    return {
+        "valore_mediano": o["Valore mediano"],
+        "p5": o["5° percentile"],
+        "prob_perdita": o["Prob. sotto il versato"],
+        "mdd": o["Max drawdown mediano"],
+        "vol": s["vol_sim"]["Mix"],
+        "n": n,
+    }
 
 
 def confronto_seed(cfg, sommari, n):
@@ -395,7 +467,7 @@ def confronto_seed(cfg, sommari, n):
     for riga, chiave in (("Valore mediano", "mediana"), ("5° percentile", "p5")):
         df = pd.DataFrame({sd: s["orizzonti"][H].loc[riga] for sd, s in zip(seeds, sommari)}).T
         out[chiave] = df
-        out[f"scarto_{chiave}"] = ((df - df.mean()).abs().max() / df.mean())
+        out[f"scarto_{chiave}"] = (df - df.mean()).abs().max() / df.mean()
     out["sufficienti"] = bool((out["scarto_mediana"] <= out["soglia"]).all())
     return out
 
@@ -407,11 +479,15 @@ def varianti_sensibilita(cfg):
     if m == "storico":
         return []
     if m == "beta":
-        return [(f"premio di mercato {ra['premio_mercato'] * 50:.0f}%", dict(premio=ra["premio_mercato"] / 2)),
-                (f"premio di mercato {ra['premio_mercato'] * 150:.0f}%", dict(premio=ra["premio_mercato"] * 1.5))]
+        return [
+            (f"premio di mercato {ra['premio_mercato'] * 50:.0f}%", dict(premio=ra["premio_mercato"] / 2)),
+            (f"premio di mercato {ra['premio_mercato'] * 150:.0f}%", dict(premio=ra["premio_mercato"] * 1.5)),
+        ]
     if m == "uguale":
-        return [(f"{(ra['valore_uguale'] - 0.03) * 100:.0f}% per tutti", dict(uguale=ra["valore_uguale"] - 0.03)),
-                (f"{(ra['valore_uguale'] + 0.03) * 100:.0f}% per tutti", dict(uguale=ra["valore_uguale"] + 0.03))]
+        return [
+            (f"{(ra['valore_uguale'] - 0.03) * 100:.0f}% per tutti", dict(uguale=ra["valore_uguale"] - 0.03)),
+            (f"{(ra['valore_uguale'] + 0.03) * 100:.0f}% per tutti", dict(uguale=ra["valore_uguale"] + 0.03)),
+        ]
     return [("tutti 3 punti più bassi", dict(spost=-0.03)), ("tutti 3 punti più alti", dict(spost=0.03))]
 
 

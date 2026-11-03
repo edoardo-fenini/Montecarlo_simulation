@@ -1,4 +1,5 @@
 """Dati sintetici deterministici: un 'finto Yahoo Finance' che non usa internet (usato da test e non regressione)."""
+
 import numpy as np
 import pandas as pd
 
@@ -28,6 +29,5 @@ def crea_finto_yahoo():
         if t in dati:
             return dati[t][0].copy(), dict(dati[t][1])
         return pd.Series(dtype=float), {}
+
     return scarica
-
-

@@ -6,7 +6,9 @@ Un portafoglio è descritto da `nome` e `titoli`:
 Un "titolo" può anche essere il nome di un altro portafoglio o la parola `benchmark`:
 così si costruiscono portafogli misti (es. 80% benchmark + 20% Cyber security).
 """
+
 import copy
+
 import yaml
 
 BENCH = "BENCH"  # simbolo interno della serie del benchmark
@@ -52,9 +54,9 @@ DEFAULT = {
     "analisi": {"inizio_B": "2007-01-01", "inizio_C": "1999-01-04"},
     "rischio_singolo_titolo": {"probabilita_annua": 0.015, "perdita_min": 0.8, "perdita_max": 1.0},
     "ter_etf_default": 0.002,  # TER annuo usato per gli ETF dentro i portafogli se non indicato in «ter»
-    "ter": {},       # opzionale: TICKER_ETF: TER annuo (es. CSSPX.MI: 0.0007)
-    "settori": {},   # opzionale: TICKER: tech | finanza | altro  (per gli stress test)
-    "proxy": {},     # opzionale: TICKER: TICKER_PROXY            (per l'analisi C)
+    "ter": {},  # opzionale: TICKER_ETF: TER annuo (es. CSSPX.MI: 0.0007)
+    "settori": {},  # opzionale: TICKER: tech | finanza | altro  (per gli stress test)
+    "proxy": {},  # opzionale: TICKER: TICKER_PROXY            (per l'analisi C)
     "prezzi_da_file": {},  # opzionale: TICKER: {file: percorso.csv, valuta: EUR} (prezzi scaricati a mano)
     "portafogli": [],
 }
@@ -79,9 +81,9 @@ def carica(percorso):
         with open(percorso, encoding="utf-8") as f:
             dati = yaml.safe_load(f)
     except FileNotFoundError:
-        raise ErroreConfig(f"Non trovo il file di configurazione «{percorso}».")
+        raise ErroreConfig(f"Non trovo il file di configurazione «{percorso}».") from None
     except yaml.YAMLError as e:
-        raise ErroreConfig(f"Il file «{percorso}» non è un YAML valido: {e}")
+        raise ErroreConfig(f"Il file «{percorso}» non è un YAML valido: {e}") from None
     return prepara(dati)
 
 
@@ -90,7 +92,7 @@ def _numero(cfg, chiave, minimo=None, massimo=None, intero=False):
     try:
         v = int(v) if intero else float(v)
     except (TypeError, ValueError):
-        raise ErroreConfig(f"«{chiave}» deve essere un numero (trovato: {cfg[chiave]!r}).")
+        raise ErroreConfig(f"«{chiave}» deve essere un numero (trovato: {cfg[chiave]!r}).") from None
     if minimo is not None and v < minimo:
         raise ErroreConfig(f"«{chiave}» deve essere almeno {minimo} (trovato: {v}).")
     if massimo is not None and v > massimo:
@@ -113,11 +115,13 @@ def _pesi(nome, titoli):
     if all(v is None or v == "" for v in valori):
         return {c: 1 / len(chiavi) for c in chiavi}
     if any(v is None or v == "" for v in valori):
-        raise ErroreConfig(f"Nel portafoglio «{nome}» alcuni titoli hanno il peso e altri no: indica tutti i pesi oppure nessuno (= pesi uguali).")
+        raise ErroreConfig(
+            f"Nel portafoglio «{nome}» alcuni titoli hanno il peso e altri no: indica tutti i pesi oppure nessuno (= pesi uguali)."
+        )
     try:
         valori = [float(v) for v in valori]
     except (TypeError, ValueError):
-        raise ErroreConfig(f"Nel portafoglio «{nome}» c'è un peso che non è un numero.")
+        raise ErroreConfig(f"Nel portafoglio «{nome}» c'è un peso che non è un numero.") from None
     if any(v < 0 for v in valori):
         raise ErroreConfig(f"Nel portafoglio «{nome}» c'è un peso negativo.")
     tot = sum(valori)
@@ -151,7 +155,7 @@ def prepara(dati):
     try:
         inter = sorted({int(x) for x in inter})
     except (TypeError, ValueError):
-        raise ErroreConfig("«orizzonti_intermedi» deve essere una lista di anni, es. [5, 10].")
+        raise ErroreConfig("«orizzonti_intermedi» deve essere una lista di anni, es. [5, 10].") from None
     cfg["orizzonti"] = [h for h in inter if 0 < h < cfg["orizzonte_anni"]] + [cfg["orizzonte_anni"]]
     if cfg["ribilanciamento"] not in RIBILANCIAMENTO_MESI:
         raise ErroreConfig(f"«ribilanciamento» deve essere uno tra: {', '.join(RIBILANCIAMENTO_MESI)}.")
@@ -164,7 +168,7 @@ def prepara(dati):
         try:
             ra[k] = float(ra[k])
         except (TypeError, ValueError):
-            raise ErroreConfig(f"«rendimento_atteso.{k}» deve essere un numero (es. 0.04 per il 4%).")
+            raise ErroreConfig(f"«rendimento_atteso.{k}» deve essere un numero (es. 0.04 per il 4%).") from None
         if abs(ra[k]) > 0.5:
             raise ErroreConfig(f"«rendimento_atteso.{k}» = {ra[k]}: scrivilo come frazione (0.04 = 4%).")
 
@@ -198,13 +202,13 @@ def prepara(dati):
             ra["personalizzato"] = {n: float(pers[n.lower()]) for n in nomi}
             ra["personalizzato"][b["nome"]] = float(pers.get("benchmark", pers.get(b["nome"].lower(), ra["valore_uguale"])))
         except (TypeError, ValueError):
-            raise ErroreConfig("Metodo «personalizzato»: i rendimenti devono essere numeri (es. 0.05 per il 5%).")
+            raise ErroreConfig("Metodo «personalizzato»: i rendimenti devono essere numeri (es. 0.05 per il 5%).") from None
 
     vc = cfg["verifica_convergenza"]
     try:
         vc["numero_seed"], vc["soglia"] = int(vc["numero_seed"]), float(vc["soglia"])
     except (TypeError, ValueError):
-        raise ErroreConfig("«verifica_convergenza»: numero_seed deve essere un intero e soglia un numero (es. 0.02).")
+        raise ErroreConfig("«verifica_convergenza»: numero_seed deve essere un intero e soglia un numero (es. 0.02).") from None
     if not 2 <= vc["numero_seed"] <= 10:
         raise ErroreConfig("«verifica_convergenza.numero_seed» deve essere tra 2 e 10.")
 
@@ -217,7 +221,7 @@ def prepara(dati):
         cfg["ter_etf_default"] = float(cfg["ter_etf_default"])
         cfg["ter"] = {str(k).upper(): float(v) for k, v in (cfg.get("ter") or {}).items()}
     except (TypeError, ValueError):
-        raise ErroreConfig("I TER degli ETF devono essere numeri (es. 0.002 per lo 0,20%).")
+        raise ErroreConfig("I TER degli ETF devono essere numeri (es. 0.002 per lo 0,20%).") from None
     if cfg["ter_etf_default"] < 0 or cfg["ter_etf_default"] > 0.03 or any(v < 0 or v > 0.03 for v in cfg["ter"].values()):
         raise ErroreConfig("I TER degli ETF vanno scritti come frazione (0.002 = 0,20%) e devono essere tra 0 e 0.03.")
     pf = cfg.get("prezzi_da_file") or {}

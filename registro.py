@@ -1,4 +1,5 @@
 """File di log (log.txt nella cartella del programma): utile per segnalare un problema."""
+
 from __future__ import annotations
 
 import logging

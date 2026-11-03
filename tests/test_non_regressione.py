@@ -1,4 +1,5 @@
 """I numeri chiave del report non devono cambiare (configurazione e seed fissi, dati sintetici)."""
+
 import non_regressione as NR
 
 
@@ -14,9 +15,12 @@ def test_parallelo_da_gli_stessi_numeri():
     """Le simulazioni indipendenti eseguite in processi separati danno esattamente gli stessi risultati."""
     import copy
     import tempfile
+
+    from dati_finti import crea_finto_yahoo
+
     import analisi
     import configurazione as C
-    from dati_finti import crea_finto_yahoo
+
     cfg = copy.deepcopy(NR.CONFIG)
     cfg["parallelo"] = "si"
     with tempfile.TemporaryDirectory() as d:

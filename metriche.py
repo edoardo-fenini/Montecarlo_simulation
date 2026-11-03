@@ -1,11 +1,21 @@
 """Metriche dei risultati simulati, statistiche storiche e stress test."""
+
 import numpy as np
 import pandas as pd
+
 from simula import simula
 
-RIGHE_ORIZZONTE = ["Totale versato", "Valore mediano", "5° percentile", "95° percentile", "Prob. sotto il versato",
-                   "Max drawdown mediano", "Max drawdown peggiore (95%)",
-                   "Tempo sott'acqua max, mediano (anni)", "Tempo sott'acqua max, peggiore 95% (anni)"]
+RIGHE_ORIZZONTE = [
+    "Totale versato",
+    "Valore mediano",
+    "5° percentile",
+    "95° percentile",
+    "Prob. sotto il versato",
+    "Max drawdown mediano",
+    "Max drawdown peggiore (95%)",
+    "Tempo sott'acqua max, mediano (anni)",
+    "Tempo sott'acqua max, peggiore 95% (anni)",
+]
 
 
 def versato(capitale, versamento, mese):
@@ -18,17 +28,39 @@ def sommario(res, cfg, n_sim):
     cap, ver = cfg["capitale_iniziale"], cfg["versamento_mensile"]
     nomi = [k for k in res if not k.startswith("_")]
     mesi = res[nomi[0]]["mensile"].shape[1] - 1
-    s = {"nomi": nomi, "n_sim": n_sim, "n_effettivi": int(res[nomi[0]]["mensile"].shape[0]), "orizzonti": {}, "bande": {}, "mdd_fin": {}, "vol_sim": {}, "var_es": {},
-         "versato": np.array([versato(cap, ver, j) for j in range(mesi + 1)])}
+    s = {
+        "nomi": nomi,
+        "n_sim": n_sim,
+        "n_effettivi": int(res[nomi[0]]["mensile"].shape[0]),
+        "orizzonti": {},
+        "bande": {},
+        "mdd_fin": {},
+        "vol_sim": {},
+        "var_es": {},
+        "versato": np.array([versato(cap, ver, j) for j in range(mesi + 1)]),
+    }
     for h in cfg["orizzonti"]:
         j, tot = h * 12, versato(cap, ver, h * 12)
         righe = {}
         for k in nomi:
             v = res[k]["mensile"][:, j].astype(float)
             mdd, uw = res[k]["mdd"][h].astype(float), res[k]["uw"][h].astype(float)
-            righe[k] = dict(zip(RIGHE_ORIZZONTE, [
-                tot, np.median(v), np.percentile(v, 5), np.percentile(v, 95), float((v < tot).mean()),
-                np.median(mdd), np.percentile(mdd, 5), np.median(uw), np.percentile(uw, 95)]))
+            righe[k] = dict(
+                zip(
+                    RIGHE_ORIZZONTE,
+                    [
+                        tot,
+                        np.median(v),
+                        np.percentile(v, 5),
+                        np.percentile(v, 95),
+                        float((v < tot).mean()),
+                        np.median(mdd),
+                        np.percentile(mdd, 5),
+                        np.median(uw),
+                        np.percentile(uw, 95),
+                    ],
+                )
+            )
         s["orizzonti"][h] = pd.DataFrame(righe)
     tot1 = versato(cap, ver, 12)
     for k in nomi:
@@ -51,7 +83,7 @@ def serie_portafoglio(R, pesi, rib_giorni=252, costo=0.0):
     passo = rib_giorni if rib_giorni else len(R)
     h, out = w.copy(), []
     for i in range(0, len(R), passo):
-        G = np.cumprod(1 + R[i:i + passo], axis=0) * h
+        G = np.cumprod(1 + R[i : i + passo], axis=0) * h
         v = G.sum(1)
         out.append(v / np.concatenate([[h.sum()], v[:-1]]) - 1)
         h = G[-1]
@@ -63,8 +95,11 @@ def serie_portafoglio(R, pesi, rib_giorni=252, costo=0.0):
 
 def stat_storiche(r):
     v = np.cumprod(1 + np.asarray(r))
-    return {"vol": float(np.std(r, ddof=1) * np.sqrt(252)), "mdd": float((v / np.maximum.accumulate(v) - 1).min()),
-            "rend_annuo": float(v[-1] ** (252 / len(v)) - 1)}
+    return {
+        "vol": float(np.std(r, ddof=1) * np.sqrt(252)),
+        "mdd": float((v / np.maximum.accumulate(v) - 1).min()),
+        "rend_annuo": float(v[-1] ** (252 / len(v)) - 1),
+    }
 
 
 def contributo_rischio(R, w):
@@ -106,8 +141,15 @@ def stress_test(gen, porte, cfg, somm, categorie, peso_singolo, n_rec=2000, anni
 
     def crescita(k):
         if k not in percorsi:
-            args = dict(n=n_rec, anni=anni_rec, costo_rb=cfg["costo_ribilanciamento"], checkpoint_anni=[anni_rec],
-                        seed=cfg["seed"] + 99, giorni=252, rib_mesi=cfg["ribilanciamento_mesi"])
+            args = dict(
+                n=n_rec,
+                anni=anni_rec,
+                costo_rb=cfg["costo_ribilanciamento"],
+                checkpoint_anni=[anni_rec],
+                seed=cfg["seed"] + 99,
+                giorni=252,
+                rib_mesi=cfg["ribilanciamento_mesi"],
+            )
             G = simula(gen, {k: porte[k]}, capitale=1.0, versamento=0, **args)[k]["mensile"].astype(float)
             K = simula(gen, {k: porte[k]}, capitale=1e-9, versamento=ver, **args)[k]["mensile"].astype(float) if ver else 0.0
             percorsi[k] = (G, K)
@@ -116,18 +158,32 @@ def stress_test(gen, porte, cfg, somm, categorie, peso_singolo, n_rec=2000, anni
     righe = []
     for i, (k, sc, v_mid, perdita) in enumerate(casi):
         v_dopo = v_mid * (1 + perdita)
-        r = {"Portafoglio": k, "Scenario": sc, "Valore prima dello shock": v_mid, "Valore dopo lo shock": v_dopo,
-             "Perdita (€)": v_mid - v_dopo, "Perdita (%)": -perdita, "Totale versato": tgt}
+        r = {
+            "Portafoglio": k,
+            "Scenario": sc,
+            "Valore prima dello shock": v_mid,
+            "Valore dopo lo shock": v_dopo,
+            "Perdita (€)": v_mid - v_dopo,
+            "Perdita (%)": -perdita,
+            "Totale versato": tgt,
+        }
         if v_dopo >= tgt:
-            r.update({"Anni per tornare al versato (mediana)": 0.0, "Prob. di tornarci entro 10 anni": 1.0, "Scende sotto il versato": False})
+            r.update(
+                {"Anni per tornare al versato (mediana)": 0.0, "Prob. di tornarci entro 10 anni": 1.0, "Scende sotto il versato": False}
+            )
         else:
             G, K = crescita(k)
             m = v_dopo * G + K
             obiettivo = tgt + ver * np.arange(m.shape[1])
             hit = m >= obiettivo
-            primo = np.where(hit.any(1), hit.argmax(1), 10 ** 6)
-            r.update({"Anni per tornare al versato (mediana)": float(np.median(primo) / 12) if (primo < 10 ** 6).mean() > 0.5 else np.inf,
-                      "Prob. di tornarci entro 10 anni": float((primo <= 120).mean()), "Scende sotto il versato": True})
+            primo = np.where(hit.any(1), hit.argmax(1), 10**6)
+            r.update(
+                {
+                    "Anni per tornare al versato (mediana)": float(np.median(primo) / 12) if (primo < 10**6).mean() > 0.5 else np.inf,
+                    "Prob. di tornarci entro 10 anni": float((primo <= 120).mean()),
+                    "Scende sotto il versato": True,
+                }
+            )
         righe.append(r)
         if progresso:
             progresso((i + 1) / len(casi))
