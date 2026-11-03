@@ -69,7 +69,7 @@ Nella **barra a sinistra**:
   - `uguale`: stesso rendimento per tutti (es. 6%). Utile per confrontare solo il rischio.
   - `storico`: i rendimenti del passato. Attenzione: proietta il passato nel futuro ed è troppo ottimista se scegli titoli che sono già andati bene.
   - `personalizzato`: scegli tu il rendimento di ogni portafoglio.
-- **Moduli**: stress test e rischio sul singolo titolo sono attivi. Il confronto tra modelli e l'analisi dal 1999 con proxy sono più lenti.
+- **Moduli**: stress test, rischio sul singolo titolo e «Le simulazioni bastano?» sono attivi. L'ultimo ripete il calcolo con 3 seed per controllare che il numero di simulazioni sia sufficiente. Il confronto tra modelli e l'analisi dal 1999 con proxy sono più lenti.
 - **Numero di simulazioni**: 10.000 richiedono circa 1-3 minuti. Per una prova veloce usa 1.000.
 - Premi **▶ Avvia simulazione**.
 
@@ -142,6 +142,13 @@ portafogli:
 
 # Facoltativo: settore per gli stress test (tech | finanza | altro), se quello automatico non ti convince
 # settori: {AMZN: tech}
+
+# Facoltativo: costo annuo (TER) degli ETF usati come titoli. Se non lo indichi si usa ter_etf_default (0,20%).
+# ter: {CSSPX.MI: 0.0007}
+# ter_etf_default: 0.002
+
+# Verifica "Le simulazioni bastano?" (attiva di default): ripete il calcolo con 3 seed diversi
+# verifica_convergenza: {numero_seed: 3, soglia: 0.02}
 ```
 
 Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%). Prima della sua nascita (2009) si usa l'indice MSCI World. Per cambiarlo aggiungi una sezione `benchmark:` come nel file di esempio.

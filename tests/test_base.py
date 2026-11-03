@@ -61,3 +61,19 @@ def test_ribilanciamento_riporta_ai_pesi_target():
     assert np.allclose(ribilancia(H, w, 0.0).sum(1), H.sum(1))        # senza costi non si perde nulla
     assert (ribilancia(H, w, 0.001).sum(1) < H.sum(1)).all()          # con costi sì
     assert np.allclose(ribilancia(np.array([[100.0, 100.0]]), np.array([.5, .5]), 0.001), 100.0)  # già a target: nessun costo
+
+
+def test_numero_di_percorsi_generati():
+    """Il motore genera esattamente i percorsi richiesti, anche quando non sono multipli del blocco di calcolo."""
+    M = rand_M()
+    p = {"a": (np.arange(3), np.full(3, 1 / 3)), "b": (np.array([0]), np.array([1.0]))}
+    for n, chunk in ((1000, 1000), (2500, 1000), (777, 300)):
+        res = simula(Bootstrap(M, 20), p, n, ANNI, CAP, 0, 0.0, [1, 2], 3, 252, chunk=chunk)
+        assert res["_n"] == n
+        for k in p:
+            assert res[k]["mensile"].shape == (n, ANNI * 12 + 1)
+            assert res[k]["mdd"][2].shape == (n,)
+    g = Bootstrap(M, 20)
+    g.prepara(50, ANNI * 252, np.random.default_rng(0))
+    assert g.idx.shape == (50, ANNI * 252)            # percorsi x giorni
+    assert g.blocco(0).shape == (50, GG, 3)           # percorsi x giorni del mese x titoli

@@ -49,7 +49,19 @@ def rendimento_colonne(cfg, colonne, metodo=None, premio=None, uguale=None, spos
     return np.array(out)
 
 
-def spiega_rendimenti(cfg, beta):
+def ter_titolo(cfg, t, tipi=None):
+    """Costo annuo (TER) sottratto con la ricentratura: quello del benchmark, quello indicato in
+    configurazione per gli ETF, oppure il default per gli ETF senza TER noto. Le azioni non hanno TER."""
+    if t == BENCH:
+        return cfg["benchmark"]["ter"]
+    if t in cfg["ter"]:
+        return cfg["ter"][t]
+    if str((tipi or {}).get(t, "")).upper() == "ETF":
+        return cfg["ter_etf_default"]
+    return 0.0
+
+
+def spiega_rendimenti(cfg, beta, tipi=None):
     """Tabella: per portafoglio beta e rendimento atteso annuo (metodo scelto)."""
     ra, comp = cfg["rendimento_atteso"], cfg["composizione"]
     righe = {}
@@ -63,7 +75,7 @@ def spiega_rendimenti(cfg, beta):
             mu = ra["personalizzato"][p]
         else:
             mu = np.nan
-        ter = cfg["benchmark"]["ter"] * pesi.get(BENCH, 0.0)
+        ter = sum(w * ter_titolo(cfg, t, tipi) for t, w in pesi.items()) if ra["metodo"] != "storico" else 0.0
         righe[p] = {"Beta verso il benchmark": bp, "Rendimento atteso annuo": mu, "di cui costi ETF (TER)": ter}
     return pd.DataFrame(righe)
 
@@ -90,10 +102,12 @@ def matrice(cfg, R):
     return M[ok], porte, colonne, R.index[ok]
 
 
-def prepara_M(cfg, M, colonne, mu):
+def prepara_M(cfg, M, colonne, mu, tipi=None):
+    """Ricentra i rendimenti sul rendimento atteso `mu` e sottrae il TER di benchmark ed ETF.
+    Con il metodo storico (mu None) i dati restano come sono: i prezzi storici degli ETF sono già al netto del TER."""
     if mu is None:
         return M
-    ter = np.array([cfg["benchmark"]["ter"] if t == BENCH else 0.0 for _, t in colonne])
+    ter = np.array([ter_titolo(cfg, t, tipi) for _, t in colonne])
     return ricentra(M, mu, ter, 252)
 
 
@@ -155,9 +169,13 @@ class Avanzamento:
         return f
 
 
-def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D.CARTELLA_CACHE, scaricatore=None, n=None):
+def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D.CARTELLA_CACHE, scaricatore=None, n=None,
+           solo=None, seed=None):
+    """solo: lista di analisi da fare (es. ["A"]); seed: sostituisce quello della configurazione."""
     t0 = time.time()
     n = n or cfg["n_simulazioni"]
+    if seed is not None:
+        cfg = {**cfg, "seed": int(seed)}
     mod = cfg["moduli"]
     if progresso:
         progresso(0.0, "Scarico/leggo i dati...")
@@ -172,12 +190,16 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
     beta = stima_beta(R)
     log("2/4  Periodi di analisi")
     per, note = periodi(cfg, R, proxy_info, arch, log)
-    anal = list(per)
+    anal = [x for x in per if solo is None or x in solo]
+    n_seed = int(cfg["verifica_convergenza"]["numero_seed"]) if mod.get("verifica_convergenza") else 1
 
     # piano di lavoro (per la barra di avanzamento)
     pesi = {}
     for a in anal:
         pesi[f"base_{a}"] = 1.0
+        if a == "A":
+            for j in range(1, n_seed):
+                pesi[f"conv{j}"] = 1.0
         if mod["rischio_singolo_titolo"] and a != "C":
             pesi[f"idio_{a}"] = 1.0
         if mod["stress_test"] and a != "C":
@@ -192,8 +214,9 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
     tipi = dati["info"]["tipo"].to_dict()
     ris = {"cfg": cfg, "n": n, "dati_info": dati["info"], "avvisi": dati["avvisi"], "estremi": dati["estremi"],
            "ultimo_dato": dati["ultimo_dato"], "nomi": list(cfg["composizione"]), "bench_nome": cfg["benchmark"]["nome"],
-           "beta": beta, "rend_attesi": spiega_rendimenti(cfg, beta), "proxy_info": proxy_info, "note": note,
-           "periodi": {}, "storico": {}, "sim": {}, "stress": {}, "idio": {}, "modelli": {}, "sensibilita": {}}
+           "beta": beta, "rend_attesi": spiega_rendimenti(cfg, beta, tipi), "proxy_info": proxy_info, "note": note,
+           "periodi": {}, "storico": {}, "sim": {}, "stress": {}, "idio": {}, "modelli": {}, "sensibilita": {},
+           "convergenza": None}
     rib, costo = cfg["ribilanciamento_mesi"], cfg["costo_ribilanciamento"]
 
     def corri(gen, porte, chiave, msg, seed_extra=0):
@@ -209,9 +232,14 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
         ris["periodi"][a] = (idx[0], idx[-1], len(idx))
         ris["storico"][a] = storico(cfg, M, porte, colonne, idx)
         mu = rendimento_colonne(cfg, colonne, beta=beta)
-        Mr = prepara_M(cfg, M, colonne, mu)
+        Mr = prepara_M(cfg, M, colonne, mu, tipi)
         b = cfg["blocco_medio_giorni"]
         ris["sim"][a] = corri(Bootstrap(Mr, b), porte, f"base_{a}", f"Analisi {a}: simulazione principale")
+        if a == "A" and n_seed > 1:
+            # stessa simulazione con seed diversi: se i risultati cambiano poco, le simulazioni bastano
+            somm = [ris["sim"][a]] + [corri(Bootstrap(Mr, b), porte, f"conv{j}", f"Verifica: stessa simulazione con il seed n. {j + 1}",
+                                             seed_extra=1000 * j) for j in range(1, n_seed)]
+            ris["convergenza"] = confronto_seed(cfg, somm, n)
         if a == "C":
             continue
         azioni = [i for i, (_, t) in enumerate(colonne) if t != BENCH and str(tipi.get(t, "")).upper() != "ETF"]
@@ -234,7 +262,7 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
                 "Student-t multivariata": corri(StudentT(Mr, 5), porte, f"t_{a}", f"Analisi {a}: modello Student-t"),
                 "GARCH(1,1) + residui bootstrap": corri(Garch(Mr), porte, f"garch_{a}", f"Analisi {a}: modello GARCH"),
             }
-            ris["sensibilita"][a] = sensibilita(cfg, M, porte, colonne, beta, corri, a)
+            ris["sensibilita"][a] = sensibilita(cfg, M, porte, colonne, beta, corri, a, tipi)
     if progresso:
         progresso(1.0, "Completato")
     ris["durata"] = time.time() - t0
@@ -242,7 +270,20 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
     return ris
 
 
-def sensibilita(cfg, M, porte, colonne, beta, corri, a):
+def confronto_seed(cfg, sommari, n):
+    """Mediana e 5° percentile a fine orizzonte per ogni seed, e scarto massimo dalla media in %."""
+    H = cfg["orizzonte_anni"]
+    seeds = [cfg["seed"] + 1000 * j for j in range(len(sommari))]
+    out = {"n": n, "seed": seeds, "soglia": cfg["verifica_convergenza"]["soglia"], "orizzonte": H}
+    for riga, chiave in (("Valore mediano", "mediana"), ("5° percentile", "p5")):
+        df = pd.DataFrame({sd: s["orizzonti"][H].loc[riga] for sd, s in zip(seeds, sommari)}).T
+        out[chiave] = df
+        out[f"scarto_{chiave}"] = ((df - df.mean()).abs().max() / df.mean())
+    out["sufficienti"] = bool((out["scarto_mediana"] <= out["soglia"]).all())
+    return out
+
+
+def sensibilita(cfg, M, porte, colonne, beta, corri, a, tipi=None):
     """Due varianti del rendimento atteso, una più bassa e una più alta di quella scelta."""
     ra = cfg["rendimento_atteso"]
     m = ra["metodo"]
@@ -259,7 +300,7 @@ def sensibilita(cfg, M, porte, colonne, beta, corri, a):
     out = []
     for j, (nome, kw) in enumerate(var):
         mu = rendimento_colonne(cfg, colonne, beta=beta, **kw)
-        out.append((nome, corri(Bootstrap(prepara_M(cfg, M, colonne, mu), cfg["blocco_medio_giorni"]), porte,
+        out.append((nome, corri(Bootstrap(prepara_M(cfg, M, colonne, mu, tipi), cfg["blocco_medio_giorni"]), porte,
                                 f"sens{j}_{a}", f"Analisi {a}: sensibilità ({nome})")))
     return out
 

@@ -188,6 +188,9 @@ def simula(gen, porte, n, anni, capitale, versamento, costo_rb, checkpoint_anni,
         fatti += nn
         if progresso:
             progresso(fatti / n)
+    # controllo: i percorsi simulati devono essere esattamente quelli richiesti
+    assert fatti == n and all(out[k]["mensile"].shape[0] == n for k in nomi), "numero di percorsi diverso da quello richiesto"
+    out["_n"] = fatti
     mean = s1 / cnt
     cov = cross / cnt - np.outer(mean, mean)
     sd = np.sqrt(np.diag(cov))

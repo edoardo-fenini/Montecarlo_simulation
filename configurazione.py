@@ -45,9 +45,13 @@ DEFAULT = {
         "rischio_singolo_titolo": True,
         "confronto_modelli": False,
         "analisi_C": False,
+        "verifica_convergenza": True,
     },
+    "verifica_convergenza": {"numero_seed": 3, "soglia": 0.02},  # seed totali (incluso quello principale)
     "analisi": {"inizio_B": "2007-01-01", "inizio_C": "1999-01-04"},
     "rischio_singolo_titolo": {"probabilita_annua": 0.015, "perdita_min": 0.8, "perdita_max": 1.0},
+    "ter_etf_default": 0.002,  # TER annuo usato per gli ETF dentro i portafogli se non indicato in «ter»
+    "ter": {},       # opzionale: TICKER_ETF: TER annuo (es. CSSPX.MI: 0.0007)
     "settori": {},   # opzionale: TICKER: tech | finanza | altro  (per gli stress test)
     "proxy": {},     # opzionale: TICKER: TICKER_PROXY            (per l'analisi C)
     "portafogli": [],
@@ -194,11 +198,26 @@ def prepara(dati):
         except (TypeError, ValueError):
             raise ErroreConfig("Metodo «personalizzato»: i rendimenti devono essere numeri (es. 0.05 per il 5%).")
 
+    vc = cfg["verifica_convergenza"]
+    try:
+        vc["numero_seed"], vc["soglia"] = int(vc["numero_seed"]), float(vc["soglia"])
+    except (TypeError, ValueError):
+        raise ErroreConfig("«verifica_convergenza»: numero_seed deve essere un intero e soglia un numero (es. 0.02).")
+    if not 2 <= vc["numero_seed"] <= 10:
+        raise ErroreConfig("«verifica_convergenza.numero_seed» deve essere tra 2 e 10.")
+
     cfg["composizione"] = appiattisci(cfg)
     cfg["settori"] = {str(k).upper(): str(v).lower() for k, v in (cfg.get("settori") or {}).items()}
     for t, s in cfg["settori"].items():
         if s not in ("tech", "finanza", "altro"):
             raise ErroreConfig(f"Settore di {t}: usa tech, finanza oppure altro (trovato «{s}»).")
+    try:
+        cfg["ter_etf_default"] = float(cfg["ter_etf_default"])
+        cfg["ter"] = {str(k).upper(): float(v) for k, v in (cfg.get("ter") or {}).items()}
+    except (TypeError, ValueError):
+        raise ErroreConfig("I TER degli ETF devono essere numeri (es. 0.002 per lo 0,20%).")
+    if cfg["ter_etf_default"] < 0 or cfg["ter_etf_default"] > 0.03 or any(v < 0 or v > 0.03 for v in cfg["ter"].values()):
+        raise ErroreConfig("I TER degli ETF vanno scritti come frazione (0.002 = 0,20%) e devono essere tra 0 e 0.03.")
     cfg["proxy"] = {str(k).upper(): str(v).upper() for k, v in (cfg.get("proxy") or {}).items()}
     return cfg
 

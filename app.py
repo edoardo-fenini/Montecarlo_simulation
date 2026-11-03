@@ -25,6 +25,7 @@ ETICHETTE_MODULI = {
     "rischio_singolo_titolo": "Rischio sul singolo titolo (crollo improvviso)",
     "confronto_modelli": "Confronto tra modelli e sensibilità (lento: tempo × 2,5 circa)",
     "analisi_C": "Analisi C: storia dal 1999 con proxy di settore",
+    "verifica_convergenza": "Le simulazioni bastano? (ripete il calcolo con 3 seed: tempo +50% circa)",
 }
 
 st.set_page_config(page_title="Confronto portafogli", page_icon="📊", layout="wide")

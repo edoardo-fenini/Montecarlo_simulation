@@ -8,11 +8,29 @@
 - [x] 5. README passo passo, GitHub Action `.github/workflows/zip-release.yml` (zip allegato alla release), esempio `esempi/2026-11-03_tre_portafogli_metodo_beta/`
 - [ ] Release v1.0.0: da creare dal sito di GitHub (Claude non ha lo strumento per creare release; istruzioni nel README)
 
+## Chiusura del progetto (seconda richiesta)
+- [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
+      modulo «Le simulazioni bastano?» (attivo, 3 seed); test sul numero di percorsi.
+- [x] 4. TER sottratto anche agli ETF usati come titoli (`ter:` per ticker, `ter_etf_default` 0,20%).
+- [ ] 2. Prova su Mac reale con GitHub Actions (`.github/workflows/prova-mac.yml`)
+- [ ] 3. Ramo main
+- [ ] 5. Release v1.0.0
+- [ ] 6. Riepilogo finale
+
+### Risultati della convergenza (metodo beta, analisi A, 15 anni)
+- Array: storia 1.342 giorni x 20 colonne; per ogni blocco di calcolo indici 1.000 percorsi x 3.780 giorni,
+  rendimenti di un mese 1.000 x 21 x 20. Percorsi effettivi = richiesti (1.000, 5.000, 10.000, 20.000).
+- 10.000 simulazioni, 5 seed: mediana fino a ±3,2% (Big tech USA), 5° percentile fino a ±3,6% -> sopra la soglia ±2%.
+- 20.000 simulazioni, 5 seed: mediana entro ±1,7% per tutti, 5° percentile entro ±2,0%.
+- **Proposta: 20.000 simulazioni.** Tempo dell'esecuzione completa di default (A+B, stress, rischio singolo titolo,
+  verifica con 3 seed) su questa macchina a 4 core: 10.000 = circa 2,5 minuti; 20.000 = circa 5 minuti.
+  Il default resta 10.000 finché l'utente non decide.
+
 ## Scelte fatte (default ragionevoli)
 - Rendimento atteso = media aritmetica annua (1 € vale in media 1+r dopo un anno), come nell'analisi iniziale.
 - Metodo `beta`: beta stimato su rendimenti **settimanali** in EUR rispetto al benchmark (le borse chiudono a orari diversi:
   con i giornalieri il beta dei titoli USA verso un ETF quotato ad Amsterdam risulterebbe troppo basso). Solo dati reali.
-- Il TER del benchmark è sottratto dopo la ricentratura; per altri ETF usati come titoli non viene sottratto (i loro prezzi storici sono già al netto, ma con la ricentratura il TER non è riconosciuto: limite noto).
+- Con la ricentratura si sottrae il TER del benchmark e degli ETF usati come titoli (valore in `ter:` o `ter_etf_default`, 0,20%). Con il metodo storico no: i prezzi storici sono già al netto.
 - Calendario: giorni in cui almeno metà dei titoli quotati ha scambiato (gestisce borse diverse e festività).
 - Valute: cambio giornaliero Yahoo `EURxxx=X`; per il dollaro prima del 2003 cambio FRED. Pence (GBp) divisi per 100.
 - Settore (stress test e proxy analisi C): indicato in configurazione → settore Yahoo (se disponibile) → ETF di settore USA più correlato.

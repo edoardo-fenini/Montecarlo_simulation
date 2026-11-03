@@ -245,6 +245,8 @@ def sintesi(ris):
             f += " In almeno uno scenario non tornerebbero al versato entro 10 anni in più di metà dei casi: " + ", ".join(f"«{k}»" for k in lenti) + "."
         F.append(f)
     F += conclusioni_stabili(ris, breve=True)
+    if ris.get("convergenza"):
+        F.append(testo_convergenza(ris))
     F.append("Questa analisi non è consulenza finanziaria e non contiene indicazioni di acquisto o vendita.")
     return F
 
@@ -281,6 +283,40 @@ def conclusioni_stabili(ris, breve=False):
     return out
 
 
+def testo_convergenza(ris):
+    """Frase in italiano semplice sull'esito della verifica con seed diversi."""
+    c = ris.get("convergenza")
+    if not c:
+        return None
+    sm = c["scarto_mediana"]
+    peggiore = sm.idxmax()
+    if c["sufficienti"]:
+        return (f"Le simulazioni bastano: ripetendo il calcolo con {len(c['seed'])} seed diversi la mediana a {c['orizzonte']} anni "
+                f"cambia al massimo del ±{num(sm.max() * 100)}% (soglia ±{num(c['soglia'] * 100, 0)}%).")
+    return (f"Le simulazioni bastano solo in parte: ripetendo il calcolo con {len(c['seed'])} seed diversi la mediana di «{peggiore}» "
+            f"cambia fino al ±{num(sm.max() * 100)}% (soglia ±{num(c['soglia'] * 100, 0)}%). Le differenze tra portafogli più grandi di "
+            f"qualche punto percentuale restano affidabili; per numeri più stabili aumenta le simulazioni (es. {num_it(2 * c['n'])}).")
+
+
+def sezione_convergenza(ris):
+    c = ris.get("convergenza")
+    if not c:
+        return []
+    H, nomi = c["orizzonte"], list(c["mediana"].columns)
+    righe = []
+    for k in nomi:
+        ok = c["scarto_mediana"][k] <= c["soglia"]
+        righe.append([esc(k)] + [eur(c["mediana"].loc[sd, k]) for sd in c["seed"]] +
+                     [f"±{num(c['scarto_mediana'][k] * 100)}%", f"±{num(c['scarto_p5'][k] * 100)}%", "sì" if ok else "<b>no</b>"])
+    return [("h3", "Le simulazioni bastano?"),
+            ("nota", f"Ho ripetuto la simulazione principale (analisi A) con {len(c['seed'])} seed diversi, cioè con altre estrazioni casuali, "
+                     f"usando {num_it(c['n'])} simulazioni ciascuna. Se i risultati cambiano poco, il numero di simulazioni è sufficiente. "
+                     f"Soglia indicativa: mediana entro ±{num(c['soglia'] * 100, 0)}% tra i seed. Il 5° percentile (i casi peggiori) è "
+                     "per natura più instabile, perché si basa su pochi percorsi."),
+            T([f"Mediana, seed {sd}" for sd in c["seed"]] + ["Scarto max mediana", "Scarto max 5° perc.", "Entro la soglia?"], righe),
+            ("box", [testo_convergenza(ris)])]
+
+
 def sezioni(ris):
     """Ritorna {scheda: [blocchi]}."""
     cfg, n, nomi = ris["cfg"], ris["n"], ris["nomi"]
@@ -300,6 +336,9 @@ def sezioni(ris):
               pct(ra.loc["di cui costi ETF (TER)", k], 2)] for k in nomi]
     B.append(("h3", "Rendimento atteso usato"))
     B.append(T(["Beta", "Rendimento atteso annuo", "Costo ETF sottratto"], righe))
+    if cfg["rendimento_atteso"]["metodo"] != "storico":
+        B.append(("nota", f"Il costo annuo (TER) è sottratto al benchmark ({pct(cfg['benchmark']['ter'], 2)}) e agli ETF usati come titoli "
+                          f"(valore indicato in configurazione o, se non indicato, {pct(cfg['ter_etf_default'], 2)}). Le azioni non hanno TER."))
     B.append(("h3", "Come leggere i termini"))
     B.append(("box", [
         "<b>Percentile</b>: il 5° percentile è il valore sotto cui finisce il 5% dei casi peggiori; il 95° quello sopra cui sta il 5% dei migliori.",
@@ -476,6 +515,7 @@ def sezioni(ris):
         B.append(("p", "Nessun modulo di robustezza attivato (confronto tra modelli, analisi C)."))
         if ris["idio"] or len(anal) > 1:
             B.append(("box", conclusioni_stabili(ris)))
+    B[:0] = sezione_convergenza(ris)
 
     # ---- Limiti
     S["Limiti dell'analisi"] = [("box", [
@@ -729,6 +769,9 @@ def tabelle_csv(ris):
         out["stress_test.csv"] = pd.concat([df.assign(analisi=a) for a, df in ris["stress"].items()])
     if ris["idio"]:
         out["rischio_singolo_titolo.csv"] = pd.concat([df.T.assign(analisi=a, orizzonte_anni=h) for a, s in ris["idio"].items() for h, df in s["orizzonti"].items()]).rename_axis("portafoglio").reset_index()
+    if ris.get("convergenza"):
+        c = ris["convergenza"]
+        out["verifica_convergenza.csv"] = pd.concat([c["mediana"].assign(misura="mediana"), c["p5"].assign(misura="5° percentile")]).rename_axis("seed").reset_index()
     if ris["modelli"]:
         out["confronto_modelli.csv"] = pd.concat([df.T.assign(analisi=a, modello=m, orizzonte_anni=h) for a, mm in ris["modelli"].items()
                                                   for m, s in mm.items() for h, df in s["orizzonti"].items()]).rename_axis("portafoglio").reset_index()

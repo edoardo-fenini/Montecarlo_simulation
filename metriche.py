@@ -18,7 +18,7 @@ def sommario(res, cfg, n_sim):
     cap, ver = cfg["capitale_iniziale"], cfg["versamento_mensile"]
     nomi = [k for k in res if not k.startswith("_")]
     mesi = res[nomi[0]]["mensile"].shape[1] - 1
-    s = {"nomi": nomi, "n_sim": n_sim, "orizzonti": {}, "bande": {}, "mdd_fin": {}, "vol_sim": {}, "var_es": {},
+    s = {"nomi": nomi, "n_sim": n_sim, "n_effettivi": int(res[nomi[0]]["mensile"].shape[0]), "orizzonti": {}, "bande": {}, "mdd_fin": {}, "vol_sim": {}, "var_es": {},
          "versato": np.array([versato(cap, ver, j) for j in range(mesi + 1)])}
     for h in cfg["orizzonti"]:
         j, tot = h * 12, versato(cap, ver, h * 12)

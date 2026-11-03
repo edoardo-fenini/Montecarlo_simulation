@@ -36,6 +36,7 @@ moduli:
   rischio_singolo_titolo: true
   confronto_modelli: false     # lento
   analisi_C: false             # storia dal 1999 con proxy di settore
+  verifica_convergenza: true   # "Le simulazioni bastano?": ripete il calcolo con 3 seed
 
 # Facoltativo: settore per gli stress test (tech | finanza | altro), se quello automatico non ti convince
 settori:
