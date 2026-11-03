@@ -75,6 +75,13 @@ class Archivio:
             return False
         return not os.path.exists(f) or (self.aggiorna and t not in self.fatti)
 
+    def ultimo_aggiornamento(self):
+        """Data dell'ultima modifica della cache dei prezzi (per sapere se i dati sono cambiati)."""
+        try:
+            return max((e.stat().st_mtime for e in os.scandir(self.dir) if e.name.endswith(".csv")), default=0.0)
+        except OSError:
+            return 0.0
+
     def in_cache(self, t):
         return os.path.exists(self._base(t) + ".csv")
 

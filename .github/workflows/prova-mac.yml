@@ -33,6 +33,12 @@ jobs:
       - name: Report da riga di comando (prova rapida)
         run: .venv/bin/python confronta.py --config configurazioni/prova_ci.yaml --veloce --uscita report/prova_ci
 
+      - name: Tempo dell'esecuzione completa di default (20.000 simulazioni, informativo)
+        continue-on-error: true
+        run: |
+          /usr/bin/time -p .venv/bin/python confronta.py --config configurazioni/esempio_tre_portafogli.yaml --uscita report/tempo_default --senza-pdf 2>&1 | grep -E "processi|Fatto in|real"
+          sysctl -n hw.ncpu machdep.cpu.brand_string || true
+
       - name: Controlla i file del report
         run: |
           ls -la report/prova_ci report/prova_ci/dati_csv

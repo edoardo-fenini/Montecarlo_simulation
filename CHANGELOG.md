@@ -42,6 +42,14 @@
   titoli; numeri veri con formati € e %.
 - Configurazioni di esempio: `core_satellite_80_20.yaml` e `etf_europei.yaml` (oltre ai tre portafogli).
 
+### Prestazioni e affidabilità
+- Le simulazioni indipendenti (principale, seed di verifica, rischio sul singolo titolo, analisi A e B, modelli) girano
+  in parallelo su più processori, con risultati identici (verificato da un test). Su una macchina a 4 core l'esecuzione
+  completa di default (20.000 simulazioni) passa da circa 290 a circa 125 secondi; su un Mac recente con più core è più
+  veloce. Opzione `parallelo: auto | si | no`; se il parallelismo non è disponibile si torna da soli al calcolo in sequenza.
+- Nell'app la stessa configurazione rilanciata con gli stessi dati non viene ricalcolata.
+- File di log `log.txt` nella cartella del programma (app e riga di comando), con i tempi delle fasi principali.
+
 ### Correzioni
 - Sul Mac le richieste dirette (FRED, BCE) fallivano con un errore di certificato SSL: ora si usano i certificati di
   `certifi`. Nella 1.0 il cambio del dollaro prima del 2003 (FRED) poteva mancare sul Mac: interessava solo l'analisi C.

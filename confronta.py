@@ -9,6 +9,7 @@ Il report va in report/AAAA-MM-GG_nome-configurazione/ (report.html, report.pdf,
 import argparse, datetime, os, re, sys, time
 
 import analisi
+import registro
 import report
 from configurazione import ErroreConfig, carica
 from dati import ErroreDati
@@ -29,23 +30,30 @@ def main(argv=None):
     ap.add_argument("--uscita", help="cartella dove salvare il report (default: report/AAAA-MM-GG_nome)")
     ap.add_argument("--senza-pdf", action="store_true", help="non creare il PDF")
     a = ap.parse_args(argv)
+    log = registro.configura()
     t0 = time.time()
     try:
         cfg = carica(a.config)
         n = 1000 if a.veloce else (a.simulazioni or cfg["n_simulazioni"])
         print(f"Configurazione «{cfg['nome']}»: {len(cfg['portafogli'])} portafogli + benchmark, {n:,} simulazioni".replace(",", "."))
+        log.info("riga di comando: %s, %d simulazioni", a.config, n)
         ris = analisi.esegui(cfg, aggiorna_dati=a.aggiorna_dati, n=n, log=print)
         out = a.uscita or cartella_uscita(cfg, a.config)
         print("Scrivo il report ...")
         f = report.salva(ris, out, pdf=not a.senza_pdf)
     except (ErroreConfig, ErroreDati) as e:
+        log.error("%s", e)
         print(f"\nERRORE: {e}", file=sys.stderr)
         return 1
+    except Exception:
+        log.exception("Errore imprevisto")
+        print(f"\nERRORE imprevisto: i dettagli sono nel file {registro.FILE_LOG}", file=sys.stderr)
+        return 2
     for x in ris["avvisi"]:
         print(f"  avviso: {x}")
     print(f"\nFatto in {time.time() - t0:.0f} secondi. Apri il report con un doppio clic su:\n  {os.path.abspath(f)}")
     return 0
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # necessario anche per il calcolo in parallelo (processi "spawn")
     sys.exit(main())

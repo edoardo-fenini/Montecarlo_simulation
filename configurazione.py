@@ -25,6 +25,7 @@ DEFAULT = {
     "costo_ribilanciamento": 0.001,
     "ribilanciamento": "annuale",
     "blocco_medio_giorni": 20,
+    "parallelo": "auto",  # auto | si | no: simulazioni indipendenti in parallelo su più processori (stessi risultati)
     "rendimento_atteso": {
         "metodo": "beta",
         "tasso_privo_rischio": 0.02,

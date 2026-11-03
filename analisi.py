@@ -2,7 +2,15 @@
 
 Uso:  ris = esegui(cfg, aggiorna_dati=False, progresso=funzione(frazione, messaggio), log=print)
 """
+import logging
+import multiprocessing as mp
+import os
+import pickle
 import time
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+from concurrent.futures.process import BrokenProcessPool
+from dataclasses import dataclass, field
+
 import numpy as np
 import pandas as pd
 
@@ -10,6 +18,8 @@ import dati as D
 import metriche
 from configurazione import BENCH
 from simula import Bootstrap, StudentT, Garch, ConCrolli, ricentra, simula
+
+registro_log = logging.getLogger("confronta")
 
 
 # ------------------------------------------------------------------ rendimenti attesi
@@ -153,26 +163,110 @@ def periodi(cfg, R, proxy_info, arch, log):
 
 # ------------------------------------------------------------------ esecuzione
 class Avanzamento:
+    """Avanzamento complessivo come media pesata dell'avanzamento dei singoli lavori (anche in parallelo)."""
+
     def __init__(self, pesi, callback):
-        self.pesi, self.cb, self.fatto = pesi, callback, 0.0
+        self.pesi, self.cb = pesi, callback
+        self.fatto = {k: 0.0 for k in pesi}
         self.tot = sum(pesi.values()) or 1
 
-    def passo(self, nome, messaggio):
-        base = self.fatto
-        peso = self.pesi[nome]
+    def aggiorna(self, chiave, frazione, messaggio):
+        self.fatto[chiave] = max(self.fatto.get(chiave, 0.0), min(frazione, 1.0))
+        if self.cb:
+            self.cb(min(sum(self.pesi[k] * f for k, f in self.fatto.items()) / self.tot, 1.0), messaggio)
 
-        def f(x):
-            if self.cb:
-                self.cb(min((base + peso * x) / self.tot, 1.0), messaggio)
-        f(0)
-        self.fatto += peso
-        return f
+
+@dataclass
+class Lavoro:
+    """Una simulazione indipendente (ha il suo seed): si può eseguire in un altro processo con risultati identici."""
+    chiave: str
+    tipo: str          # bootstrap | crolli | t | garch | stress
+    messaggio: str
+    peso: float
+    M: np.ndarray
+    porte: dict
+    seed_extra: int = 0
+    extra: dict = field(default_factory=dict)
+
+
+def _generatore(lav: Lavoro, cfg: dict):
+    b = cfg["blocco_medio_giorni"]
+    if lav.tipo == "t":
+        return StudentT(lav.M, 5)
+    if lav.tipo == "garch":
+        return Garch(lav.M)
+    if lav.tipo == "crolli":
+        rs = cfg["rischio_singolo_titolo"]
+        return ConCrolli(Bootstrap(lav.M, b), lav.extra["azioni"], rs["probabilita_annua"], (rs["perdita_min"], rs["perdita_max"]))
+    return Bootstrap(lav.M, b)
+
+
+def esegui_lavoro(lav: Lavoro, cfg: dict, n: int, coda=None, callback=None):
+    """Esegue un lavoro. L'avanzamento va a `coda` (processo separato) oppure a `callback` (stesso processo)."""
+    def prog(f):
+        if coda is not None:
+            coda.put((lav.chiave, f))
+        elif callback is not None:
+            callback(f)
+    if lav.tipo == "stress":
+        e = lav.extra
+        return lav.chiave, metriche.stress_test(Bootstrap(lav.M, cfg["blocco_medio_giorni"]), lav.porte, cfg, e["sommario"],
+                                                e["categorie"], e["singolo"], n_rec=min(n, 1000), progresso=prog)
+    res = simula(_generatore(lav, cfg), lav.porte, n, cfg["orizzonte_anni"], cfg["capitale_iniziale"], cfg["versamento_mensile"],
+                 cfg["costo_ribilanciamento"], cfg["orizzonti"], cfg["seed"] + lav.seed_extra, 252,
+                 rib_mesi=cfg["ribilanciamento_mesi"], progresso=prog)
+    return lav.chiave, metriche.sommario(res, cfg, n)
+
+
+def usa_parallelo(cfg: dict, n: int, n_lavori: int) -> bool:
+    scelta = str(cfg.get("parallelo", "auto")).lower()
+    if scelta in ("no", "false", "0") or n_lavori < 2 or (os.cpu_count() or 1) < 2:
+        return False
+    return scelta in ("si", "sì", "true", "1") or n >= 5000
+
+
+def esegui_lavori(lavori: list, cfg: dict, n: int, av: Avanzamento, log=print) -> dict:
+    """Esegue i lavori in parallelo (processi separati) quando conviene, altrimenti uno dopo l'altro.
+    I risultati sono identici nei due casi, perché ogni lavoro ha il suo seed."""
+    risultati = {}
+    if usa_parallelo(cfg, n, len(lavori)):
+        processi = max(1, min(len(lavori), os.cpu_count() or 1, 8))
+        try:
+            ctx = mp.get_context("spawn")
+            with ctx.Manager() as gestore:
+                coda = gestore.Queue()
+                with ProcessPoolExecutor(max_workers=processi, mp_context=ctx) as ex:
+                    futuri = {ex.submit(esegui_lavoro, lav, cfg, n, coda): lav for lav in lavori}
+                    in_corso = set(futuri)
+                    while in_corso:
+                        finiti, in_corso = wait(in_corso, timeout=0.25, return_when=FIRST_COMPLETED)
+                        while not coda.empty():
+                            chiave, f = coda.get_nowait()
+                            av.aggiorna(chiave, f, next(lv.messaggio for lv in lavori if lv.chiave == chiave))
+                        for fu in finiti:
+                            chiave, r = fu.result()  # un errore dentro un lavoro arriva qui come errore vero
+                            risultati[chiave] = r
+                            av.aggiorna(chiave, 1.0, futuri[fu].messaggio)
+            log(f"     ({len(lavori)} simulazioni su {processi} processi in parallelo)")
+            return risultati
+        except (BrokenProcessPool, OSError, pickle.PicklingError, EOFError) as e:
+            log(f"     parallelismo non disponibile ({e}): continuo in sequenza")
+            registro_log.warning("parallelismo non disponibile: %s", e)
+    for lav in lavori:
+        if lav.chiave in risultati:
+            continue
+        log(f"     {lav.messaggio} ...")
+        av.aggiorna(lav.chiave, 0.0, lav.messaggio)
+        chiave, r = esegui_lavoro(lav, cfg, n, callback=lambda f, lav=lav: av.aggiorna(lav.chiave, f, lav.messaggio))
+        risultati[chiave] = r
+    return risultati
 
 
 def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D.CARTELLA_CACHE, scaricatore=None, n=None,
            solo=None, seed=None):
     """solo: lista di analisi da fare (es. ["A"]); seed: sostituisce quello della configurazione."""
     t0 = time.time()
+    tempi = {}
     n = n or cfg["n_simulazioni"]
     if seed is not None:
         cfg = {**cfg, "seed": int(seed)}
@@ -193,24 +287,7 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
     per, note = periodi(cfg, R, proxy_info, arch, log)
     anal = [x for x in per if solo is None or x in solo]
     n_seed = int(cfg["verifica_convergenza"]["numero_seed"]) if mod.get("verifica_convergenza") else 1
-
-    # piano di lavoro (per la barra di avanzamento)
-    pesi = {}
-    for a in anal:
-        pesi[f"base_{a}"] = 1.0
-        if a == "A":
-            for j in range(1, n_seed):
-                pesi[f"conv{j}"] = 1.0
-        if mod["rischio_singolo_titolo"] and a != "C":
-            pesi[f"idio_{a}"] = 1.0
-        if mod["stress_test"] and a != "C":
-            pesi[f"stress_{a}"] = 0.4
-        if mod["confronto_modelli"] and a != "C":
-            pesi[f"t_{a}"] = 1.0
-            pesi[f"garch_{a}"] = 1.3
-            for j in range(2 if cfg["rendimento_atteso"]["metodo"] != "storico" else 0):
-                pesi[f"sens{j}_{a}"] = 1.0
-    av = Avanzamento(pesi, progresso)
+    tempi["dati"] = time.time() - t0
 
     tipi = dati["info"]["tipo"].to_dict()
     ris = {"cfg": cfg, "n": n, "dati_info": dati["info"], "avvisi": dati["avvisi"], "estremi": dati["estremi"],
@@ -218,57 +295,73 @@ def esegui(cfg, aggiorna_dati=False, progresso=None, log=print, cartella_cache=D
            "beta": beta, "rend_attesi": spiega_rendimenti(cfg, beta, tipi), "proxy_info": proxy_info, "note": note,
            "periodi": {}, "storico": {}, "sim": {}, "stress": {}, "idio": {}, "modelli": {}, "sensibilita": {},
            "convergenza": None}
-    rib, costo = cfg["ribilanciamento_mesi"], cfg["costo_ribilanciamento"]
 
-    def corri(gen, porte, chiave, msg, seed_extra=0):
-        cb = av.passo(chiave, msg)
-        log(f"     {msg} ...")
-        res = simula(gen, porte, n, cfg["orizzonte_anni"], cfg["capitale_iniziale"], cfg["versamento_mensile"],
-                     costo, cfg["orizzonti"], cfg["seed"] + seed_extra, 252, rib_mesi=rib, progresso=cb)
-        return metriche.sommario(res, cfg, n)
-
-    log("3/4  Simulazioni")
+    # ---- piano dei lavori: le simulazioni indipendenti tra loro (ognuna con il suo seed)
+    lavori, stress_da_fare, nomi_sens = [], {}, {}
     for a in anal:
         M, porte, colonne, idx = matrice(cfg, per[a])
         ris["periodi"][a] = (idx[0], idx[-1], len(idx))
         ris["storico"][a] = storico(cfg, M, porte, colonne, idx)
-        mu = rendimento_colonne(cfg, colonne, beta=beta)
-        Mr = prepara_M(cfg, M, colonne, mu, tipi)
-        b = cfg["blocco_medio_giorni"]
-        ris["sim"][a] = corri(Bootstrap(Mr, b), porte, f"base_{a}", f"Analisi {a}: simulazione principale")
+        Mr = prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta), tipi)
+        lavori.append(Lavoro(f"base_{a}", "bootstrap", f"Analisi {a}: simulazione principale", 1.0, Mr, porte))
         if a == "A":
             ris["matrici"] = {"A": (Mr, porte)}  # per la prova rapida dei pesi nell'app
-        if a == "A" and n_seed > 1:
-            # stessa simulazione con seed diversi: se i risultati cambiano poco, le simulazioni bastano
-            somm = [ris["sim"][a]] + [corri(Bootstrap(Mr, b), porte, f"conv{j}", f"Verifica: stessa simulazione con il seed n. {j + 1}",
-                                             seed_extra=1000 * j) for j in range(1, n_seed)]
-            ris["convergenza"] = confronto_seed(cfg, somm, n)
+            for j in range(1, n_seed):  # stessa simulazione con seed diversi: verifica che le simulazioni bastino
+                lavori.append(Lavoro(f"conv{j}", "bootstrap", f"Verifica: stessa simulazione con il seed n. {j + 1}", 1.0, Mr, porte, 1000 * j))
         if a == "C":
             continue
-        azioni = [i for i, (_, t) in enumerate(colonne) if t != BENCH and str(tipi.get(t, "")).upper() != "ETF"]
         if mod["rischio_singolo_titolo"]:
-            rs = cfg["rischio_singolo_titolo"]
-            g = ConCrolli(Bootstrap(Mr, b), azioni, rs["probabilita_annua"], (rs["perdita_min"], rs["perdita_max"]))
-            ris["idio"][a] = corri(g, porte, f"idio_{a}", f"Analisi {a}: rischio sul singolo titolo")
+            azioni = [i for i, (_, t) in enumerate(colonne) if t != BENCH and str(tipi.get(t, "")).upper() != "ETF"]
+            lavori.append(Lavoro(f"idio_{a}", "crolli", f"Analisi {a}: rischio sul singolo titolo", 1.2, Mr, porte, extra={"azioni": azioni}))
         if mod["stress_test"]:
             cat = {p: [proxy_info[colonne[i][1]]["categoria"] for i in c] for p, (c, _) in porte.items()}
             singolo = {}
             for p, pesi_p in cfg["composizione"].items():
                 ws = [w for t, w in pesi_p.items() if t != BENCH and str(tipi.get(t, "")).upper() != "ETF"]
                 singolo[p] = max(ws) if ws else None
-            log(f"     Analisi {a}: stress test ...")
-            cb = av.passo(f"stress_{a}", f"Analisi {a}: stress test")
-            ris["stress"][a] = metriche.stress_test(Bootstrap(Mr, b), porte, cfg, ris["sim"][a], cat, singolo,
-                                                    n_rec=min(n, 1000), progresso=cb)
+            stress_da_fare[a] = (Mr, porte, cat, singolo)
         if mod["confronto_modelli"]:
-            ris["modelli"][a] = {
-                "Student-t multivariata": corri(StudentT(Mr, 5), porte, f"t_{a}", f"Analisi {a}: modello Student-t"),
-                "GARCH(1,1) + residui bootstrap": corri(Garch(Mr), porte, f"garch_{a}", f"Analisi {a}: modello GARCH"),
-            }
-            ris["sensibilita"][a] = sensibilita(cfg, M, porte, colonne, beta, corri, a, tipi)
+            lavori.append(Lavoro(f"t_{a}", "t", f"Analisi {a}: modello Student-t", 1.0, Mr, porte))
+            lavori.append(Lavoro(f"garch_{a}", "garch", f"Analisi {a}: modello GARCH", 1.3, Mr, porte))
+            for j, (nome_v, kw) in enumerate(varianti_sensibilita(cfg)):
+                Mv = prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta, **kw), tipi)
+                lavori.append(Lavoro(f"sens{j}_{a}", "bootstrap", f"Analisi {a}: sensibilità ({nome_v})", 1.0, Mv, porte))
+                nomi_sens[f"sens{j}_{a}"] = nome_v
+
+    pesi = {lav.chiave: lav.peso for lav in lavori}
+    pesi.update({f"stress_{a}": 0.4 for a in stress_da_fare})
+    av = Avanzamento(pesi, progresso)
+
+    log("3/4  Simulazioni")
+    t1 = time.time()
+    risultati = esegui_lavori(lavori, cfg, n, av, log)
+    tempi["simulazioni"] = time.time() - t1
+    if stress_da_fare:  # gli stress test usano il valore mediano della simulazione principale: vengono dopo
+        t1 = time.time()
+        lavori_s = [Lavoro(f"stress_{a}", "stress", f"Analisi {a}: stress test", 0.4, Mr, porte,
+                           extra={"sommario": risultati[f"base_{a}"], "categorie": cat, "singolo": singolo})
+                    for a, (Mr, porte, cat, singolo) in stress_da_fare.items()]
+        risultati.update(esegui_lavori(lavori_s, cfg, n, av, log))
+        tempi["stress test"] = time.time() - t1
+
+    # ---- raccolta dei risultati
+    for a in anal:
+        ris["sim"][a] = risultati[f"base_{a}"]
+        if f"idio_{a}" in risultati:
+            ris["idio"][a] = risultati[f"idio_{a}"]
+        if f"stress_{a}" in risultati:
+            ris["stress"][a] = risultati[f"stress_{a}"]
+        if f"t_{a}" in risultati:
+            ris["modelli"][a] = {"Student-t multivariata": risultati[f"t_{a}"], "GARCH(1,1) + residui bootstrap": risultati[f"garch_{a}"]}
+            ris["sensibilita"][a] = [(nomi_sens[k], risultati[k]) for k in sorted(nomi_sens) if k.endswith(f"_{a}")]
+    if "A" in anal and n_seed > 1:
+        ris["convergenza"] = confronto_seed(cfg, [ris["sim"]["A"]] + [risultati[f"conv{j}"] for j in range(1, n_seed)], n)
     if progresso:
         progresso(1.0, "Completato")
     ris["durata"] = time.time() - t0
+    tempi["totale"] = ris["durata"]
+    ris["tempi"] = tempi
+    registro_log.info("tempi: %s", ", ".join(f"{k} {v:.1f}s" for k, v in tempi.items()))
     log(f"4/4  Fatto in {ris['durata']:.0f} secondi")
     return ris
 
@@ -307,26 +400,19 @@ def confronto_seed(cfg, sommari, n):
     return out
 
 
-def sensibilita(cfg, M, porte, colonne, beta, corri, a, tipi=None):
-    """Due varianti del rendimento atteso, una più bassa e una più alta di quella scelta."""
+def varianti_sensibilita(cfg):
+    """Due varianti del rendimento atteso, una più bassa e una più alta di quella scelta: [(nome, parametri), ...]."""
     ra = cfg["rendimento_atteso"]
     m = ra["metodo"]
     if m == "storico":
         return []
     if m == "beta":
-        var = [(f"premio di mercato {ra['premio_mercato'] * 50:.0f}%", dict(premio=ra["premio_mercato"] / 2)),
-               (f"premio di mercato {ra['premio_mercato'] * 150:.0f}%", dict(premio=ra["premio_mercato"] * 1.5))]
-    elif m == "uguale":
-        var = [(f"{(ra['valore_uguale'] - 0.03) * 100:.0f}% per tutti", dict(uguale=ra["valore_uguale"] - 0.03)),
-               (f"{(ra['valore_uguale'] + 0.03) * 100:.0f}% per tutti", dict(uguale=ra["valore_uguale"] + 0.03))]
-    else:
-        var = [("tutti 3 punti più bassi", dict(spost=-0.03)), ("tutti 3 punti più alti", dict(spost=0.03))]
-    out = []
-    for j, (nome, kw) in enumerate(var):
-        mu = rendimento_colonne(cfg, colonne, beta=beta, **kw)
-        out.append((nome, corri(Bootstrap(prepara_M(cfg, M, colonne, mu, tipi), cfg["blocco_medio_giorni"]), porte,
-                                f"sens{j}_{a}", f"Analisi {a}: sensibilità ({nome})")))
-    return out
+        return [(f"premio di mercato {ra['premio_mercato'] * 50:.0f}%", dict(premio=ra["premio_mercato"] / 2)),
+                (f"premio di mercato {ra['premio_mercato'] * 150:.0f}%", dict(premio=ra["premio_mercato"] * 1.5))]
+    if m == "uguale":
+        return [(f"{(ra['valore_uguale'] - 0.03) * 100:.0f}% per tutti", dict(uguale=ra["valore_uguale"] - 0.03)),
+                (f"{(ra['valore_uguale'] + 0.03) * 100:.0f}% per tutti", dict(uguale=ra["valore_uguale"] + 0.03))]
+    return [("tutti 3 punti più bassi", dict(spost=-0.03)), ("tutti 3 punti più alti", dict(spost=0.03))]
 
 
 def storico(cfg, M, porte, colonne, idx):

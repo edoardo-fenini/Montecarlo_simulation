@@ -25,7 +25,10 @@
 - [x] 4. Funzioni in più: analisi salvate (report/AAAA-MM-GG_HHMMSS_nome con riassunto.json) e confronto tra due,
       prova rapida dei pesi (analisi.prova_pesi, 2.000 simulazioni), Excel (openpyxl), configurazioni core_satellite_80_20 ed
       etf_europei (ETF verificati su Yahoo; TER lasciati al default 0,20% perché non verificati).
-- [ ] 5. Qualità e prestazioni (tempi, parallelismo, ruff, type hints, test, log)
+- [~] 5. Qualità e prestazioni: tempi misurati (dati ~1 s, simulazioni ~95%, stress ~10 s, report ~5 s); parallelismo a livello
+      di lavori (ProcessPoolExecutor, spawn): 291 s -> 123 s su 4 core, numeri identici (test). Ottimizzazioni interne al motore
+      scartate: richiederebbero di riordinare i calcoli (rischio di cambiare i numeri). Cache di sessione nell'app, log.txt.
+      Da fare: ruff (commit separato), type hints, misura su Mac reale (passo informativo nel workflow).
 - [ ] 6. Release v1.1.0 (README con screenshot, CHANGELOG, riepilogo PDF, PR, release)
 
 ## Chiusura del progetto (seconda richiesta)

@@ -68,3 +68,22 @@ def test_prova_rapida_dei_pesi(ris):
 def test_configurazioni_di_esempio_valide(percorso):
     cfg = C.carica(percorso)
     assert cfg["portafogli"] and cfg["composizione"]
+
+
+def test_file_di_log(tmp_path):
+    import logging
+    import registro
+    f = tmp_path / "log.txt"
+    log = registro.configura(percorso=str(f))
+    log.error("prova di scrittura nel log")
+    for h in log.handlers:
+        h.flush()
+    assert "prova di scrittura nel log" in f.read_text(encoding="utf-8")
+    n = len(log.handlers)
+    registro.configura(percorso=str(f))
+    assert len(log.handlers) == n  # idempotente
+    for h in list(log.handlers):
+        if getattr(h, "baseFilename", "") == str(f):
+            log.removeHandler(h)
+            h.close()
+    assert logging.getLogger("confronta") is log

@@ -397,9 +397,19 @@ def esegui_simulazione(contenitore) -> None:
         barra.progress(f, text=f"{fase(messaggio, int(ss.nsim))} {f * 100:.0f}%{stima}")
 
     try:
-        cfg = C.prepara(cfg_da_stato(tab))
+        grezza = cfg_da_stato(tab)
+        cfg = C.prepara(copy.deepcopy(grezza))
+        # stessa configurazione e stessi dati già calcolati in questa sessione: risultato istantaneo
+        chiave = yaml.safe_dump(grezza, sort_keys=True) + str(D.Archivio(log=lambda *a: None).ultimo_aggiornamento())
+        cache = ss.setdefault("cache_risultati", {})
         log.info("Avvio simulazione «%s»: %d portafogli, %d simulazioni", cfg["nome"], len(cfg["portafogli"]), cfg["n_simulazioni"])
-        ris = analisi.esegui(cfg, aggiorna_dati=aggiorna, log=lambda m: log.info(m.strip()), progresso=progresso)
+        if not aggiorna and chiave in cache:
+            ris = cache[chiave]
+            log.info("Risultato ripreso dalla cache della sessione")
+        else:
+            ris = analisi.esegui(cfg, aggiorna_dati=aggiorna, log=lambda m: log.info(m.strip()), progresso=progresso)
+            cache.clear()  # una sola simulazione in memoria, per non occupare troppa RAM
+            cache[chiave] = ris
         barra.progress(1.0, text="Preparo il report…")
         S = report.sezioni(ris)
         ss.ris, ss.sezioni = ris, S
