@@ -169,8 +169,8 @@ def calendario_comune(serie):
     idx = pd.DatetimeIndex(unione)
     oss = pd.DataFrame({t: idx.isin(s.index) for t, s in serie.items()}, index=idx)
     vivi = pd.DataFrame({t: (idx >= s.index[0]) & (idx <= s.index[-1]) for t, s in serie.items()}, index=idx)
-    quota = oss.sum(1) / vivi.sum(1).clip(lower=1)
-    return idx[(quota >= 0.5) & (idx.dayofweek < 5)]
+    quota = oss.sum(axis=1) / vivi.sum(axis=1).clip(lower=1)
+    return idx[(quota >= 0.5) & (idx.day_of_week < 5)]
 
 
 # ------------------------------------------------------------------ costruzione dataset
