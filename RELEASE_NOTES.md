@@ -19,7 +19,7 @@ Prima versione dello strumento per confrontare il **rischio** di più portafogli
 1. Scarica `confronta-portafogli-v1.0.0.zip` qui sotto, aprilo e sposta la cartella in **Documenti**.
 2. Fai doppio clic su **`Installa.command`**. La prima volta macOS lo blocca: vai in Impostazioni di Sistema → Privacy e sicurezza → **Apri comunque**. Python e le librerie vengono installati dentro la cartella. Serve internet e ci vogliono alcuni minuti.
 3. Fai doppio clic su **`Avvia.command`**: si apre il browser con l'app. Per chiuderla, chiudi la finestra del Terminale.
-4. Se il doppio clic viene bloccato anche dopo "Apri comunque": `xattr -dr com.apple.quarantine ~/Documents/confronta-portafogli`.
+4. Se il doppio clic viene bloccato anche dopo "Apri comunque": `xattr -dr com.apple.quarantine ~/Documents/confronta-portafogli-v1.0.0` (nel Terminale; è il nome della cartella estratta dallo zip).
 
 Tutti i dettagli sono nel `README.md`.
 
