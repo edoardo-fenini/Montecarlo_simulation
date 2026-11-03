@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import time
 import warnings
 
 import pandas as pd
@@ -70,7 +71,10 @@ def scarica_fred_usd():
     """Cambio USD per 1 EUR dalla FRED (dal 1999), usato prima dei dati Yahoo (2003).
     Se la FRED non risponde, ripiega sui cambi della Banca Centrale Europea (anch'essi dal 1999)."""
     try:
-        raw = fonti.con_tentativi(fonti._scarica_url, "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXUSEU")
+        # un solo tentativo breve: se la FRED è lenta si passa subito alla BCE (stessi anni, tassi quasi identici)
+        raw = fonti.con_tentativi(
+            lambda u: fonti._scarica_url(u, timeout=10), "https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXUSEU", tentativi=1
+        )
     except fonti.ErroreRete:
         raw = b""
     if not raw:
@@ -119,8 +123,10 @@ class Archivio:
         base = self._base(t)
         if self._da_scaricare(t, base + ".csv"):
             self.log(f"  scarico {t} ...")
+            inizio = time.time()
             try:
                 s, meta = self.scarica(t)
+                fonti.log.info("%s: %d prezzi da %s in %.1f s", t, len(s), (meta or {}).get("fonte", "?"), time.time() - inizio)
             except fonti.ErroreRete as e:
                 if self.in_cache(t):
                     ultimo = pd.read_csv(base + ".csv", index_col=0, parse_dates=True).index[-1]

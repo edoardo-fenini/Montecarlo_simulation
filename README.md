@@ -4,6 +4,12 @@ Uno strumento per confrontare il **rischio** di più portafogli di azioni ed ETF
 
 > **Non è consulenza finanziaria.** È un aiuto per capire i rischi, non un consiglio di acquisto.
 
+| Pagina iniziale | «In una pagina» | Fan chart interattivo |
+|---|---|---|
+| ![Pagina iniziale](docs/immagini/01_pagina_iniziale.png) | ![Schede con il livello di rischio](docs/immagini/02_in_una_pagina.png) | ![Fan chart](docs/immagini/03_fan_chart.png) |
+
+**Novità della versione 1.1:** dati più affidabili (più fonti, modalità offline, prezzi da file CSV, controllo dei ticker), report con copertina, indice e pagina «In una pagina» con il livello di rischio da 1 a 5, grafici interattivi, analisi salvate e confronto tra due analisi, prova rapida dei pesi, esportazione in Excel, calcolo in parallelo (circa 2 volte più veloce). Tutti i dettagli in `CHANGELOG.md`.
+
 ---
 
 ## 1. Scaricare il programma
@@ -81,10 +87,17 @@ Nella **barra a sinistra**:
   - `storico`: i rendimenti del passato. Attenzione: proietta il passato nel futuro ed è troppo ottimista se scegli titoli che sono già andati bene.
   - `personalizzato`: scegli tu il rendimento di ogni portafoglio.
 - **Moduli**: stress test, rischio sul singolo titolo e «Le simulazioni bastano?» sono attivi. L'ultimo ripete il calcolo con 3 seed per controllare che il numero di simulazioni sia sufficiente. Il confronto tra modelli e l'analisi dal 1999 con proxy sono più lenti.
-- **Numero di simulazioni**: il default è 20.000, così i risultati cambiano al massimo di circa ±2% tra un calcolo e l'altro. Con i moduli di default servono circa 3-5 minuti. Per una prova veloce usa 1.000.
-- Premi **▶ Avvia simulazione**.
+- **Numero di simulazioni**: il default è 20.000, così i risultati cambiano al massimo di circa ±2% tra un calcolo e l'altro. Le simulazioni girano in parallelo su più processori: con i moduli di default servono circa 1-2 minuti (misurato: 104 secondi sul Mac M1 a 3 core di GitHub; meno su un Mac recente). Per una prova veloce usa 1.000.
+- Ogni opzione ha un'icona **?** con una breve spiegazione.
+- Premi **▶ Avvia simulazione** (oppure il pulsante blu nella pagina iniziale). La barra mostra la fase in corso e il tempo stimato.
 
-**Risultati**: compaiono in schede (Sintesi, Risultati per orizzonte, Fan chart, Drawdown, Rischio e correlazioni, Stress test, Robustezza, Limiti). In alto ci sono i pulsanti per scaricare il **report HTML** (si apre con il browser) e il **report PDF**.
+**Risultati**: compaiono in schede: **In una pagina** (una scheda per portafoglio con i numeri chiave e il livello di rischio da 1 a 5), Sintesi, Risultati per orizzonte, Fan chart, Drawdown, Rischio e correlazioni, Stress test, Robustezza, Limiti. Nel fan chart e nel grafico dei cali passa il mouse per leggere i valori di ogni anno, e clicca sui nomi della legenda per nascondere un portafoglio. In alto ci sono i pulsanti per scaricare il **report HTML** (si apre con il browser), il **PDF** (con copertina e indice cliccabile) e il file **Excel**.
+
+**Prova rapida dei pesi**: nella scheda Sintesi un cursore mostra cosa succede mescolando il benchmark con un portafoglio satellite (es. 80% MSCI World + 20% cyber). È un calcolo veloce e approssimato: per i numeri definitivi crea il portafoglio misto e rilancia la simulazione.
+
+**Analisi salvate**: ogni simulazione viene salvata da sola nella cartella `report/`. Nella scheda **🗂️ Analisi salvate** trovi l'elenco, puoi riaprire o scaricare un report e confrontare due analisi affiancate.
+
+**Tema scuro**: menu **⋮** in alto a destra → **Settings** → **Theme**.
 
 **Salva / carica configurazione**: in fondo alla barra laterale puoi scaricare le impostazioni correnti in un file `.yaml` e ricaricarle la volta dopo.
 
@@ -193,12 +206,18 @@ portafogli:
 
 Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%). Prima della sua nascita (2009) si usa l'indice MSCI World. Per cambiarlo aggiungi una sezione `benchmark:` come nel file di esempio.
 
-## 8. Aggiornare a una nuova versione
+## 8. Aggiornare a una nuova versione (ad esempio dalla 1.0 alla 1.1)
 
-1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella.
-2. Copia nella nuova cartella le tue configurazioni (`configurazioni/*.yaml`) e, se vuoi, i report vecchi (`report/`).
-3. Fai doppio clic su `Installa.command` nella nuova cartella, poi usa `Avvia.command`.
-4. Quando tutto funziona puoi cancellare la cartella vecchia.
+Le tue cose stanno in tre cartelle: `configurazioni/` (i file YAML), `cache_prezzi/` (i prezzi già scaricati) e `report/` (i report salvati). Il resto si può sostituire.
+
+1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella, ad esempio `Documenti/confronta-portafogli-v1.1.0`.
+2. Copia dalla cartella vecchia a quella nuova:
+   - i tuoi file da `configurazioni/` (non sovrascrivere gli esempi nuovi, se hanno lo stesso nome rinomina i tuoi);
+   - l'intera cartella `cache_prezzi/` (così non riscarichi tutto);
+   - l'intera cartella `report/` (i report della 1.0 restano leggibili; nella scheda «Analisi salvate» compaiono solo quelli creati con la 1.1, perché la 1.0 non salvava il file `riassunto.json`).
+3. Se macOS blocca i file nuovi, vedi il punto 3 (anche il comando `xattr`).
+4. Fai doppio clic su `Installa.command` nella nuova cartella (serve: la 1.1 usa due librerie in più), poi usa `Avvia.command`.
+5. Quando tutto funziona puoi cancellare la cartella vecchia.
 
 ## 9. Problemi comuni
 
@@ -214,7 +233,10 @@ Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%).
 | L'app non si apre nel browser | Guarda l'indirizzo scritto nel Terminale (es. `http://localhost:54321`) e copialo nel browser. |
 | La simulazione è lenta | Riduci il numero di simulazioni o spegni "Confronto tra modelli" e "Analisi C". |
 | Qualcosa non va dopo un aggiornamento di macOS | Cancella le cartelle `.venv`, `.python` e `.uv` e rilancia `Installa.command`. |
-| I prezzi sembrano vecchi | Spunta **Aggiorna i dati** nell'app (oppure usa `--aggiorna-dati`). |
+| I prezzi sembrano vecchi | Spunta **Aggiorna i dati** nell'app (oppure usa `--aggiorna-dati`). La data è scritta in alto: «Dati aggiornati al …». |
+| «Nessuna fonte online risponde» | Riprova tra qualche minuto (Yahoo a volte limita gli accessi), oppure carica i prezzi da file (vedi «Caricare i prezzi da un file»). Se i prezzi erano già stati scaricati, lo strumento usa quelli e lo segnala. |
+| «Si è verificato un errore imprevisto» | Mandami il file **`log.txt`** che trovi nella cartella del programma, insieme alla configurazione (pulsante «Scarica configurazione»). |
+| Il calcolo in parallelo non parte | Nel file YAML scrivi `parallelo: no`: il calcolo è più lento ma i risultati sono identici. |
 
 ---
 
@@ -228,10 +250,10 @@ Il codice di riferimento sta nel ramo **`main`**. Per renderlo il ramo predefini
 
 ### Creare una release
 1. Apri il repository e clicca **Releases → Draft a new release** (o **Create a new release**).
-2. In **Choose a tag** scrivi `v1.0.0` e scegli **Create new tag: v1.0.0 on publish**. In **Target** scegli **`main`**.
-3. Titolo: `v1.0.0`. Nella descrizione incolla il contenuto di `RELEASE_NOTES.md`.
+2. In **Choose a tag** scrivi il numero di versione (es. `v1.1.0`) e scegli **Create new tag … on publish**. In **Target** scegli **`main`**.
+3. Titolo: ad esempio `v1.1.0`. Nella descrizione incolla il contenuto di `RELEASE_NOTES.md`.
 4. Premi **Publish release**.
-5. Dopo uno o due minuti la GitHub Action **"Zip per la release"** allega automaticamente `confronta-portafogli-v1.0.0.zip` alla release (puoi seguirla nella scheda **Actions**). Lo zip non contiene `.venv`, cache e report generati.
+5. Dopo uno o due minuti la GitHub Action **"Zip per la release"** allega automaticamente `confronta-portafogli-v1.1.0.zip` alla release (puoi seguirla nella scheda **Actions**). Lo zip non contiene `.venv`, cache e report generati.
 
 ### Prova automatica su Mac
 A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, GitHub esegue su un Mac Apple Silicon: installazione con `Installa.command`, test, un report di prova e l'avvio dell'app. L'esito (spunta verde o croce rossa) si vede nella scheda **Actions** e accanto all'ultimo commit; il report di prova si scarica dagli *Artifacts* dell'esecuzione.
@@ -243,12 +265,20 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `app.py` | l'app (Streamlit) |
 | `confronta.py` | lo stesso confronto da riga di comando |
 | `configurazione.py` | lettura e controllo della configurazione YAML |
-| `dati.py` | download dei prezzi con cache, conversione in euro, settori |
-| `analisi.py` | rendimenti attesi, periodi A/B/C, esecuzione dei moduli |
+| `fonti.py` | fonti dei prezzi (Yahoo, Stooq, BCE), tentativi ripetuti, lettura dei CSV manuali |
+| `dati.py` | cache dei prezzi, conversione in euro, settori, controllo dei ticker |
+| `analisi.py` | rendimenti attesi, periodi A/B/C, esecuzione (anche in parallelo) dei moduli |
 | `simula.py` | motore Monte Carlo (bootstrap a blocchi, Student-t, GARCH, crolli sul singolo titolo) |
 | `metriche.py` | metriche e stress test |
-| `report.py` | report HTML, PDF e CSV |
-| `configurazioni/` | file di esempio |
-| `esempi/` | report di esempio già pronti |
-| `tests/` | test automatici (`python -m pytest -q tests`) |
-| `STATO.md` | note di sviluppo |
+| `report.py` | report HTML, PDF, Excel e CSV; analisi salvate |
+| `grafici_app.py` | grafici interattivi dell'app (Plotly) |
+| `stile.py` | colori e tratti fissi dei portafogli (uguali in app, report e PDF) |
+| `registro.py` | file di log `log.txt` |
+| `configurazioni/` | file di esempio (tre portafogli, core + satellite 80/20, ETF europei, prova automatica) |
+| `esempi/` | report di esempio già pronti, verifica della convergenza, file di prezzi di esempio |
+| `strumenti/` | `verifica_convergenza.py` (le simulazioni bastano?) e `verifica_fonti.py` (quali fonti rispondono) |
+| `tests/` | test automatici (`python -m pytest -q tests`), compreso il test di non regressione |
+| `docs/immagini/` | immagini del README |
+| `CHANGELOG.md`, `STATO.md` | modifiche tra le versioni e note di sviluppo |
+
+Per chi sviluppa: `pip install -r requirements-dev.txt`, poi `ruff check .` e `ruff format .`. Il test di non regressione (`tests/test_non_regressione.py`) controlla che 1.236 numeri chiave non cambino; si rigenera solo per una modifica voluta al calcolo con `python tests/non_regressione.py --aggiorna`.

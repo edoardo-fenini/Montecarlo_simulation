@@ -1,32 +1,28 @@
-# v1.0.0 – Confronto del rischio di portafogli
+# v1.1.0 – Più robusta, più chiara, più bella
 
-Prima versione dello strumento per confrontare il **rischio** di più portafogli di azioni ed ETF con una simulazione Monte Carlo, pensato per chi non sa programmare e usa un Mac.
+Seconda versione dello strumento per confrontare il **rischio** di portafogli di azioni ed ETF con una simulazione Monte Carlo.
+Tutte le funzioni della 1.0 restano; i risultati del calcolo sono identici (verificato da un test di non regressione).
 
 > Non è consulenza finanziaria: è un aiuto per capire i rischi, non un consiglio di acquisto.
 
-## Cosa fa
-- Confronta quanti portafogli vuoi (azioni ed ETF, anche europei: `.MI`, `.DE`, `.AS`, `.PA`, `.L`, `.SW`) con un benchmark (di default l'iShares Core MSCI World, `IWDA.AS`). Tutto è convertito in euro con il cambio giornaliero.
-- Simula migliaia di futuri possibili rimescolando blocchi di storia reale (bootstrap a blocchi), con ribilanciamento, costi e versamenti mensili.
-- Per ogni orizzonte (es. 5, 10, 15 anni) mostra il valore mediano, il 5° e il 95° percentile, la probabilità di finire sotto il versato, il calo massimo (drawdown) e il tempo per recuperarlo.
-- Quattro metodi per il rendimento atteso: **beta** (default: 2% + beta × 4%), **uguale**, **storico** (con avviso) e **personalizzato**.
-- **Portafogli misti**, ad esempio 80% MSCI World + 20% Cyber security.
-- Moduli: stress test (crolli stile 2000 e 2008, singolo titolo −90%), rischio di crollo di un singolo titolo, verifica «Le simulazioni bastano?» e, facoltativi, confronto tra modelli (Student-t, GARCH) e storia dal 1999 con proxy di settore.
-- Report in **HTML**, **PDF** e tabelle **CSV** per Excel, con una sintesi automatica in italiano semplice.
-- **App** nel browser (Streamlit) con tabella dei portafogli, barra di avanzamento, risultati a schede, download dei report e salvataggio/caricamento della configurazione. È precaricato un esempio con tre portafogli.
-- In alternativa, **riga di comando**: `python confronta.py --config configurazioni/mio_file.yaml`.
+## Novità
+- **Dati più affidabili**: se Yahoo Finance non risponde lo strumento riprova e passa ad altre fonti gratuite (Yahoo diretto, Stooq, Banca Centrale Europea per i cambi); senza internet usa i prezzi già salvati; puoi caricare i prezzi da un file CSV; controllo dei ticker con nome della società, borsa, valuta e anni di storia; «Dati aggiornati al …» sempre in vista.
+- **Report più leggibile**: copertina e indice cliccabile, pagina «In una pagina» con una scheda per portafoglio e un livello di rischio da 1 a 5, tabelle che entrano nella pagina, una spiegazione sotto ogni grafico, zona sotto il capitale investito evidenziata.
+- **App più curata**: grafici interattivi (passa il mouse per leggere i valori), card riassuntive, pagina iniziale in 3 passi, aiuto «?» su ogni opzione, barra di avanzamento con il tempo stimato, tema chiaro o scuro.
+- **Funzioni in più**: analisi salvate e confronto tra due analisi, prova rapida dei pesi tra benchmark e satellite, esportazione in Excel, nuove configurazioni di esempio (core + satellite 80/20, ETF europei).
+- **Più veloce**: le simulazioni girano in parallelo; con le impostazioni di default (20.000 simulazioni) circa 1-2 minuti.
 
-## Come installarlo sul Mac (Apple Silicon o Intel)
-1. Scarica `confronta-portafogli-v1.0.0.zip` qui sotto, aprilo e sposta la cartella in **Documenti**.
-2. Fai doppio clic su **`Installa.command`**. La prima volta macOS lo blocca: vai in Impostazioni di Sistema → Privacy e sicurezza → **Apri comunque**. Python e le librerie vengono installati dentro la cartella. Serve internet e ci vogliono alcuni minuti.
-3. Fai doppio clic su **`Avvia.command`**: si apre il browser con l'app. Per chiuderla, chiudi la finestra del Terminale.
-4. Se il doppio clic viene bloccato anche dopo "Apri comunque": `xattr -dr com.apple.quarantine ~/Documents/confronta-portafogli-v1.0.0` (nel Terminale; è il nome della cartella estratta dallo zip).
+## Come installarla sul Mac (Apple Silicon o Intel)
+1. Scarica `confronta-portafogli-v1.1.0.zip` qui sotto, aprilo e sposta la cartella in **Documenti**.
+2. Doppio clic su **`Installa.command`** (la prima volta: Impostazioni di Sistema → Privacy e sicurezza → **Apri comunque**).
+3. Doppio clic su **`Avvia.command`**: si apre il browser con l'app.
+4. Se il doppio clic viene bloccato anche dopo "Apri comunque": `xattr -dr com.apple.quarantine ~/Documents/confronta-portafogli-v1.1.0` (nel Terminale).
 
-Tutti i dettagli sono nel `README.md`.
+**Aggiornamento dalla 1.0**: copia nella nuova cartella `configurazioni/` (i tuoi file), `cache_prezzi/` e `report/`, poi rilancia `Installa.command`. Dettagli nel README, punto 8.
 
 ## Limiti noti
-- **Il rendimento atteso è un'ipotesi**, non una previsione: cambiandolo cambiano i valori finali. Le differenze di rischio tra portafogli sono più solide del livello dei numeri.
-- **Il futuro può essere diverso dal passato.** Il modello rimescola eventi già avvenuti, e i titoli quotati da poco hanno poca storia.
-- **Dati da Yahoo Finance**: possono contenere errori, e il servizio a volte limita gli accessi (in quel caso basta riprovare dopo qualche minuto). Il settore dei titoli non è sempre disponibile: allora si usa l'ETF di settore più correlato, che si può correggere nella configurazione.
-- **Costi**: sono inclusi TER degli ETF e costo di ribilanciamento, ma non imposte, spread e commissioni.
-- **Tempo di calcolo**: con le 20.000 simulazioni di default (risultati stabili entro circa ±2%) un confronto richiede alcuni minuti. Per una prova veloce si può scendere a 1.000.
-- I file `.command` non sono firmati da Apple, per questo serve "Apri comunque" la prima volta.
+- Il rendimento atteso è un'ipotesi, non una previsione; il futuro può essere diverso dal passato.
+- Le fonti gratuite possono avere errori o limitare gli accessi; Stooq al momento non restituisce dati.
+- Il livello di rischio di un portafoglio con volatilità vicina a una soglia può cambiare di uno tra un calcolo e l'altro.
+- Il tema scuro va scelto dal menu ⋮ → Settings → Theme (Streamlit non segue da solo il tema del sistema con un tema personalizzato).
+- I file `.command` non sono firmati da Apple: la prima volta serve "Apri comunque".

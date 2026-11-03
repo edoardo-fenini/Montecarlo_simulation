@@ -1,6 +1,11 @@
 # Registro delle modifiche
 
-## 1.1.0 (in sviluppo, ramo `v1.1`)
+## 1.1.0 (3 novembre 2026)
+
+Nessuna funzione della 1.0 è stata tolta. **I numeri del calcolo non sono cambiati**: il test di non regressione
+(1.236 numeri chiave con configurazione e seed fissi) è rimasto identico dall'inizio alla fine dello sviluppo, anche con
+il calcolo in parallelo. Unica differenza sui dati reali: sul Mac il cambio del dollaro prima del 2003 ora viene
+scaricato correttamente (vedi Correzioni).
 
 ### Dati più affidabili
 - Più fonti gratuite senza chiave API, provate in ordine: Yahoo Finance (yfinance) → Yahoo Finance API diretta → Stooq;

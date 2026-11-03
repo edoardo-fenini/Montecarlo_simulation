@@ -562,7 +562,8 @@ def sezione_una_pagina(ris):
         (
             "nota",
             "Il livello dipende dalla volatilità annua simulata, cioè da quanto oscilla il valore in un anno. Le soglie sono "
-            "ispirate alla scala di rischio (SRI) usata nei documenti europei dei prodotti finanziari, ridotta a 5 livelli.",
+            "ispirate alla scala di rischio (SRI) usata nei documenti europei dei prodotti finanziari, ridotta a 5 livelli. "
+            "Se la volatilità è vicina a una soglia (es. 14,0%), il livello può cambiare di uno tra un calcolo e l'altro.",
         ),
         criteri_rischio(),
     ]

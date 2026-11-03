@@ -1,0 +1,75 @@
+nome: tre portafogli v1.1
+capitale_iniziale: 5000.0
+versamento_mensile: 0.0
+orizzonte_anni: 15
+orizzonti_intermedi:
+- 5
+- 10
+n_simulazioni: 20000
+seed: 12345
+costo_ribilanciamento: 0.001
+ribilanciamento: annuale
+blocco_medio_giorni: 20.0
+parallelo: auto
+rendimento_atteso:
+  metodo: beta
+  tasso_privo_rischio: 0.02
+  premio_mercato: 0.04
+  valore_uguale: 0.06
+  personalizzato: {}
+benchmark:
+  nome: MSCI World (ETF)
+  descrizione: iShares Core MSCI World UCITS ETF USD (Acc)
+  ticker: IWDA.AS
+  isin: IE00B4L5Y983
+  ter: 0.002
+  proxy_storico: ^990100-USD-STRD
+moduli:
+  stress_test: true
+  rischio_singolo_titolo: true
+  confronto_modelli: true
+  analisi_C: true
+  verifica_convergenza: true
+verifica_convergenza:
+  numero_seed: 3
+  soglia: 0.02
+analisi:
+  inizio_B: '2007-01-01'
+  inizio_C: '1999-01-04'
+rischio_singolo_titolo:
+  probabilita_annua: 0.015
+  perdita_min: 0.8
+  perdita_max: 1.0
+ter_etf_default: 0.002
+ter: {}
+settori:
+  AMZN: tech
+  GOOGL: tech
+proxy: {}
+prezzi_da_file: {}
+portafogli:
+- nome: Cyber security
+  titoli:
+  - PANW
+  - FTNT
+  - FFIV
+  - CHKP
+  - CRWD
+  - S
+  - ZS
+- nome: Banche d'investimento / PE
+  titoli:
+  - GS
+  - JPM
+  - MS
+  - BLK
+  - BX
+  - HSBC
+  - UBS
+- nome: Big tech USA
+  titoli:
+    PLTR: 20
+    AAPL: 20
+    MSFT: 20
+    GOOGL: 20
+    AMZN: 20

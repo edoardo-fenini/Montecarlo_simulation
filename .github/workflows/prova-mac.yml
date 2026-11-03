@@ -66,6 +66,10 @@ jobs:
           if pgrep -f "[s]treamlit run app.py" >/dev/null; then echo "ERRORE: l'app non si è fermata"; exit 1; fi
           echo "App fermata correttamente"
 
+      - name: Ultime righe del file di log
+        if: always()
+        run: tail -n 40 log.txt || true
+
       - name: Salva il report di prova
         if: always()
         uses: actions/upload-artifact@v5
@@ -74,4 +78,5 @@ jobs:
           path: |
             report/prova_ci
             avvia.log
+            log.txt
           if-no-files-found: ignore

@@ -58,10 +58,10 @@ def _contesto_ssl():
         return ssl.create_default_context()
 
 
-def _scarica_url(url: str) -> bytes:
+def _scarica_url(url: str, timeout: float = TIMEOUT) -> bytes:
     req = urllib.request.Request(url, headers={"User-Agent": AGENTE, "Accept": "*/*"})
     try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT, context=_contesto_ssl()) as r:
+        with urllib.request.urlopen(req, timeout=timeout, context=_contesto_ssl()) as r:
             return r.read()
     except urllib.error.HTTPError as e:
         if e.code in (404, 400):
