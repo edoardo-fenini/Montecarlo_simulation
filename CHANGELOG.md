@@ -1,5 +1,26 @@
 # Registro delle modifiche
 
+## 1.3.1 (4 novembre 2026)
+
+Versione di correzione. Nessuna funzione tolta. Il test di non regressione (1.236 numeri) è identico; il modello GARCH del
+«Confronto tra modelli» dà gli stessi numeri di prima tutte le volte che la stima converge.
+
+### Correzione: stima GARCH non convergente usata in silenzio
+- **Cosa succedeva**: nel modulo «Confronto tra modelli» il GARCH(1,1) di ogni titolo si stima per massima verosimiglianza con
+  l'ottimizzatore SLSQP (parametri omega, alpha, beta con i vincoli omega > 0, alpha ≥ 0, beta ≥ 0, alpha + beta < 1). Su serie senza
+  raggruppamenti di volatilità riconoscibili (alpha finisce sul bordo 0, verosimiglianza piatta) o quasi costanti (prezzo fermo, varianza
+  quasi nulla) il sottoproblema quadratico di SLSQP diventa mal condizionato e l'ottimizzatore si ferma con il codice 4, «Inequality
+  constraints incompatible» (`ConvergenceWarning` visto sul Mac nella prova di Installa.command, con i dati sintetici dei test). I parametri
+  restituiti sono l'ultimo tentativo, non un ottimo, e venivano usati lo stesso.
+- **Effetto sui risultati**: solo sul modello GARCH del confronto tra modelli (sezione «Robustezza»); i risultati principali (block
+  bootstrap), gli stress test e il rischio sul singolo titolo non usano il GARCH. Con parametri non ottimi la volatilità simulata dal GARCH
+  per quel titolo poteva essere sbagliata (di solito di poco: la volatilità media resta vicina a quella storica).
+- **Correzione**: la stima standard è identica a prima; se non converge si riprova da altri tre punti di partenza; se nessuna stima converge
+  con parametri validi, per quel titolo si usa la **volatilità costante** (alpha = beta = 0, equivale a ripescare i rendimenti giornalieri). Il
+  ripiego non è mai silenzioso: avviso nel log, nella Sintesi e nella sezione «Robustezza» del report («Avviso sul modello GARCH»). Le
+  serie (quasi) costanti non vengono nemmeno stimate. Gli avvisi di scipy non arrivano più al terminale.
+- 5 nuovi test (`tests/test_garch.py`), compreso un ottimizzatore finto che risponde sempre «codice 4».
+
 ## 1.3.0 (4 novembre 2026)
 
 Versione di consolidamento. Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di

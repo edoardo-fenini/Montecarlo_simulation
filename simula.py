@@ -64,26 +64,46 @@ class StudentT:
 
 class Garch:
     """GARCH(1,1) per ogni titolo; gli shock standardizzati sono ripescati (bootstrap) tenendo
-    insieme lo stesso giorno per tutti i titoli, così si conservano le correlazioni."""
+    insieme lo stesso giorno per tutti i titoli, così si conservano le correlazioni.
 
-    def __init__(self, M):
-        from arch import arch_model
+    La stima (massima verosimiglianza con l'ottimizzatore SLSQP di `arch`) può non convergere quando la serie non ha raggruppamenti
+    di volatilità (alpha finisce al bordo 0) o ha varianza quasi nulla: SLSQP risponde allora «Inequality constraints incompatible»
+    (codice 4) e i parametri restituiti sono l'ultimo tentativo, non un ottimo. Un risultato non convergente non viene mai usato:
+    si riprova con altri punti di partenza e, se non basta, per quel titolo si usa la volatilità costante (equivale al ripescaggio
+    dei rendimenti giornalieri). Ogni ripiego è elencato in `self.avvisi` e finisce nel report."""
 
+    PARTENZE = ((0.05, 0.05, 0.90), (0.20, 0.10, 0.70), (0.50, 0.02, 0.50))  # (omega / varianza, alpha, beta)
+
+    def __init__(self, M, nomi=None):
         M = np.asarray(M, float)
         self.mu = M.mean(0)
         N = M.shape[1]
+        nomi = list(nomi) if nomi is not None and len(nomi) == N else [f"colonna {j + 1}" for j in range(N)]
         par = np.zeros((N, 3))
         Z = np.zeros_like(M)
+        self.avvisi, self.ripieghi = [], []
         for j in range(N):
             r = (M[:, j] - self.mu[j]) * 100
-            f = arch_model(r, mean="Zero", vol="GARCH", p=1, q=1, dist="normal").fit(disp="off")
-            om, al, be = f.params["omega"], f.params["alpha[1]"], f.params["beta[1]"]
-            if al + be > 0.995:  # troppo persistente: riporta a un valore stazionario
-                k = 0.995 / (al + be)
-                al, be = al * k, be * k
+            stima = _stima_garch(r, self.PARTENZE)
+            if stima is None:  # nessuna stima affidabile: volatilità costante (alpha = beta = 0)
+                var = float(r.var())
+                om, al, be = var, 0.0, 0.0
+                sd = np.sqrt(var)
+                z = r / sd if sd > 0 else np.zeros_like(r)
+                self.ripieghi.append(nomi[j])
+            else:
+                om, al, be, z = stima
+                if al + be > 0.995:  # troppo persistente: riporta a un valore stazionario
+                    k = 0.995 / (al + be)
+                    al, be = al * k, be * k
             par[j] = (om, al, be)
-            z = f.resid / f.conditional_volatility
-            Z[:, j] = (z - z.mean()) / z.std()
+            Z[:, j] = (z - z.mean()) / z.std() if z.std() > 0 else 0.0
+        if self.ripieghi:
+            self.avvisi.append(
+                "GARCH(1,1): la stima non converge per " + ", ".join(dict.fromkeys(self.ripieghi)) + " (serie senza variazioni di volatilità "
+                "riconoscibili o quasi costante). Per questi titoli il modello GARCH usa una volatilità costante: il confronto tra "
+                "modelli è meno informativo, i risultati principali (block bootstrap) non cambiano."
+            )
         self.par, self.Z = par, Z
         self.h0 = par[:, 0] / (1 - par[:, 1] - par[:, 2])
 
@@ -102,6 +122,33 @@ class Garch:
             self.eps2 = eps**2
             out[:, g, :] = self.mu + eps / 100.0
         return out
+
+
+def _stima_garch(r: np.ndarray, partenze) -> tuple[float, float, float, np.ndarray] | None:
+    """(omega, alpha, beta, residui standardizzati) di un GARCH(1,1) CONVERGENTE e con parametri validi; None se non ci si riesce.
+    Prima la stima standard (identica alle versioni precedenti), poi altri punti di partenza. Gli avvisi di `arch`/scipy sono
+    intercettati: l'esito si legge da `convergence_flag`, non dal terminale."""
+    import warnings
+
+    from arch import arch_model
+
+    var = float(np.var(r))
+    if not np.isfinite(var) or var < 1e-10:  # serie (quasi) costante: niente da stimare
+        return None
+    mod = arch_model(r, mean="Zero", vol="GARCH", p=1, q=1, dist="normal")
+    for partenza in (None, *partenze):
+        sv = None if partenza is None else np.array([partenza[0] * var, partenza[1], partenza[2]])
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            try:
+                f = mod.fit(disp="off", starting_values=sv)
+            except (ValueError, np.linalg.LinAlgError):
+                continue
+        om, al, be = (float(f.params[k]) for k in ("omega", "alpha[1]", "beta[1]"))
+        valido = all(np.isfinite([om, al, be])) and om > 0 and al >= 0 and be >= 0 and al + be < 1
+        if f.convergence_flag == 0 and valido:
+            return om, al, be, np.asarray(f.resid / f.conditional_volatility, float)
+    return None
 
 
 class ConCrolli:
