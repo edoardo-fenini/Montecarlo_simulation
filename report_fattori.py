@@ -192,3 +192,84 @@ def blocchi(ris: dict) -> list:
         B.append(("nota", f"I fattori {', '.join(tardi)} nascono dopo l'inizio della storia ({pd.Timestamp(conf['inizio_storia']):%d/%m/%Y}): prima valgono 0 nelle simulazioni (nessuna esposizione nota) e non entrano nelle regressioni."))
     B.append(("nota", "La regressione usa rendimenti settimanali in euro, con penalità ridge (esposizioni più prudenti quando la storia è breve o i fattori si somigliano; il fattore mercato non è penalizzato)."))
     return B
+
+
+# ---------------------------------------------------------------- validazione del modello (backtest del VaR)
+SEMAFORO = {"verde": "🟢 verde", "giallo": "🟡 giallo", "rosso": "🔴 rosso"}
+
+
+def grafico_backtest(ris: dict) -> bytes:
+    import matplotlib.pyplot as plt
+
+    import report as RP
+
+    bt = ris["backtest"]
+    serie = list(bt["rend"])
+    nc = min(2, len(serie))
+    nr = int(np.ceil(len(serie) / nc))
+    fig, axs = plt.subplots(nr, nc, figsize=(11, 3.2 * nr), squeeze=False)
+    d = bt["date"]
+    for ax, p in zip(axs.ravel(), serie):
+        ok = bt["ok"][p]
+        r = bt["rend"][p] * 100
+        ax.plot(d[ok], r[ok], color="#999999", lw=0.5, label="Rendimento del giorno")
+        ax.plot(d[ok], -bt["var"][(p, "storico", 0.95)][ok] * 100, color="#E69F00", lw=1, label="VaR 95% storico")
+        ax.plot(d[ok], -bt["var"][(p, "fattori", 0.95)][ok] * 100, color="#0072B2", lw=1, label="VaR 95% a fattori")
+        for mod, col, mk in (("storico", "#E69F00", "o"), ("fattori", "#D55E00", "x")):
+            f = bt["flag"][(p, mod, 0.95)].astype(bool)
+            ax.scatter(d[ok][f], r[ok][f], s=14, color=col, marker=mk, zorder=5, label=f"Sforamenti ({mod})")
+        ax.set_title(RP.corto(p, 32), fontsize=10, fontweight="bold")
+        ax.set_ylabel("%")
+        ax.grid(alpha=0.25)
+    for ax in axs.ravel()[len(serie) :]:
+        ax.axis("off")
+    h, lab = axs.ravel()[0].get_legend_handles_labels()
+    fig.legend(h, lab, ncols=5, fontsize=8, loc="lower center", frameon=False)
+    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    return RP.png(fig)
+
+
+def blocchi_backtest(ris: dict) -> list:
+    bt = ris.get("backtest")
+    if not bt:
+        return []
+    t = bt["tabella"]
+    B = [
+        (
+            "p",
+            f"Per ogni giorno si calcola il VaR a 1 giorno con i soli dati passati (finestra mobile di {bt['finestra']} giorni di borsa) e si "
+            "confronta con il rendimento del giorno dopo, come fanno le banche. Con un VaR al 95% ci si aspetta di superarlo in circa 1 giorno su 20; "
+            "al 99% in circa 1 su 100.",
+        ),
+        (
+            "box",
+            [
+                "<b>Test di Kupiec</b>: gli sforamenti sono tanti quanti ci aspettiamo? (p-value sotto 5% = no).",
+                "<b>Test di Christoffersen</b>: gli sforamenti arrivano sparsi o a grappolo? A grappolo = il modello reagisce tardi alle crisi.",
+                "<b>Semaforo</b>: verde = entrambi i test passati; giallo = uno sotto il 5%; rosso = uno sotto l'1%.",
+            ],
+        ),
+    ]
+    for lv in sorted(t["livello"].unique()):
+        B.append(("h3", f"VaR a 1 giorno al {int(round(lv * 100))}%"))
+        righe = []
+        for _, r in t[t["livello"] == lv].iterrows():
+            righe.append(
+                [
+                    r["serie"],
+                    r["modello"],
+                    str(int(r["giorni"])),
+                    f"{int(r['sforamenti'])} (attesi {r['attesi']:.1f})".replace(".", ","),
+                    _p(r["p_kupiec"], 1),
+                    _p(r["p_christoffersen"], 1),
+                    SEMAFORO[r["semaforo"]],
+                ]
+            )
+        B.append(("tab", {"intest": ["Modello", "Giorni", "Sforamenti", "Kupiec (p)", "Christoffersen (p)", "Esito"], "righe": righe, "gruppi": None, "sx": True}))
+    B.append(("h3", "Rendimenti effettivi contro VaR"))
+    B.append(("img", grafico_backtest(ris)))
+    B.append(("didascalia", "Linee: VaR 95% dei due modelli (cambiato di segno). Punti e croci: giorni in cui la perdita ha superato il VaR."))
+    mig = t.groupby("modello")["semaforo"].apply(lambda s: s.map({"verde": 0, "giallo": 1, "rosso": 2}).mean())
+    B.append(("nota", "Voto medio dei semafori (0 = tutti verdi, 2 = tutti rossi): " + ", ".join(f"{m} {v:.2f}".replace(".", ",") for m, v in mig.items()) + "."))
+    B.append(("nota", "Il modello «fattori» usa un VaR normale con la covarianza dei fattori su tutta la loro storia; il modello «storico» è il quantile degli ultimi 2 anni. Un test su pochi anni ha poca forza: un esito verde non è una garanzia."))
+    return B

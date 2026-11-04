@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
+import backtest_var
 import dati as D
 import fattori as FA
 import isin
@@ -434,6 +435,14 @@ def esegui(
         "modello_simulazione": modello,
         "fattori": fatt,
     }
+
+    if mod.get("backtest_var") and fatt is not None and "A" in per:
+        log("     backtest del VaR (validazione del modello)")
+        M_bt, porte_bt, colonne_bt, idx_bt = matrice(cfg, per["A"])
+        try:
+            ris["backtest"] = backtest_var.esegui(M_bt, porte_bt, colonne_bt, idx_bt, fatt["F"], fatt["V"], fatt["conf"], log=log)
+        except ValueError as e:
+            ris["avvisi"].append(f"Backtest del VaR non eseguito: {e}")
 
     # ---- piano dei lavori: le simulazioni indipendenti tra loro (ognuna con il suo seed)
     lavori, stress_da_fare, nomi_sens, mats = [], {}, {}, {}

@@ -35,6 +35,7 @@ SCHEDE = [
     "Da dove viene il rischio",
     "Stress test",
     "Robustezza",
+    "Validazione del modello",
     "Limiti dell'analisi",
 ]
 PALETTE, GRIGIO = stile.PALETTE, stile.GRIGIO
@@ -890,6 +891,8 @@ def sezioni(ris: dict) -> dict[str, list]:
     # ---- Da dove viene il rischio (modello a fattori; si calcola dalle regressioni, anche senza simulare con i fattori)
     S["Da dove viene il rischio"] = report_fattori.blocchi(ris)
 
+    S["Validazione del modello"] = report_fattori.blocchi_backtest(ris)
+
     # ---- Stress test
     B = S["Stress test"]
     if ris["stress"]:
@@ -1553,6 +1556,13 @@ def tabelle_csv(ris: dict) -> dict[str, pd.DataFrame]:
             .rename_axis("portafoglio")
             .reset_index()
         )
+    if ris.get("fattori"):
+        f = ris["fattori"]
+        out["fattori_esposizioni_titoli.csv"] = f["stima"].beta.assign(R2=f["stima"].r2, volatilita=f["stima"].vol, volatilita_specifica=f["stima"].vol_specifica).rename_axis("titolo").reset_index()
+        out["fattori_quota_rischio.csv"] = pd.DataFrame({p: s["quote"] for p, s in f["scomposizione"].items()}).rename_axis("gruppo").reset_index()
+        out["fattori_elenco.csv"] = f["info"].reset_index()
+    if ris.get("backtest"):
+        out["backtest_var.csv"] = ris["backtest"]["tabella"]
     return out
 
 

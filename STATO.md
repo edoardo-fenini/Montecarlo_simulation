@@ -270,3 +270,7 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
       Limite noto: il benchmark ETF ha correlazione giornaliera 0,6 con l'indice MSCI (fusi orari/qualità del dato Yahoo): i suoi scarti regionali sono rumore.
 - [x] Tappa 2 – `report_fattori.py`: scheda «Da dove viene il rischio» (barre impilate, esposizioni, R², avvisi R²<0,3, sintesi in italiano), anche con modello storico
       (modulo `scomposizione_rischio`). App: selettore del modello + due moduli nuovi.
+- [x] Tappa 3 – `backtest_var.py`: VaR 1 giorno 95/99% su finestra mobile 504 giorni, modelli storico (quantile) e fattori (beta ricalcolati ogni 21 giorni, covarianza
+      dei fattori su tutta la storia fino a ieri + varianza specifica, VaR normale); Kupiec, Christoffersen, semaforo; scheda «Validazione del modello» (tabelle + grafico);
+      modulo `backtest_var` disattivato di default. Test: `tests/test_backtest_var.py`. Primo esito reale (Cyber/Big tech/MSCI World, 5,4 anni): vedi il riepilogo finale.
+  Ora: prova nel browser con modello fattori, confronto dei due modelli sull'esempio, README/CHANGELOG/RELEASE_NOTES, PR, tag.
