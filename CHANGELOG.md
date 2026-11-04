@@ -1,5 +1,47 @@
 # Registro delle modifiche
 
+## 1.3.1 (4 novembre 2026)
+
+Versione di correzione. Nessuna funzione tolta. Il test di non regressione (1.236 numeri) è identico; il modello GARCH del
+«Confronto tra modelli» dà gli stessi numeri di prima tutte le volte che la stima converge.
+
+### Correzione: stima GARCH non convergente usata in silenzio
+- **Cosa succedeva**: nel modulo «Confronto tra modelli» il GARCH(1,1) di ogni titolo si stima per massima verosimiglianza con
+  l'ottimizzatore SLSQP (parametri omega, alpha, beta con i vincoli omega > 0, alpha ≥ 0, beta ≥ 0, alpha + beta < 1). Su serie senza
+  raggruppamenti di volatilità riconoscibili (alpha finisce sul bordo 0, verosimiglianza piatta) o quasi costanti (prezzo fermo, varianza
+  quasi nulla) il sottoproblema quadratico di SLSQP diventa mal condizionato e l'ottimizzatore si ferma con il codice 4, «Inequality
+  constraints incompatible» (`ConvergenceWarning` visto sul Mac nella prova di Installa.command, con i dati sintetici dei test). I parametri
+  restituiti sono l'ultimo tentativo, non un ottimo, e venivano usati lo stesso.
+- **Effetto sui risultati**: solo sul modello GARCH del confronto tra modelli (sezione «Robustezza»); i risultati principali (block
+  bootstrap), gli stress test e il rischio sul singolo titolo non usano il GARCH. Con parametri non ottimi la volatilità simulata dal GARCH
+  per quel titolo poteva essere sbagliata (di solito di poco: la volatilità media resta vicina a quella storica).
+- **Correzione**: la stima standard è identica a prima; se non converge si riprova da altri tre punti di partenza; se nessuna stima converge
+  con parametri validi, per quel titolo si usa la **volatilità costante** (alpha = beta = 0, equivale a ripescare i rendimenti giornalieri). Il
+  ripiego non è mai silenzioso: avviso nel log, nella Sintesi e nella sezione «Robustezza» del report («Avviso sul modello GARCH»). Le
+  serie (quasi) costanti non vengono nemmeno stimate. Gli avvisi di scipy non arrivano più al terminale.
+- 5 nuovi test (`tests/test_garch.py`), compreso un ottimizzatore finto che risponde sempre «codice 4».
+
+### Correzione: la prova di Installa.command falliva nello zip della release
+- `tests/test_release.py` leggeva `.github/workflows/release.yml`, che sta solo nel repository (lo zip lo esclude): sul Mac
+  «1 failed». Ora i test che dipendono da file presenti solo nel repository usano `tests/solo_repository.richiede(...)` e, se il
+  file manca, sono **saltati con un messaggio chiaro** («File presenti solo nel repository di sviluppo … non è un errore»).
+  Verificato eseguendo l'intera suite dentro lo zip costruito come nella release: era l'unico test interessato.
+- La prova rapida di `Installa.command` eseguiva **tutta** la suite (sul Mac 153 secondi invece dei 30 annunciati). Ora esegue solo i
+  test con il marker pytest **`rapido`** (`pytest -m rapido`): veloci, senza internet, compresi il test di non regressione, l'avvio
+  dell'app e la creazione del PDF. Sono esclusi i test lenti elencati in `tests/conftest.py` (simulazioni complete nell'app, interazioni
+  AppTest, calcolo in parallelo, prova nel browser). Tempo misurato: 31 secondi su Linux a 4 core (sul Mac di GitHub la suite gira circa il 40%
+  più veloce). La suite completa resta nei workflow «Test» e «Prova su Mac» e per chi sviluppa.
+
+### Prova su Mac «come l'utente»
+- Nuovo job `zip-release` in «Prova su Mac» (macOS 14, Apple Silicon): costruisce lo zip esattamente come la release (o, avviandolo a mano,
+  scarica lo zip di una release pubblicata), lo estrae in una cartella pulita fuori dal repository, esegue `Installa.command
+  --non-interattivo`, controlla che la prova rapida non abbia test falliti e duri al massimo 75 secondi (obiettivo circa 30), poi avvia e
+  ferma `Avvia.command`. Avrebbe trovato il problema di `release.yml` prima della 1.3.0.
+- Lo zip si crea con `strumenti/crea_zip.sh`, usato sia dal workflow «Release» sia da questa prova (stesso contenuto, stessi controlli).
+
+### Altro
+- 12 nuovi test (211 in tutto). Note di rilascio v1.3.1, README e report «progresso, debolezze e sviluppi» aggiornati.
+
 ## 1.3.0 (4 novembre 2026)
 
 Versione di consolidamento. Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di

@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release:
+        description: "Facoltativo: tag di una release pubblicata (es. v1.3.1) da scaricare e provare al posto dello zip costruito dal commit"
+        required: false
+        type: string
 
 jobs:
   mac:
@@ -87,3 +92,77 @@ jobs:
             avvia.log
             log.txt
           if-no-files-found: ignore
+
+  # Come fa l'utente: zip della release → cartella pulita → Installa.command (non interattivo) → prova rapida → Avvia.command.
+  # Avrebbe trovato il test che leggeva .github/ (assente nello zip) prima della release 1.3.0.
+  zip-release:
+    runs-on: macos-14   # Apple Silicon (M1)
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Zip della release (costruito come nel workflow «Release», oppure scaricato)
+        id: zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE: ${{ inputs.release }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/scaricati"
+          if [ -n "$RELEASE" ]; then
+            gh release download "$RELEASE" --pattern "*.zip" --dir "$RUNNER_TEMP/scaricati"
+            ZIP=$(ls "$RUNNER_TEMP"/scaricati/*.zip | head -1)
+          else
+            ZIP=$(bash strumenti/crea_zip.sh "v0.0.0-prova" "$RUNNER_TEMP/scaricati" | tail -1)
+          fi
+          ls -la "$ZIP"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Estrai in una cartella pulita (fuori dal repository, senza .git né .github)
+        id: cartella
+        env:
+          ZIP: ${{ steps.zip.outputs.zip }}
+        run: |
+          DEST="$RUNNER_TEMP/Documenti"
+          mkdir -p "$DEST" && cd "$DEST" && unzip -q "$ZIP"
+          DIR=$(ls -d "$DEST"/confronta-portafogli-*/ | head -1)
+          ls -la "$DIR"
+          test ! -e "$DIR/.git" && test ! -e "$DIR/.github"
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Installa.command (non interattivo, come il doppio clic)
+        working-directory: ${{ steps.cartella.outputs.dir }}
+        run: |
+          INIZIO=$(date +%s)
+          set +e
+          ./Installa.command --non-interattivo 2>&1 | tee installa.log
+          ESITO=${PIPESTATUS[0]}
+          set -e
+          echo "Installazione completa in $(( $(date +%s) - INIZIO )) secondi (uscita $ESITO)"
+          test "$ESITO" = "0"
+          grep -q "Installazione completata" installa.log
+          if grep -E "[0-9]+ failed" installa.log; then echo "ERRORE: test falliti nella prova rapida"; exit 1; fi
+
+      - name: Tempo della prova rapida (deve restare intorno ai 30 secondi)
+        working-directory: ${{ steps.cartella.outputs.dir }}
+        run: |
+          INIZIO=$(date +%s)
+          .venv/bin/python -m pytest -q -m rapido -p no:cacheprovider tests | tail -3
+          DURATA=$(( $(date +%s) - INIZIO ))
+          echo "Prova rapida: ${DURATA} secondi"
+          if [ "$DURATA" -gt 75 ]; then echo "ERRORE: la prova rapida dura ${DURATA} s (obiettivo circa 30 s)"; exit 1; fi
+
+      - name: Avvia.command risponde e si ferma
+        working-directory: ${{ steps.cartella.outputs.dir }}
+        run: |
+          ./Avvia.command --non-interattivo > avvia.log 2>&1 &
+          AVVIA=$!
+          URL=""
+          for i in $(seq 1 120); do
+            URL=$(grep -o "http://localhost:[0-9]*" avvia.log | head -1)
+            if [ -n "$URL" ] && curl -sf "$URL/_stcore/health" >/dev/null; then break; fi
+            sleep 1
+          done
+          cat avvia.log
+          curl -sf "$URL/_stcore/health" && echo " <- l'app risponde"
+          kill $AVVIA; sleep 3
+          if pgrep -f "[s]treamlit run app.py" >/dev/null; then echo "ERRORE: l'app non si è fermata"; exit 1; fi

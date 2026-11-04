@@ -1,6 +1,6 @@
 # Progresso, debolezze e sviluppi
 
-Aggiornato al 4 novembre 2026, dopo la versione **1.3.0** (consolidamento).
+Aggiornato al 4 novembre 2026, dopo la versione **1.3.1** (correzioni dopo la prova su un Mac reale).
 Nota: nelle versioni precedenti questo report era stato consegnato solo in chat (PDF). Da ora sta nel repository, così si aggiorna
 insieme al codice.
 
@@ -38,6 +38,11 @@ Risolte nella 1.3:
 - ~~Release da creare a mano dal sito, tag con nomi incoerenti~~ → release automatica, formato unico `vX.Y.Z`.
 - ~~La prova nel browser era fuori dal repository e dava un falso errore sulla tabella in canvas~~ → `tests/e2e/`, verifica dal testo associato.
 - ~~Portafoglio da ricopiare a mano dal conto titoli~~ → importazione dal CSV del broker.
+
+Risolte nella 1.3.1:
+- ~~La prova rapida di Installa.command falliva nello zip (test che leggeva `.github/`) e durava 153 s invece di 30~~ → skip con messaggio,
+  marker `rapido`, prova su Mac dallo zip della release.
+- ~~Stima GARCH non convergente usata in silenzio~~ → altri punti di partenza, poi volatilità costante con avviso nel report.
 
 Ancora aperte:
 - **Dipendenza da servizi gratuiti** (Yahoo Finance, OpenFIGI): possono limitare o cambiare senza preavviso. Mitigato da cache, più fonti,

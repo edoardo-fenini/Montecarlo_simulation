@@ -209,7 +209,7 @@ def _generatore(lav: Lavoro, cfg: dict):
     if lav.tipo == "t":
         return StudentT(lav.M, 5)
     if lav.tipo == "garch":
-        return Garch(lav.M)
+        return Garch(lav.M, lav.extra.get("nomi"))
     if lav.tipo == "crolli":
         rs = cfg["rischio_singolo_titolo"]
         return ConCrolli(Bootstrap(lav.M, b), lav.extra["azioni"], rs["probabilita_annua"], (rs["perdita_min"], rs["perdita_max"]))
@@ -237,8 +237,9 @@ def esegui_lavoro(lav: Lavoro, cfg: dict, n: int, coda=None, callback=None):
             n_rec=min(n, 1000),
             progresso=prog,
         )
+    gen = _generatore(lav, cfg)
     res = simula(
-        _generatore(lav, cfg),
+        gen,
         lav.porte,
         n,
         cfg["orizzonte_anni"],
@@ -251,7 +252,10 @@ def esegui_lavoro(lav: Lavoro, cfg: dict, n: int, coda=None, callback=None):
         rib_mesi=cfg["ribilanciamento_mesi"],
         progresso=prog,
     )
-    return lav.chiave, metriche.sommario(res, cfg, n)
+    som = metriche.sommario(res, cfg, n)
+    if getattr(gen, "avvisi", None):  # es. GARCH non convergente: ripiego segnalato nel report
+        som["avvisi_modello"] = list(gen.avvisi)
+    return lav.chiave, som
 
 
 def usa_parallelo(cfg: dict, n: int, n_lavori: int) -> bool:
@@ -396,7 +400,8 @@ def esegui(
             stress_da_fare[a] = (Mr, porte, cat, singolo)
         if mod["confronto_modelli"]:
             lavori.append(Lavoro(f"t_{a}", "t", f"Analisi {a}: modello Student-t", 1.0, Mr, porte))
-            lavori.append(Lavoro(f"garch_{a}", "garch", f"Analisi {a}: modello GARCH", 1.3, Mr, porte))
+            nomi_col = [t for _, t in colonne]
+            lavori.append(Lavoro(f"garch_{a}", "garch", f"Analisi {a}: modello GARCH", 1.3, Mr, porte, extra={"nomi": nomi_col}))
             for j, (nome_v, kw) in enumerate(varianti_sensibilita(cfg)):
                 Mv = prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta, **kw), tipi)
                 lavori.append(Lavoro(f"sens{j}_{a}", "bootstrap", f"Analisi {a}: sensibilità ({nome_v})", 1.0, Mv, porte))
@@ -436,6 +441,9 @@ def esegui(
             ris["stress"][a] = risultati[f"stress_{a}"]
         if f"t_{a}" in risultati:
             ris["modelli"][a] = {"Student-t multivariata": risultati[f"t_{a}"], "GARCH(1,1) + residui bootstrap": risultati[f"garch_{a}"]}
+            for x in risultati[f"garch_{a}"].get("avvisi_modello", []):
+                ris.setdefault("avvisi_modelli", []).append(f"Analisi {a}: {x}")
+                log(f"  ATTENZIONE {x}")
             ris["sensibilita"][a] = [(nomi_sens[k], risultati[k]) for k in sorted(nomi_sens) if k.endswith(f"_{a}")]
     if "A" in anal and n_seed > 1:
         ris["convergenza"] = confronto_seed(cfg, [ris["sim"]["A"]] + [risultati[f"conv{j}"] for j in range(1, n_seed)], n)

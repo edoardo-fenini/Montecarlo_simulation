@@ -751,6 +751,15 @@ def sezioni(ris: dict) -> dict[str, list]:
     )
     if ris["avvisi"]:
         B.append(("warn", "<b>Avvisi sui dati:</b><br/>" + "<br/>".join(esc(x) for x in ris["avvisi"])))
+    if ris.get("avvisi_modelli"):
+        dove = ", ".join(dict.fromkeys(x.split(":", 1)[0] for x in ris["avvisi_modelli"]))
+        B.append(
+            (
+                "warn",
+                f"<b>Avviso sui modelli ({esc(dove)}):</b> la stima GARCH non converge per alcuni titoli; nel confronto tra modelli per loro "
+                "si usa una volatilità costante. I risultati principali non cambiano (dettagli in «Robustezza»).",
+            )
+        )
     if ris["estremi"]:
         B.append(
             (
@@ -909,6 +918,8 @@ def sezioni(ris: dict) -> dict[str, list]:
                 "Classifica = dal portafoglio più rischioso al meno rischioso.",
             )
         )
+        if ris.get("avvisi_modelli"):  # GARCH non convergente: ripiego sulla volatilità costante, mai in silenzio
+            B.append(("warn", "<b>Avviso sul modello GARCH:</b><br/>" + "<br/>".join(esc(x) for x in ris["avvisi_modelli"])))
         for a in ris["modelli"]:
             righe = []
             mod = [("Block bootstrap", ris["sim"][a])] + list(ris["modelli"][a].items())

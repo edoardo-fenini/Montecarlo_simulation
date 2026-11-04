@@ -40,25 +40,10 @@ jobs:
           python3 strumenti/note_release.py note "$TAG" CHANGELOG.md > note_release.md
           echo "--- note della release $TAG ---"; cat note_release.md
 
-      - name: Crea lo zip
+      - name: Crea lo zip e controlla il contenuto (stesso script della prova su Mac)
         env:
           TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          NOME="confronta-portafogli-${TAG}"
-          git archive --format=zip --prefix="${NOME}/" -o "${NOME}.zip" HEAD
-          unzip -l "${NOME}.zip" | tail -3
-
-      - name: Controlla il contenuto dello zip
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          NOME="confronta-portafogli-${TAG}"
-          # Installa.command e Avvia.command devono essere eseguibili (permessi -rwx)
-          zipinfo "${NOME}.zip" | grep -E "(Installa|Avvia)\.command" | tee comandi.txt
-          test "$(grep -c '^-rwx' comandi.txt)" = "2"
-          # niente ambienti, cache o report generati
-          if unzip -l "${NOME}.zip" | grep -E "/(\.venv|\.python|cache_prezzi|report)/"; then echo "ERRORE: file che non devono stare nello zip"; exit 1; fi
-          for f in isin.py controllo.py nomi.py app.py configurazioni/esempio_isin.yaml; do unzip -l "${NOME}.zip" | grep -q "$f"; done
+        run: bash strumenti/crea_zip.sh "$TAG" .
 
       - name: Crea (o aggiorna) la release e allega lo zip
         env:
