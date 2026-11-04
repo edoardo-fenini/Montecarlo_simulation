@@ -269,6 +269,9 @@ def test_impostazioni_ripristinate_se_streamlit_cancella_lo_stato_dei_widget(app
     assert copia["capitale"] == 12345.0 and copia["orizzonte"] == 7 and copia["rf"] == 2.0  # la copia segue i valori attuali
     # ripristino: come dopo un'esecuzione interrotta da un errore, quando Streamlit ha cancellato lo stato dei widget
     stato = {"capitale": 1.0, stato_app.CHIAVE_COPIA: dict(copia)}
-    assert stato_app.conserva(stato, ["capitale", "orizzonte", "rf"]) == ["orizzonte", "rf"]
-    assert stato["capitale"] == 1.0 and stato["orizzonte"] == 7 and stato["rf"] == 2.0
-    assert stato[stato_app.CHIAVE_COPIA]["capitale"] == 1.0
+    assert stato_app.conserva(stato, ["capitale", "orizzonte", "rf"]) == ["capitale", "orizzonte", "rf"]  # vince la copia (v1.5)
+    assert stato["capitale"] == 12345.0 and stato["orizzonte"] == 7 and stato["rf"] == 2.0
+    stato_app.registra(stato, "capitale")  # una scelta voluta aggiorna la copia
+    stato["capitale"] = 1.0
+    stato_app.registra(stato, "capitale")
+    assert stato_app.conserva(stato, ["capitale"]) == [] and stato["capitale"] == 1.0
