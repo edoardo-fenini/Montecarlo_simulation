@@ -1,6 +1,6 @@
 # Registro delle modifiche
 
-## 1.2.0 (in sviluppo, 4 novembre 2026)
+## 1.2.0 (4 novembre 2026)
 
 Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di non regressione
 (1.236 numeri chiave) è rimasto identico.

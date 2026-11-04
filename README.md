@@ -153,6 +153,10 @@ Nell'app, dopo **🔎 Controlla i dati**, sotto la tabella compare per ogni ISIN
 Esempio pronto con azioni ed ETF europei: `configurazioni/esempio_isin.yaml`.
 
 ### Controllo dei dati prima della simulazione
+| ![Controllo dati con ISIN](docs/screenshot/01_controllo_dati_isin.png) | ![Menu della quotazione](docs/screenshot/02_menu_quotazione.png) | ![ISIN errato: simulazione bloccata](docs/screenshot/04_isin_errato_bloccato.png) |
+|---|---|---|
+| Tabella con semaforo per tre ISIN (e il benchmark) | Menu per scegliere un'altra quotazione dell'ISIN | Cifra di controllo errata: «Avvia simulazione» è disattivato |
+
 Il pulsante **🔎 Controlla i dati** (barra laterale) verifica tutti i titoli, benchmark compreso, **prima** di simulare. Compare la tabella «Controllo dati» con, per ogni titolo: input (ticker o ISIN), ticker usato, nome completo, borsa, valuta, fonte dei dati, prima e ultima data, anni di storia, % di giorni mancanti, ultimo prezzo e semaforo. In cima il riepilogo, ad esempio *«12 titoli trovati, 1 avviso, 0 errori»*. La stessa tabella finisce nel report (sezione Sintesi, CSV `controllo_dati.csv`, scheda Excel «Controllo dati»). Premendo **Avvia simulazione** il controllo viene rifatto da solo.
 
 | Semaforo | Quando | Cosa succede |
@@ -265,17 +269,17 @@ portafogli:
 
 Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%). Prima della sua nascita (2009) si usa l'indice MSCI World. Per cambiarlo aggiungi una sezione `benchmark:` come nel file di esempio.
 
-## 8. Aggiornare a una nuova versione (ad esempio dalla 1.0 alla 1.1)
+## 8. Aggiornare a una nuova versione (ad esempio dalla 1.1 alla 1.2)
 
 Le tue cose stanno in tre cartelle: `configurazioni/` (i file YAML), `cache_prezzi/` (i prezzi già scaricati) e `report/` (i report salvati). Il resto si può sostituire.
 
-1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella, ad esempio `Documenti/confronta-portafogli-v1.1.0`.
+1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella, ad esempio `Documenti/confronta-portafogli-v1.2.0`.
 2. Copia dalla cartella vecchia a quella nuova:
    - i tuoi file da `configurazioni/` (non sovrascrivere gli esempi nuovi, se hanno lo stesso nome rinomina i tuoi);
    - l'intera cartella `cache_prezzi/` (così non riscarichi tutto);
    - l'intera cartella `report/` (i report della 1.0 restano leggibili; nella scheda «Analisi salvate» compaiono solo quelli creati con la 1.1, perché la 1.0 non salvava il file `riassunto.json`).
 3. Se macOS blocca i file nuovi, vedi il punto 3 (anche il comando `xattr`).
-4. Fai doppio clic su `Installa.command` nella nuova cartella (serve: la 1.1 usa due librerie in più), poi usa `Avvia.command`.
+4. Fai doppio clic su `Installa.command` nella nuova cartella (serve se la nuova versione usa librerie in più; non fa male se non serve), poi usa `Avvia.command`.
 5. Quando tutto funziona puoi cancellare la cartella vecchia.
 
 ## 9. Problemi comuni

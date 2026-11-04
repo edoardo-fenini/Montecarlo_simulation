@@ -23,6 +23,19 @@ jobs:
           NOME="confronta-portafogli-${TAG}"
           git archive --format=zip --prefix="${NOME}/" -o "${NOME}.zip" HEAD
           unzip -l "${NOME}.zip" | tail -3
+      - name: Controlla il contenuto dello zip
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          NOME="confronta-portafogli-${TAG}"
+          # Installa.command e Avvia.command devono essere eseguibili (permessi -rwx)
+          zipinfo "${NOME}.zip" | grep -E "(Installa|Avvia)\.command" | tee comandi.txt
+          test "$(grep -c '^-rwx' comandi.txt)" = "2"
+          # niente ambienti, cache o report generati; ci sono le novità della 1.2
+          if unzip -l "${NOME}.zip" | grep -E "/(\.venv|\.python|cache_prezzi|report)/"; then echo "ERRORE: file che non devono stare nello zip"; exit 1; fi
+          unzip -l "${NOME}.zip" | grep -q "isin.py"
+          unzip -l "${NOME}.zip" | grep -q "controllo.py"
+          unzip -l "${NOME}.zip" | grep -q "configurazioni/esempio_isin.yaml"
       - name: Allega lo zip alla release
         env:
           GH_TOKEN: ${{ github.token }}

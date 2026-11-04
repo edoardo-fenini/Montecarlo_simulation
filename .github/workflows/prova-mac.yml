@@ -4,6 +4,8 @@ name: Prova su Mac
 
 on:
   push:
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -30,6 +32,9 @@ jobs:
       - name: Test automatici
         run: .venv/bin/python -m pytest -q tests
 
+      - name: Controllo dati con ISIN (conversione ISIN -> ticker e semaforo, dati reali)
+        run: .venv/bin/python confronta.py --solo-controllo --config configurazioni/esempio_isin.yaml
+
       - name: Report da riga di comando (prova rapida)
         run: .venv/bin/python confronta.py --config configurazioni/prova_ci.yaml --veloce --uscita report/prova_ci
 
@@ -45,6 +50,8 @@ jobs:
           test -s report/prova_ci/report.html
           head -c 4 report/prova_ci/report.pdf | grep -q "%PDF"
           grep -q "Le simulazioni bastano?" report/prova_ci/report.html
+          grep -q "Controllo dei dati prima della simulazione" report/prova_ci/report.html
+          test -s report/prova_ci/dati_csv/controllo_dati.csv
 
       - name: Avvia l'app per qualche secondo e verifica che risponda
         run: |
