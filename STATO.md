@@ -120,6 +120,8 @@ debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLE
       ricerca non la dà), riquadro nell'app con ➕ per riga e portafoglio di destinazione. Provata dal vivo (4/11/2026): «MSCI World» →
       IWDA.AS, EUNL.DE, URTH…; «IE00B4L5Y983» → IWDA.L con ISIN. Scelta: ISIN mostrato solo se cercato (Yahoo non lo restituisce); un titolo
       già presente nel portafoglio non viene duplicato; il peso del nuovo titolo resta vuoto. 7 test + prova nel browser.
+- [x] 7. Chiusura: RELEASE_NOTES v1.3.0, README (novità, aggiornamento), user-agent 1.3, report `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
+      198 test verdi in locale (5 min di app + 3 min di browser), non regressione identica. Pull request, merge e tag: vedi sotto.
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;

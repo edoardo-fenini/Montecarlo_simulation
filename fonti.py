@@ -23,7 +23,7 @@ logging.getLogger("yfinance").setLevel(logging.CRITICAL)
 TIMEOUT = 25  # secondi per ogni richiesta
 TENTATIVI = 3  # tentativi per fonte in caso di errore di rete
 ATTESA_INIZIALE = 1.5  # secondi; raddoppia a ogni tentativo (1,5 – 3 – 6)
-AGENTE = "confronta-portafogli/1.1 (strumento personale di analisi; python-urllib)"
+AGENTE = "confronta-portafogli/1.3 (strumento personale di analisi; python-urllib)"
 
 # suffisso Yahoo -> (suffisso Stooq, valuta dei prezzi Stooq)
 STOOQ = {"": (".us", "USD"), ".DE": (".de", "EUR"), ".F": (".de", "EUR"), ".L": (".uk", "GBp"), ".T": (".jp", "JPY"), ".HK": (".hk", "HKD")}

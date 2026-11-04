@@ -59,6 +59,10 @@ non regressione (1.236 numeri chiave) è rimasto identico.
 - `strumenti/note_release.py` valida il nome del tag (solo `vX.Y.Z`) ed estrae le note. `zip-release.yml` resta per le release create a mano.
 - README: spiegazione dei tag vecchi (`V_1.0.1`, `V_1.1.0`, `V_1.2.0`, `prova`, non cancellati) e della procedura passo passo dal sito.
 
+### Altro
+- Report «progresso, debolezze e sviluppi» ora nel repository: `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
+- 86 nuovi test (198 in tutto), tutti senza internet; i workflow «Test» e «Prova su Mac» girano a ogni push.
+
 ## 1.2.0 (4 novembre 2026)
 
 Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di non regressione

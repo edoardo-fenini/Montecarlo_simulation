@@ -8,6 +8,10 @@ Uno strumento per confrontare il **rischio** di più portafogli di azioni ed ETF
 |---|---|---|
 | ![Pagina iniziale](docs/immagini/01_pagina_iniziale.png) | ![Schede con il livello di rischio](docs/immagini/02_in_una_pagina.png) | ![Fan chart](docs/immagini/03_fan_chart.png) |
 
+**Novità della versione 1.3:** risultati vecchi nascosti con un avviso quando cambi titoli, impostazioni o dati; corretto l'errore
+`StreamlitDuplicateElementId` che poteva fermare l'app a fine analisi; controllo automatico dei nomi OpenFIGI/Yahoo per ogni ISIN;
+importazione del portafoglio dal CSV del broker; ricerca dei titoli per nome; release automatica dal tag `vX.Y.Z`; prova nel browser nei test.
+
 **Novità della versione 1.1:** dati più affidabili (più fonti, modalità offline, prezzi da file CSV, controllo dei ticker), report con copertina, indice e pagina «In una pagina» con il livello di rischio da 1 a 5, grafici interattivi, analisi salvate e confronto tra due analisi, prova rapida dei pesi, esportazione in Excel, calcolo in parallelo (circa 2 volte più veloce). Tutti i dettagli in `CHANGELOG.md`.
 
 ---
@@ -307,11 +311,11 @@ portafogli:
 
 Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%). Prima della sua nascita (2009) si usa l'indice MSCI World. Per cambiarlo aggiungi una sezione `benchmark:` come nel file di esempio.
 
-## 8. Aggiornare a una nuova versione (ad esempio dalla 1.1 alla 1.2)
+## 8. Aggiornare a una nuova versione (ad esempio dalla 1.2 alla 1.3)
 
 Le tue cose stanno in tre cartelle: `configurazioni/` (i file YAML), `cache_prezzi/` (i prezzi già scaricati) e `report/` (i report salvati). Il resto si può sostituire.
 
-1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella, ad esempio `Documenti/confronta-portafogli-v1.2.0`.
+1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella, ad esempio `Documenti/confronta-portafogli-v1.3.0`.
 2. Copia dalla cartella vecchia a quella nuova:
    - i tuoi file da `configurazioni/` (non sovrascrivere gli esempi nuovi, se hanno lo stesso nome rinomina i tuoi);
    - l'intera cartella `cache_prezzi/` (così non riscarichi tutto);
