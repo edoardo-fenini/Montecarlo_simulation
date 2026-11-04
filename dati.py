@@ -162,6 +162,17 @@ class Archivio:
         self.memoria[t] = (s, self._meta(t))
         return self.memoria[t]
 
+    def rinfresca(self, t):
+        """Riscarica il ticker una volta (se c'è internet e non è già stato aggiornato): per prezzi in cache troppo vecchi."""
+        if not self.in_rete or t in self.fatti:
+            return
+        self.memoria.pop(t, None)
+        vecchio, self.aggiorna = self.aggiorna, True
+        try:
+            self.prezzi(t)
+        finally:
+            self.aggiorna = vecchio
+
     def importa_csv(self, t, contenuto, valuta, tipo="EQUITY", nome=""):
         """Salva in cache i prezzi di un CSV scaricato a mano. Ritorna la serie letta."""
         t = t.strip().upper()
@@ -179,6 +190,7 @@ class Archivio:
             "nome": nome or f"{t} (prezzi da file)",
             "borsa": "file",
             "fonte": FONTE_MANUALE,
+            "prezzi_non_positivi": s.attrs.get("non_positivi", 0),
             "scaricato_il": datetime.date.today().isoformat(),
         }
         json.dump(meta, open(base + ".json", "w"))
