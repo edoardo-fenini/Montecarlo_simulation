@@ -1,0 +1,48 @@
+# Esempio con gli ISIN al posto dei ticker: azioni ed ETF europei.
+#   python confronta.py --config configurazioni/esempio_isin.yaml --solo-controllo     (solo verifica dei dati)
+#   python confronta.py --config configurazioni/esempio_isin.yaml                      (verifica + simulazione)
+#
+# Per ogni titolo puoi scrivere un ticker Yahoo (ENEL.MI) OPPURE un ISIN (IT0003128367): lo strumento lo riconosce da solo,
+# controlla la cifra di controllo e lo converte in ticker (OpenFIGI, con la ricerca di Yahoo come riserva).
+# Se un ISIN è quotato su più borse sceglie con la regola «isin.preferenze» (default: EUR, poi .MI, .DE, .AS, poi le altre;
+# a parità più storia e più volumi). Il report mostra sia l'ISIN sia il ticker usato.
+
+nome: Esempio ISIN
+capitale_iniziale: 10000
+versamento_mensile: 200
+orizzonte_anni: 15
+orizzonti_intermedi: [5, 10]
+rendimento_atteso:
+  metodo: beta
+n_simulazioni: 20000
+
+# Opzionale: regola per scegliere la quotazione quando un ISIN è quotato su più borse.
+# isin:
+#   preferenze: [EUR, .MI, .DE, .AS]       # valuta o suffisso Yahoo della borsa, in ordine di preferenza
+#   openfigi_chiave: null                   # opzionale: chiave gratuita OpenFIGI (vedi README)
+# Opzionale: forza una quotazione diversa da quella scelta dalla regola (oppure usa il menu nell'app).
+# isin_scelte: {IE00B4L5Y983: EUNL.DE}
+
+# Opzionale: nome che ti aspetti per un titolo; se il nome trovato è molto diverso compare un avviso (giallo).
+nomi_attesi:
+  IT0003128367: Enel
+  IE00BK5BQT80: Vanguard FTSE All-World
+  US0378331005: Apple
+
+ter_etf_default: 0.002
+
+portafogli:
+  - nome: Azioni europee
+    titoli:
+      - IT0003128367   # Enel
+      - IT0000072618   # Intesa Sanpaolo
+      - IT0003132476   # Eni
+      - DE0007164600   # SAP
+      - NL0010273215   # ASML
+      - FR0000121014   # LVMH
+      - DE0007236101   # Siemens
+      - FR0000120271   # TotalEnergies
+  - nome: ETF globali
+    titoli: {IE00BK5BQT80: 60, IE00B5BMR087: 25, IE00BKM4GZ66: 15}   # FTSE All-World, S&P 500, MSCI Emergenti IMI
+  - nome: Misto ETF e azioni
+    titoli: {IE00BK5BQT80: 70, IT0003128367: 10, DE0007164600: 10, US0378331005: 10}   # si possono mescolare ISIN e ticker (es. AAPL)

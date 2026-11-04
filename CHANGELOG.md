@@ -1,5 +1,40 @@
 # Registro delle modifiche
 
+## 1.2.0 (4 novembre 2026)
+
+Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di non regressione
+(1.236 numeri chiave) è rimasto identico.
+
+### Supporto agli ISIN
+- Per ogni titolo (tabella dell'app, benchmark, file YAML) si può scrivere un ticker Yahoo **oppure un ISIN**: è riconosciuto
+  da solo (2 lettere + 9 caratteri + cifra di controllo) e la cifra di controllo viene verificata.
+- Conversione in ticker con OpenFIGI (gratuito, nessuna chiave obbligatoria) e, come riserva, la ricerca di Yahoo Finance
+  (`yfinance.Search`). Ogni ticker candidato è verificato su Yahoo (valuta, storia, volumi, ultimo scambio).
+- Scelta della quotazione con una regola configurabile (`isin.preferenze`, default EUR → `.MI` → `.DE` → `.AS` → altre; a parità
+  più storia e più volumi; le quotazioni ferme o con volumi trascurabili vanno in fondo). Nell'app un menu mostra la quotazione scelta
+  e le altre trovate; `isin_scelte` in configurazione forza una quotazione.
+- Conversioni in cache (`cache_prezzi/isin_ticker.json`). Chiave OpenFIGI facoltativa (`isin.openfigi_chiave` o variabile
+  `OPENFIGI_API_KEY`), mai scritta nei report.
+- Il report mostra per ogni titolo l'ISIN e il ticker usato (tabella «Titoli usati», `titoli.csv`, Excel).
+- Nuovo esempio `configurazioni/esempio_isin.yaml` (azioni ed ETF europei).
+
+### Controllo dei dati prima della simulazione
+- Tabella «Controllo dati» con semaforo per titolo (input, ticker usato, nome, borsa, valuta, fonte, prima/ultima data, anni di
+  storia, % giorni mancanti, ultimo prezzo, esito), riepilogo in cima («12 titoli trovati, 1 avviso, 0 errori»).
+- Rosso (blocca): non trovato / ISIN errato, nessun prezzo, meno di 1 anno di storia, ultimo prezzo oltre 30 giorni, prezzi
+  zero o negativi. Giallo (avviso): meno di 3 anni, oltre 5% di giorni mancanti, ultimo prezzo oltre 7 giorni, movimenti
+  giornalieri estremi, nome molto diverso da quello atteso (`nomi_attesi`). Soglie in `controllo_dati`.
+- App: pulsante **Controlla i dati** separato; con almeno un rosso **Avvia simulazione** è disattivato con un messaggio su cosa
+  correggere. Sostituisce il vecchio riquadro «Controllo dei ticker».
+- Riga di comando: `confronta.py` stampa la tabella e si ferma con un messaggio chiaro se c'è un rosso; `--solo-controllo`
+  esegue solo la verifica.
+- La tabella è nel report (Sintesi), in `dati_csv/controllo_dati.csv` e in una scheda Excel.
+
+### Altro
+- Le fonti di prezzi segnalano quanti prezzi zero o negativi hanno scartato (`prezzi_non_positivi` nei metadati).
+- Prezzi in cache più vecchi di 7 giorni: il controllo prova a riscaricarli prima di dichiararli vecchi.
+- 62 nuovi test (ISIN, scelta della quotazione, ogni regola del semaforo, blocco con un rosso, app, report), tutti senza internet.
+
 ## 1.1.0 (3 novembre 2026)
 
 Nessuna funzione della 1.0 è stata tolta. **I numeri del calcolo non sono cambiati**: il test di non regressione

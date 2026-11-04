@@ -13,6 +13,7 @@ import yaml
 
 import analisi
 import configurazione as C
+import controllo
 import dati as D
 import grafici_app as G
 import registro
@@ -24,7 +25,8 @@ ESEMPIO = "configurazioni/esempio_tre_portafogli.yaml"
 
 AIUTO = {
     "nome": "Serve a riconoscere il report: compare nel titolo e nel nome del file.",
-    "tabella": "Una riga per titolo. Ticker come su finance.yahoo.com. Peso in %: vuoto = pesi uguali. "
+    "tabella": "Una riga per titolo. Scrivi il ticker come su finance.yahoo.com (es. ENEL.MI) oppure l'ISIN (es. IT0003128367): "
+    "l'ISIN è riconosciuto da solo e convertito in ticker. Peso in %: vuoto = pesi uguali. "
     "Portafoglio misto: come ticker scrivi il nome di un altro portafoglio oppure «benchmark».",
     "capitale": "Quanto investi all'inizio, in euro.",
     "versamento": "Quanto aggiungi ogni mese (0 = solo l'investimento iniziale). I versamenti seguono i pesi del portafoglio.",
@@ -40,7 +42,7 @@ AIUTO = {
     "rib": "Ogni quanto riportare i titoli ai pesi scelti, pagando il costo di ribilanciamento.",
     "costo": "Costo pagato sull'importo comprato e venduto a ogni ribilanciamento.",
     "seed": "Numero di partenza delle estrazioni casuali: con lo stesso seed si ottengono gli stessi risultati.",
-    "b_ticker": "L'ETF di confronto. Default: iShares Core MSCI World (IWDA.AS).",
+    "b_ticker": "L'ETF di confronto: ticker Yahoo oppure ISIN. Default: iShares Core MSCI World (IWDA.AS).",
     "b_proxy": "Indice usato per gli anni prima della nascita dell'ETF.",
     "aggiorna": "Riscarica i prezzi anche se sono già salvati sul computer (per avere gli ultimi giorni).",
 }
@@ -128,6 +130,8 @@ def applica_cfg(raw: dict) -> None:
     ss.costo = float(cfg["costo_ribilanciamento"]) * 100
     b = cfg["benchmark"]
     ss.b_nome, ss.b_ticker, ss.b_ter, ss.b_proxy = b["nome"], b["ticker"], float(b["ter"]) * 100, b.get("proxy_storico") or ""
+    ss.scelte_isin = {str(k).replace(" ", "").upper(): str(v).strip().upper() for k, v in (cfg.get("isin_scelte") or {}).items()}
+    ss.pop("controllo", None)
 
 
 def cfg_da_stato(tabella: pd.DataFrame) -> dict:
@@ -169,6 +173,10 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
         "personalizzato": {k: v / 100 for k, v in ss.personalizzato.items()},
     }
     raw["moduli"] = {k: bool(ss[f"mod_{k}"]) for k in C.DEFAULT["moduli"]}
+    if ss.get("scelte_isin"):
+        raw["isin_scelte"] = dict(ss.scelte_isin)
+    else:
+        raw.pop("isin_scelte", None)
     raw["benchmark"] = {
         **(raw.get("benchmark") or {}),
         "nome": ss.b_nome,
@@ -208,15 +216,6 @@ def carica_file() -> None:
 def carica_esempio() -> None:
     applica_cfg(yaml.safe_load(open(ESEMPIO, encoding="utf-8")))
     ss.pop("ris", None)
-
-
-@st.cache_data(show_spinner=False, ttl=3600)
-def verifica_cache(t: str):
-    """Scheda del ticker (scarica e mette in cache i prezzi se mancano). Ritorna un messaggio se non esiste."""
-    try:
-        return D.verifica_ticker(D.Archivio(log=lambda *a: None), t)
-    except ErroreDati as e:
-        return str(e).split(".")[0]
 
 
 # ------------------------------------------------------------------ rendering dei blocchi del report
@@ -305,6 +304,82 @@ def senza_immagini(blocchi: list) -> list:
     return [b for b in blocchi if b[0] not in ("img", "didascalia")]
 
 
+# ------------------------------------------------------------------ controllo dei dati
+def chiave_dati(tabella: pd.DataFrame) -> str | None:
+    """Impronta di ciò che il controllo guarda (titoli, benchmark, regole ISIN, soglie). None se le impostazioni non sono valide."""
+    try:
+        g = cfg_da_stato(tabella)
+    except C.ErroreConfig:
+        return None
+    parti = {k: g.get(k) for k in ("portafogli", "isin", "isin_scelte", "nomi_attesi", "controllo_dati", "prezzi_da_file")}
+    parti["benchmark"] = (g.get("benchmark") or {}).get("ticker")
+    return yaml.safe_dump(parti, sort_keys=True, allow_unicode=True)
+
+
+def calcola_controllo(grezza: dict, aggiorna: bool):
+    """Controlla tutti i titoli (scarica i prezzi mancanti). Ritorna (esito, archivio dei prezzi già aperto)."""
+    cfg = C.prepara(copy.deepcopy(grezza))
+    arch = D.Archivio(aggiorna=bool(aggiorna), log=lambda *a: None)
+    return controllo.controlla(cfg, arch, log=lambda *a: None), arch
+
+
+def scegli_quotazione(isin_cod: str, chiave_widget: str, predefinita: str) -> None:
+    """Menu «quotazione»: salva la scelta e chiede di rifare il controllo."""
+    scelta = ss[chiave_widget]
+    if scelta == predefinita:
+        ss.scelte_isin.pop(isin_cod, None)
+    else:
+        ss.scelte_isin[isin_cod] = scelta
+    ss.ricontrolla = True
+
+
+def etichetta_quotazione(q: dict) -> str:
+    return (
+        f"{q['ticker']} · {q['borsa']} · {q['valuta']} · {report.num(q['storia_anni'])} anni di storia · "
+        f"volume medio {report.num_it(int(q['volume_medio']))}"
+    )
+
+
+def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
+    cc = ss.get("controllo")
+    if not cc:
+        return
+    e = cc["esito"]
+    with st.expander("🔎 Controllo dati", expanded=(e["blocca"] or e["gialli"] > 0 or not con_ris)):
+        (st.error if e["blocca"] else st.warning if e["gialli"] else st.success)(f"**{e['riepilogo']}**")
+        if cc["chiave"] != chiave_attuale:
+            st.info("Dopo questo controllo hai cambiato titoli o impostazioni: premi «Controlla i dati» per aggiornarlo.")
+        if e["blocca"]:
+            st.error(e["messaggio"].replace("\n", "  \n"))
+        st.dataframe(
+            controllo.tabella(e["righe"]),
+            hide_index=True,
+            width="stretch",
+            column_config={"Dettagli": st.column_config.TextColumn(width="large")},
+        )
+        st.caption("🟢 tutto a posto · 🟡 avviso, si può procedere · 🔴 errore, la simulazione non parte finché non lo correggi.")
+        multi = [r for r in e["righe"] if r.get("risoluzione") and len(r["risoluzione"]["quotazioni"]) > 1]
+        for r in multi:
+            ris_i = r["risoluzione"]
+            elenco = [q["ticker"] for q in ris_i["quotazioni"]]
+            etichette = {q["ticker"]: etichetta_quotazione(q) for q in ris_i["quotazioni"]}
+            k = f"quot_{r['isin']}"
+            if ris_i["ticker"] not in etichette:  # ticker forzato in configurazione, non tra quelli trovati
+                elenco.insert(0, ris_i["ticker"])
+                etichette[ris_i["ticker"]] = ris_i["ticker"] + " · scelto in configurazione"
+            ss[k] = ris_i["ticker"]
+            st.selectbox(
+                f"Quotazione scelta per {r['isin']} ({r['nome'] or '–'})",
+                elenco,
+                format_func=etichette.get,
+                key=k,
+                on_change=scegli_quotazione,
+                args=(r["isin"], k, ris_i["predefinito"]),
+                help=f"Trovate {len(elenco)} quotazioni con {ris_i['metodo']}. Scelta automatica: {ris_i['predefinito']} "
+                "(preferisce EUR, poi Borsa Italiana, Xetra, Amsterdam; poi più storia e volumi).",
+            )
+
+
 # ------------------------------------------------------------------ barra laterale
 with st.sidebar:
     st.title("📊 Impostazioni")
@@ -323,7 +398,7 @@ with st.sidebar:
         hide_index=True,
         column_config={
             "Portafoglio": st.column_config.TextColumn(width="medium", help="Nome del portafoglio"),
-            "Ticker": st.column_config.TextColumn(width="small", help=AIUTO["tabella"]),
+            "Ticker": st.column_config.TextColumn("Ticker o ISIN", width="small", help=AIUTO["tabella"]),
             "Peso (%)": st.column_config.NumberColumn(
                 min_value=0.0, max_value=100.0, format="%.2f", width="small", help="Peso in percentuale; vuoto = pesi uguali"
             ),
@@ -333,39 +408,6 @@ with st.sidebar:
     c1, c2 = st.columns(2)
     c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch", help="Imposta pesi uguali dentro ogni portafoglio.")
     c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch", help="Torna ai tre portafogli di esempio.")
-
-    riferimenti = {str(x).strip().lower() for x in tab["Portafoglio"]} | {"benchmark"}
-    ticker_tab = list(
-        dict.fromkeys(
-            str(t).strip().upper()
-            for t in tab["Ticker"]
-            if str(t).strip() not in ("", "None") and str(t).strip().lower() not in riferimenti
-        )
-    )
-    with st.expander("🔎 Controllo dei ticker"):
-        arch_v = D.Archivio(log=lambda *a: None)
-        nuovi = [t for t in ticker_tab if not arch_v.in_cache(t)]
-        automatico = len(nuovi) <= 3 or ss.get("verifica_tutti", False)  # pochi ticker nuovi: li controllo subito
-        if nuovi and not automatico:
-            st.caption(f"{len(nuovi)} ticker non ancora scaricati: {', '.join(nuovi)}.")
-            if st.button("Scarica e controlla tutti i ticker", width="stretch"):
-                ss.verifica_tutti = True
-                st.rerun()
-        righe_v = []
-        with st.spinner("Controllo i ticker..."):
-            for t in ticker_tab:
-                if t in nuovi and not automatico:
-                    continue
-                v = verifica_cache(t)
-                if isinstance(v, str):
-                    righe_v.append({"Ticker": t, "Nome": "❌ " + v, "Borsa": "", "Valuta": "", "Anni": None, "Fonte": ""})
-                else:
-                    righe_v.append(
-                        {"Ticker": t, "Nome": v["nome"], "Borsa": v["borsa"], "Valuta": v["valuta"], "Anni": v["anni"], "Fonte": v["fonte"]}
-                    )
-        if righe_v:
-            st.dataframe(pd.DataFrame(righe_v), hide_index=True, width="stretch")
-            st.caption("Controlla che il nome corrisponda all'azienda che intendevi: un ticker sbagliato può indicare un'altra società.")
 
     with st.expander("📄 Carica prezzi da file"):
         st.caption(
@@ -387,7 +429,6 @@ with st.sidebar:
         if st.button("Importa i prezzi", width="stretch", disabled=f_csv is None or not t_csv.strip()):
             try:
                 s_imp = D.Archivio(log=lambda *a: None).importa_csv(t_csv, f_csv.getvalue(), v_csv, tipo_csv)
-                verifica_cache.clear()
                 st.success(
                     f"Importati {len(s_imp)} prezzi per {t_csv.strip().upper()} dal {s_imp.index[0]:%d/%m/%Y} al "
                     f"{s_imp.index[-1]:%d/%m/%Y}. Ora puoi usare questo ticker nella tabella."
@@ -423,14 +464,29 @@ with st.sidebar:
     st.number_input("Numero di simulazioni", min_value=500, max_value=100000, step=1000, key="nsim", help=AIUTO["nsim"])
     with st.expander("Benchmark e impostazioni avanzate"):
         st.text_input("Nome del benchmark", key="b_nome")
-        st.text_input("Ticker del benchmark", key="b_ticker", help=AIUTO["b_ticker"])
+        st.text_input("Ticker (o ISIN) del benchmark", key="b_ticker", help=AIUTO["b_ticker"])
         st.number_input("TER del benchmark (%)", min_value=0.0, max_value=3.0, step=0.01, key="b_ter", help="Costo annuo dell'ETF.")
         st.text_input("Indice prima della nascita dell'ETF", key="b_proxy", help=AIUTO["b_proxy"])
         st.selectbox("Ribilanciamento", list(C.RIBILANCIAMENTO_MESI), key="rib", help=AIUTO["rib"])
         st.number_input("Costo di ribilanciamento (%)", min_value=0.0, max_value=5.0, step=0.05, key="costo", help=AIUTO["costo"])
         st.number_input("Seed", min_value=0, step=1, key="seed", help=AIUTO["seed"])
     aggiorna = st.checkbox("Aggiorna i dati (riscarica i prezzi)", value=False, help=AIUTO["aggiorna"])
-    avvia = st.button("▶ Avvia simulazione", type="primary", width="stretch")
+    chiave_attuale = chiave_dati(tab)
+    cc = ss.get("controllo")
+    bloccato = bool(cc and chiave_attuale is not None and cc["chiave"] == chiave_attuale and cc["esito"]["blocca"])
+    controlla = st.button(
+        "🔎 Controlla i dati",
+        width="stretch",
+        help="Verifica tutti i titoli (anche gli ISIN) prima di simulare: esistenza, storia, prezzi recenti, buchi nei dati.",
+    )
+    avvia = st.button("▶ Avvia simulazione", type="primary", width="stretch", disabled=bloccato)
+    if bloccato:
+        da_correggere = ", ".join(r["input"] for r in cc["esito"]["righe"] if r["esito"] == controllo.ROSSO)
+        st.error(
+            f"Non posso avviare la simulazione: {cc['esito']['rossi']} "
+            f"{'titolo ha' if cc['esito']['rossi'] == 1 else 'titoli hanno'} un errore (rosso): **{da_correggere}**. "
+            "Correggi o togli i titoli indicati (dettagli in «Controllo dati») e premi di nuovo «Controlla i dati»."
+        )
 
     st.header("Salva / carica", divider="gray")
     try:
@@ -484,7 +540,15 @@ def esegui_simulazione(contenitore) -> None:
 
     try:
         grezza = cfg_da_stato(tab)
-        cfg = C.prepara(copy.deepcopy(grezza))
+        C.prepara(copy.deepcopy(grezza))  # errori di configurazione subito, prima del controllo dei dati
+        barra.progress(0.0, text="Controllo i dati…")
+        esito, arch = calcola_controllo(grezza, aggiorna)
+        ss.controllo = {"chiave": chiave_attuale, "esito": esito}
+        if esito["blocca"]:
+            barra.empty()
+            contenitore.error("**Simulazione non avviata.** " + esito["messaggio"].replace("\n", "  \n"))
+            return
+        cfg = esito["cfg"]  # ISIN già convertiti in ticker
         # stessa configurazione e stessi dati già calcolati in questa sessione: risultato istantaneo
         chiave = yaml.safe_dump(grezza, sort_keys=True) + str(D.Archivio(log=lambda *a: None).ultimo_aggiornamento())
         cache = ss.setdefault("cache_risultati", {})
@@ -493,7 +557,14 @@ def esegui_simulazione(contenitore) -> None:
             ris = cache[chiave]
             log.info("Risultato ripreso dalla cache della sessione")
         else:
-            ris = analisi.esegui(cfg, aggiorna_dati=aggiorna, log=lambda m: log.info(m.strip()), progresso=progresso)
+            ris = analisi.esegui(
+                cfg,
+                aggiorna_dati=aggiorna,
+                log=lambda m: log.info(m.strip()),
+                progresso=progresso,
+                archivio=arch,
+                controllo=controllo.per_report(esito),
+            )
             cache.clear()  # una sola simulazione in memoria, per non occupare troppa RAM
             cache[chiave] = ris
         barra.progress(1.0, text="Preparo il report…")
@@ -679,7 +750,7 @@ def mostra_salvate() -> None:
 st.title("Confronto del rischio di portafogli")
 scheda_sim, scheda_salvate = st.tabs(["🧮 Simulazione", "🗂️ Analisi salvate"])
 zona_messaggi = scheda_sim.container()
-avvia = avvia or ss.pop("avvia_ora", False)  # pulsante della pagina iniziale (il callback gira prima dello script)
+avvia = (avvia or ss.pop("avvia_ora", False)) and not bloccato  # pulsante della pagina iniziale (il callback gira prima dello script)
 
 with scheda_sim:
     if "ris" not in ss and not avvia:
@@ -703,11 +774,27 @@ with scheda_sim:
             + " · ".join(nomi_pf + [ss.b_nome])
             + f" — {report.eur(ss.capitale)} iniziali, {ss.orizzonte} anni, {report.num_it(int(ss.nsim))} simulazioni."
         )
-        st.button("▶ Avvia la simulazione con queste impostazioni", type="primary", on_click=lambda: ss.update(avvia_ora=True))
+        st.button(
+            "▶ Avvia la simulazione con queste impostazioni", type="primary", on_click=lambda: ss.update(avvia_ora=True), disabled=bloccato
+        )
         st.caption("Questo strumento non è consulenza finanziaria.")
+
+    if controlla or ss.pop("ricontrolla", False):
+        try:
+            with st.spinner("Controllo i dati (scarico i prezzi mancanti)…"):
+                esito_c, _ = calcola_controllo(cfg_da_stato(tab), aggiorna)
+            ss.controllo = {"chiave": chiave_attuale, "esito": esito_c}
+            if esito_c["blocca"]:
+                st.rerun()  # per disattivare subito «Avvia simulazione»
+        except C.ErroreConfig as e:
+            zona_messaggi.error(f"**C'è un problema nelle impostazioni.** {e}")
+        except ErroreDati as e:
+            zona_messaggi.error(f"**Non riesco a controllare i dati.** {e}")
 
     if avvia:
         esegui_simulazione(zona_messaggi)
+
+    pannello_controllo(chiave_attuale, "ris" in ss)
 
     if "ris" in ss:
         ris, S = ss.ris, ss.sezioni

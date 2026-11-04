@@ -570,6 +570,62 @@ def sezione_una_pagina(ris):
     return B
 
 
+COLORE_ESITO = {"VERDE": "#1B5E20", "GIALLO": "#8A5A00", "ROSSO": "#A31515"}
+
+
+def blocco_controllo_dati(ris: dict) -> list:
+    """Tabella «Controllo dati» (semaforo per titolo) calcolata prima della simulazione. Vuota se il controllo non è stato eseguito."""
+    c = ris.get("controllo")
+    if not c:
+        return []
+    t = c["tabella_senza_emoji"]
+    righe = []
+    for _, x in t.iterrows():
+        esito = x["Esito"].upper()
+        righe.append(
+            [
+                esc(x["Input"]),
+                f'<font color="{COLORE_ESITO[esito]}"><b>{esito}</b></font>',
+                esc(x["Ticker usato"]),
+                esc(corto(x["Nome"], 26)),
+                esc(f"{x['Borsa']} ({x['Valuta']})" if x["Valuta"] else x["Borsa"]),
+                esc(x["Fonte"]),
+                x["Prima data"],
+                x["Ultima data"],
+                x["Anni di storia"],
+                x["% giorni mancanti"],
+                esc(x["Ultimo prezzo"].split(" del ")[0]),
+            ]
+        )
+    B = [
+        ("h3", "Controllo dei dati prima della simulazione"),
+        (
+            "p",
+            f"<b>{esc(c['riepilogo'])}.</b> La prima colonna è ciò che hai scritto (ticker o ISIN). Semaforo: <b>verde</b> = tutto a posto; <b>giallo</b> = avviso, si può procedere; <b>rosso</b> = errore che blocca la simulazione.",
+        ),
+        T(
+            [
+                "Esito",
+                "Ticker usato",
+                "Nome",
+                "Borsa (valuta)",
+                "Fonte",
+                "Prima data",
+                "Ultima data",
+                "Anni",
+                "% giorni mancanti",
+                "Ultimo prezzo",
+            ],
+            righe,
+            sx=True,
+        ),
+    ]
+    note = [f"<b>{esc(x['Input'])}</b>: {esc(x['Dettagli'])}" for _, x in t.iterrows() if x["Dettagli"] != "tutto a posto"]
+    if note:
+        B.append(("box", note))
+    return B
+
+
 def sezioni(ris: dict) -> dict[str, list]:
     """Ritorna {scheda: [blocchi]}."""
     cfg, n, nomi = ris["cfg"], ris["n"], ris["nomi"]
@@ -621,6 +677,7 @@ def sezioni(ris: dict) -> dict[str, list]:
             ],
         )
     )
+    B += blocco_controllo_dati(ris)
     B.append(("h3", "Dati e periodi analizzati"))
     crisi = [
         ("bolla dot-com 2000-2002", "2000-03-10", "2002-10-09"),
@@ -666,6 +723,7 @@ def sezioni(ris: dict) -> dict[str, list]:
         righe.append(
             [
                 t,
+                esc(r.get("isin", "") or ""),
                 esc(corto(r["nome"] or "", 30)),
                 esc(r.get("borsa", "") or ""),
                 r["valuta"] or "",
@@ -681,10 +739,10 @@ def sezioni(ris: dict) -> dict[str, list]:
     B.append(
         (
             "dettagli",
-            "Titoli usati (borsa, valuta, storia, beta, settore, fonte dei dati)",
+            "Titoli usati (ISIN, ticker, borsa, valuta, storia, beta, settore, fonte dei dati)",
             [
                 T(
-                    ["Nome", "Borsa", "Valuta", "Tipo", "Primo dato", "Ultimo dato", "Anni", "Beta", "Settore stress", "Fonte"],
+                    ["ISIN", "Nome", "Borsa", "Valuta", "Tipo", "Primo dato", "Ultimo dato", "Anni", "Beta", "Settore stress", "Fonte"],
                     righe,
                     sx=True,
                 )
@@ -1419,6 +1477,8 @@ def tabelle_csv(ris: dict) -> dict[str, pd.DataFrame]:
         .assign(beta=[ris["beta"].get(BENCH if t == ris["cfg"]["benchmark"]["ticker"] else t, np.nan) for t in ris["dati_info"].index])
         .reset_index()
     )
+    if ris.get("controllo"):
+        out["controllo_dati.csv"] = ris["controllo"]["tabella_senza_emoji"]
     if ris["stress"]:
         out["stress_test.csv"] = pd.concat([df.assign(analisi=a) for a, df in ris["stress"].items()])
     if ris["idio"]:
@@ -1563,6 +1623,16 @@ def excel_report(ris) -> bytes:
     ws = wb.create_sheet("Rendimenti attesi")
     scrivi(ws, 1, "Beta e rendimento atteso", ris["rend_attesi"])
     larghezze(ws)
+    if ris.get("controllo"):
+        ws = wb.create_sheet("Controllo dati")
+        scrivi(
+            ws,
+            1,
+            "Controllo dati: " + ris["controllo"]["riepilogo"],
+            ris["controllo"]["tabella_senza_emoji"].set_index("Input"),
+            lambda m: "",
+        )
+        larghezze(ws, 16, 16)
     ws = wb.create_sheet("Titoli")
     info = ris["dati_info"].copy()
     info["beta"] = [ris["beta"].get(BENCH if t == ris["cfg"]["benchmark"]["ticker"] else t, np.nan) for t in info.index]

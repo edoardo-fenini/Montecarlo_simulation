@@ -39,12 +39,15 @@ def vuota():
 
 def _pulisci(s: pd.Series) -> pd.Series:
     s = pd.to_numeric(s, errors="coerce").dropna()
+    non_positivi = int((s <= 0).sum())  # il «Controllo dati» segnala i prezzi zero o negativi che qui vengono scartati
     s = s[s > 0]
     idx = s.index
     if getattr(idx, "tz", None) is not None:
         idx = idx.tz_localize(None)
     s.index = pd.DatetimeIndex(idx).normalize()
-    return s[~s.index.duplicated(keep="last")].sort_index()
+    s = s[~s.index.duplicated(keep="last")].sort_index()
+    s.attrs["non_positivi"] = non_positivi
+    return s
 
 
 def _contesto_ssl():
@@ -95,7 +98,9 @@ def yahoo_yfinance(ticker: str):
     if h is None or h.empty or "Adj Close" not in h:
         return vuota()
     md = tk.history_metadata or {}
-    return _pulisci(h["Adj Close"]), {
+    s = _pulisci(h["Adj Close"])
+    return s, {
+        "prezzi_non_positivi": s.attrs.get("non_positivi", 0),
         "valuta": md.get("currency"),
         "tipo": md.get("instrumentType"),
         "nome": md.get("longName") or md.get("shortName"),
@@ -130,6 +135,7 @@ def yahoo_diretto(ticker: str):
         log.warning("%s: Yahoo diretto ha restituito dati non giornalieri, li scarto", ticker)
         return vuota()
     return s, {
+        "prezzi_non_positivi": s.attrs.get("non_positivi", 0),
         "valuta": md.get("currency"),
         "tipo": md.get("instrumentType"),
         "nome": md.get("longName") or md.get("shortName"),
@@ -166,7 +172,9 @@ def stooq(ticker: str):
     df = pd.read_csv(io.BytesIO(raw), index_col="Date", parse_dates=True)
     if "Close" not in df or df.empty:
         return vuota()
-    return _pulisci(df["Close"]), {
+    s = _pulisci(df["Close"])
+    return s, {
+        "prezzi_non_positivi": s.attrs.get("non_positivi", 0),
         "valuta": sv[1],
         "tipo": "CURRENCY" if ticker.endswith("=X") else None,
         "nome": None,

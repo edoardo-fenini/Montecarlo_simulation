@@ -5,6 +5,9 @@ Esempi:
   python confronta.py --config configurazioni/mio_portafoglio.yaml --veloce
   python confronta.py --config configurazioni/mio_portafoglio.yaml --simulazioni 20000 --aggiorna-dati
 
+Prima di simulare il programma controlla i dati e stampa la tabella «Controllo dati»; con un errore (rosso) si ferma.
+  python confronta.py --config configurazioni/esempio_isin.yaml --solo-controllo     (solo la verifica, senza simulare)
+
 Il report va in report/AAAA-MM-GG_nome-configurazione/ (report.html, report.pdf, dati_csv/)."""
 
 import argparse
@@ -15,6 +18,8 @@ import sys
 import time
 
 import analisi
+import controllo
+import dati as D
 import registro
 import report
 from configurazione import ErroreConfig, carica
@@ -27,13 +32,15 @@ def cartella_uscita(cfg, percorso_cfg, base="report"):
     return os.path.join(base, f"{datetime.date.today():%Y-%m-%d}_{slug}")
 
 
-def main(argv=None):
+def main(argv=None, scaricatore=None, kw_isin=None, oggi=None, cartella_cache=D.CARTELLA_CACHE):
+    """scaricatore, kw_isin, oggi, cartella_cache: solo per i test (dati finti, niente internet)."""
     ap = argparse.ArgumentParser(description="Confronto del rischio di portafogli con Monte Carlo.")
     ap.add_argument("--config", required=True, help="file YAML di configurazione (vedi cartella configurazioni/)")
     ap.add_argument("--simulazioni", type=int, help="numero di simulazioni (sostituisce quello della configurazione)")
     ap.add_argument("--veloce", action="store_true", help="prova rapida con 1.000 simulazioni")
     ap.add_argument("--aggiorna-dati", action="store_true", help="riscarica i prezzi anche se sono già in cache")
     ap.add_argument("--uscita", help="cartella dove salvare il report (default: report/AAAA-MM-GG_nome)")
+    ap.add_argument("--solo-controllo", action="store_true", help="controlla solo i dati (titoli, ISIN, storia, prezzi) senza simulare")
     ap.add_argument("--senza-pdf", action="store_true", help="non creare il PDF")
     a = ap.parse_args(argv)
     log = registro.configura()
@@ -43,7 +50,20 @@ def main(argv=None):
         n = 1000 if a.veloce else (a.simulazioni or cfg["n_simulazioni"])
         print(f"Configurazione «{cfg['nome']}»: {len(cfg['portafogli'])} portafogli + benchmark, {n:,} simulazioni".replace(",", "."))
         log.info("riga di comando: %s, %d simulazioni", a.config, n)
-        ris = analisi.esegui(cfg, aggiorna_dati=a.aggiorna_dati, n=n, log=print)
+        arch = D.Archivio(cartella_cache, a.aggiorna_dati, print, scaricatore)
+        print("Controllo dei dati (scarico i prezzi mancanti) ...")
+        esito = controllo.controlla(cfg, arch, oggi=oggi, log=print, **(kw_isin or {}))
+        print(controllo.testo_tabella(esito))
+        if esito["blocca"]:
+            log.error("controllo dati: %s", esito["riepilogo"])
+            print(f"\nERRORE: {esito['messaggio']}", file=sys.stderr)
+            return 1
+        if a.solo_controllo:
+            print(f"\nControllo terminato: {esito['riepilogo']}. Nessun errore: puoi lanciare la simulazione.")
+            return 0
+        ris = analisi.esegui(
+            esito["cfg"], aggiorna_dati=a.aggiorna_dati, n=n, log=print, archivio=arch, controllo=controllo.per_report(esito)
+        )
         out = a.uscita or cartella_uscita(cfg, a.config)
         print("Scrivo il report ...")
         f = report.salva(ris, out, pdf=not a.senza_pdf)

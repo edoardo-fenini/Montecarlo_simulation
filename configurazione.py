@@ -10,6 +10,7 @@ così si costruiscono portafogli misti (es. 80% benchmark + 20% Cyber security).
 from __future__ import annotations
 
 import copy
+import re
 
 import yaml
 
@@ -60,6 +61,24 @@ DEFAULT = {
     "settori": {},  # opzionale: TICKER: tech | finanza | altro  (per gli stress test)
     "proxy": {},  # opzionale: TICKER: TICKER_PROXY            (per l'analisi C)
     "prezzi_da_file": {},  # opzionale: TICKER: {file: percorso.csv, valuta: EUR} (prezzi scaricati a mano)
+    "isin": {
+        # regola per scegliere la quotazione di un ISIN: nell'ordine, valuta ("EUR") o suffisso di borsa (".MI" Milano,
+        # ".DE" Xetra, ".AS" Amsterdam); a parità, più anni di storia e poi più volumi. Le altre borse vengono dopo.
+        "preferenze": ["EUR", ".MI", ".DE", ".AS"],
+        "max_quotazioni": 12,  # quante quotazioni verificare su Yahoo per ogni ISIN
+        "openfigi_chiave": None,  # opzionale (anche variabile d'ambiente OPENFIGI_API_KEY): alza i limiti di OpenFIGI, vedi README
+    },
+    "isin_scelte": {},  # opzionale: ISIN: TICKER  (forza una quotazione diversa da quella scelta dalla regola)
+    "nomi_attesi": {},  # opzionale: TICKER_O_ISIN: nome atteso (avviso se il nome trovato è molto diverso)
+    "controllo_dati": {
+        "storia_min_anni": 1,  # ROSSO sotto questa storia
+        "storia_avviso_anni": 3,  # GIALLO sotto questa storia
+        "giorni_mancanti_max": 0.05,  # GIALLO oltre questa quota di giorni senza prezzo
+        "ultimo_prezzo_blocco_giorni": 30,  # ROSSO se l'ultimo prezzo è più vecchio
+        "ultimo_prezzo_avviso_giorni": 7,  # GIALLO se l'ultimo prezzo è più vecchio
+        "movimento_estremo": 0.30,  # GIALLO se un giorno il prezzo si muove di più (in valore assoluto)
+        "somiglianza_nome_min": 0.4,  # GIALLO se la somiglianza col nome atteso (0-1) è più bassa
+    },
     "portafogli": [],
 }
 
@@ -175,8 +194,12 @@ def prepara(dati: dict) -> dict:
             raise ErroreConfig(f"«rendimento_atteso.{k}» = {ra[k]}: scrivilo come frazione (0.04 = 4%).")
 
     b = cfg["benchmark"]
+    braw = dati.get("benchmark") or {}
+    if isinstance(braw, dict) and braw.get("isin") and not braw.get("ticker"):
+        b["ticker"] = str(braw["isin"])  # solo l'ISIN indicato: sarà convertito in ticker
     if not b.get("ticker"):
         raise ErroreConfig("Manca il ticker del benchmark.")
+    b["ticker"] = str(b["ticker"]).strip()
     b["ter"] = float(b.get("ter") or 0)
 
     # ---- portafogli
@@ -215,6 +238,7 @@ def prepara(dati: dict) -> dict:
         raise ErroreConfig("«verifica_convergenza.numero_seed» deve essere tra 2 e 10.")
 
     cfg["composizione"] = appiattisci(cfg)
+    _controlla_isin_e_soglie(cfg)
     cfg["settori"] = {str(k).upper(): str(v).lower() for k, v in (cfg.get("settori") or {}).items()}
     for t, s in cfg["settori"].items():
         if s not in ("tech", "finanza", "altro"):
@@ -232,6 +256,36 @@ def prepara(dati: dict) -> dict:
     cfg["prezzi_da_file"] = {str(k).upper(): v for k, v in pf.items()}
     cfg["proxy"] = {str(k).upper(): str(v).upper() for k, v in (cfg.get("proxy") or {}).items()}
     return cfg
+
+
+def _controlla_isin_e_soglie(cfg: dict) -> None:
+    isin = cfg["isin"]
+    pref = isin.get("preferenze")
+    if isinstance(pref, str):
+        pref = [x.strip() for x in pref.split(",") if x.strip()]
+    if not isinstance(pref, list) or not pref or any(not re.fullmatch(r"\.?[A-Za-z0-9]{1,5}", str(p)) for p in pref):
+        raise ErroreConfig("«isin.preferenze» deve essere una lista di valute e borse, es. [EUR, .MI, .DE, .AS].")
+    isin["preferenze"] = [str(p).upper() for p in pref]
+    try:
+        isin["max_quotazioni"] = int(isin["max_quotazioni"])
+    except (TypeError, ValueError):
+        raise ErroreConfig("«isin.max_quotazioni» deve essere un numero intero.") from None
+    if not 1 <= isin["max_quotazioni"] <= 40:
+        raise ErroreConfig("«isin.max_quotazioni» deve essere tra 1 e 40.")
+    if isin.get("openfigi_chiave") is not None:
+        isin["openfigi_chiave"] = str(isin["openfigi_chiave"]).strip() or None
+    cfg["isin_scelte"] = {re.sub(r"\s+", "", str(k)).upper(): str(v).strip().upper() for k, v in (cfg.get("isin_scelte") or {}).items()}
+    cfg["nomi_attesi"] = {re.sub(r"\s+", "", str(k)).upper(): str(v).strip() for k, v in (cfg.get("nomi_attesi") or {}).items()}
+    cd = cfg["controllo_dati"]
+    for k in DEFAULT["controllo_dati"]:
+        try:
+            cd[k] = float(cd[k])
+        except (TypeError, ValueError):
+            raise ErroreConfig(f"«controllo_dati.{k}» deve essere un numero.") from None
+        if cd[k] < 0:
+            raise ErroreConfig(f"«controllo_dati.{k}» non può essere negativo.")
+    if cd["storia_avviso_anni"] < cd["storia_min_anni"] or cd["ultimo_prezzo_blocco_giorni"] < cd["ultimo_prezzo_avviso_giorni"]:
+        raise ErroreConfig("«controllo_dati»: le soglie di avviso (giallo) devono essere più larghe di quelle di blocco (rosso).")
 
 
 def appiattisci(cfg: dict) -> dict[str, dict[str, float]]:
@@ -273,6 +327,8 @@ def in_yaml(cfg: dict) -> str:
     """Configurazione 'pulita' (solo le chiavi dell'utente) come testo YAML."""
     tieni = [k for k in DEFAULT if k != "portafogli"]
     out = {k: cfg[k] for k in tieni if k in cfg}
+    if isinstance(out.get("isin"), dict):  # la chiave API (se c'è) non va mai scritta nei report
+        out["isin"] = {k: v for k, v in out["isin"].items() if k != "openfigi_chiave"}
     out["portafogli"] = []
     for p in cfg["portafogli"]:
         pesi = p.get("titoli")
