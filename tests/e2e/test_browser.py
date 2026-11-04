@@ -148,3 +148,17 @@ def test_importa_csv_del_broker_con_anteprima(pagina):
     expect(pagina.get_by_text("Portafoglio «Conto broker» aggiunto alla tabella (4 titoli)")).to_be_visible()
     controlla(pagina)
     expect(pagina.get_by_text("Ticker usati:")).to_contain_text("IE00BK5BQT80 →")
+
+
+def test_ricerca_per_nome_e_aggiunta_con_un_clic(pagina):
+    pagina.get_by_text("Cerca un titolo per nome").click()
+    campo = pagina.get_by_role("textbox", name="Nome dell'azienda o dell'ETF")
+    campo.fill("Ferrari")
+    campo.press("Enter")
+    pagina.get_by_role("button", name="Cerca", exact=True).click()
+    expect(pagina.get_by_text("Ferrari S.p.A. · FERR.MI · Milan · EUR · Azione")).to_be_visible()
+    expect(pagina.get_by_text("Ferrari Ucits Etf · FERRX.MI")).to_be_visible()
+    pagina.get_by_role("button", name="➕").first.click()
+    expect(pagina.get_by_text("Aggiunto Ferrari S.p.A. (FERR.MI)")).to_be_visible()
+    controlla(pagina)
+    expect(pagina.get_by_text("Ticker usati:")).to_contain_text("FERR.MI → FERR.MI")

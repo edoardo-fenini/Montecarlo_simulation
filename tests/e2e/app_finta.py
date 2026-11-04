@@ -15,6 +15,7 @@ RADICE = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RADICE))
 import fonti  # noqa: E402
 import isin  # noqa: E402
+import ricerca  # noqa: E402
 
 NOME_ETF = "iShares Core MSCI World UCITS ETF"
 FIGI = json.dumps(
@@ -61,7 +62,18 @@ def finto_ispettore(t, http=None, ispettore=None):
     }
 
 
+def finta_ricerca(testo):
+    """Ricerca per nome finta: due quotazioni dell'azienda cercata e un ETF."""
+    base = testo.strip().split()[0].upper()[:4]
+    return [
+        {"symbol": f"{base}.MI", "longname": f"{testo.title()} S.p.A.", "exchDisp": "Milan", "quoteType": "EQUITY"},
+        {"symbol": f"{base}.DE", "longname": f"{testo.title()} S.p.A.", "exchDisp": "XETRA", "quoteType": "EQUITY"},
+        {"symbol": f"{base}X.MI", "longname": f"{testo.title()} UCITS ETF", "exchDisp": "Milan", "quoteType": "ETF"},
+    ]
+
+
 fonti.scarica_con_ripiego = finto_scarica
+ricerca._ricerca_yahoo = finta_ricerca
 isin._http = finto_http
 isin.ispeziona_ticker = finto_ispettore
 

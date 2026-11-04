@@ -214,3 +214,45 @@ def test_importa_dal_broker_anteprima_e_conferma(app, monkeypatch):
     assert round(conto["Peso (%)"].sum(), 6) == 100
     assert len(t) > len(conto)  # i portafogli già presenti restano
     assert any("aggiunto alla tabella" in m.value for m in app.success)
+
+
+# ------------------------------------------------------------------ v1.3: ricerca per nome
+def test_ricerca_per_nome_e_aggiunta_con_un_clic(app, monkeypatch):
+    import ricerca
+
+    risultati = [
+        {"nome": "Enel S.p.A.", "ticker": "ENEL.MI", "isin": "", "borsa": "Milan", "valuta": "EUR", "tipo": "Azione"},
+        {"nome": "Enel ADR", "ticker": "ENLAY", "isin": "", "borsa": "OTC", "valuta": "USD", "tipo": "Azione"},
+    ]
+    monkeypatch.setattr(ricerca, "cerca", lambda testo, **kw: risultati)
+    app = con_tabella(app, [["P", "AAPL", None]])
+    app.text_input(key="ricerca_testo").set_value("enel").run()
+    app = bottone(app, "Cerca").click().run()
+    assert not app.exception and app.session_state["risultati_ricerca"]["righe"] == risultati
+    assert any("Enel S.p.A. · ENEL.MI · Milan · EUR · Azione" in m.value for m in app.markdown)
+    next(b for b in app.button if b.key == "btn_aggiungi_0_ENEL.MI").click().run()
+    assert not app.exception
+    t = app.session_state["tabella"]
+    assert list(t[t["Portafoglio"] == "P"]["Ticker"]) == ["AAPL", "ENEL.MI"]
+    assert any("Aggiunto Enel S.p.A. (ENEL.MI)" in m.value for m in app.success)
+    # secondo clic sullo stesso titolo: nessun doppione
+    next(b for b in app.button if b.key == "btn_aggiungi_0_ENEL.MI").click().run()
+    t = app.session_state["tabella"]
+    assert (t["Ticker"] == "ENEL.MI").sum() == 1
+
+
+def test_ricerca_in_un_nuovo_portafoglio_e_avviso_sui_pesi(app, monkeypatch):
+    import ricerca
+
+    r = {"nome": "Enel S.p.A.", "ticker": "ENEL.MI", "isin": "", "borsa": "Milan", "valuta": "EUR", "tipo": "Azione"}
+    monkeypatch.setattr(ricerca, "cerca", lambda testo, **kw: [r])
+    app = con_tabella(app, [["P", "AAPL", 100.0]])
+    app.text_input(key="ricerca_testo").set_value("enel").run()
+    app = bottone(app, "Cerca").click().run()
+    next(b for b in app.button if b.key == "btn_aggiungi_0_ENEL.MI").click().run()
+    assert any("scrivi il peso del nuovo titolo" in m.value for m in app.success)
+    app.selectbox(key="ricerca_destinazione").select("➕ Nuovo portafoglio").run()
+    app.text_input(key="ricerca_nuovo_nome").set_value("Italia").run()
+    next(b for b in app.button if b.key == "btn_aggiungi_0_ENEL.MI").click().run()
+    t = app.session_state["tabella"]
+    assert list(t[t["Portafoglio"] == "Italia"]["Ticker"]) == ["ENEL.MI"]

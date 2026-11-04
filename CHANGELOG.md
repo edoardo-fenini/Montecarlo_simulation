@@ -41,6 +41,10 @@ non regressione (1.236 numeri chiave) è rimasto identico.
   virgola o con il punto, righe d'intestazione del broker e righe di totale saltate, titoli ripetuti sommati, colonne di costo ignorate.
 - Esempio `esempi/portafoglio_broker_esempio.csv`; formato documentato nel README.
 
+### Ricerca per nome
+- Nell'app, riquadro «🔍 Cerca un titolo per nome»: fino a 10 risultati (nome, ticker, ISIN se si cerca un ISIN, borsa, valuta, tipo) da
+  aggiungere al portafoglio scelto (anche nuovo) con un clic su ➕. Solo azioni, ETF, fondi e indici; nessun doppione. Modulo `ricerca.py`.
+
 ### Prova nel browser nel repository
 - `tests/e2e/`: prova Playwright dell'app con una finta rete (nessun accesso a internet), eseguita nel workflow **Test** (Linux).
 - Corretto il falso FAIL della 1.2 sulla tabella in canvas: sotto la tabella «Controllo dati» c'è ora la riga di testo «Ticker usati:

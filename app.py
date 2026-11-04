@@ -20,6 +20,7 @@ import grafici_app as G
 import importa_broker as B
 import registro
 import report
+import ricerca as R
 from dati import ErroreDati
 
 log = registro.configura()
@@ -226,6 +227,25 @@ def conferma_broker() -> None:
     ss.tabella = pd.concat([t, nuove], ignore_index=True)[["Portafoglio", "Ticker", "Peso (%)"]]
     ss.versione += 1
     ss.msg_broker = f"Portafoglio «{a['nome']}» aggiunto alla tabella ({len(nuove)} titoli). Ora premi «Controlla i dati»."
+
+
+def aggiungi_da_ricerca(r: dict, portafoglio: str) -> None:
+    """Aggiunge il titolo trovato con la ricerca alla tabella, nel portafoglio indicato (nuovo se non esiste)."""
+    portafoglio = (portafoglio or "").strip() or "Nuovo portafoglio"
+    t = ss.tabella_corrente.copy()
+    stesso = t[t["Portafoglio"].astype(str).str.strip() == portafoglio]
+    if (stesso["Ticker"].astype(str).str.upper() == r["ticker"]).any():
+        ss.msg_ricerca = ("info", f"{r['ticker']} è già nel portafoglio «{portafoglio}».")
+        return
+    nuova = pd.DataFrame([{"Portafoglio": portafoglio, "Ticker": r["ticker"], "Peso (%)": None}])
+    ss.tabella = pd.concat([t, nuova], ignore_index=True)[["Portafoglio", "Ticker", "Peso (%)"]]
+    ss.versione += 1
+    con_pesi = stesso["Peso (%)"].notna().any()
+    ss.msg_ricerca = (
+        "ok",
+        f"Aggiunto {r['nome']} ({r['ticker']}) a «{portafoglio}»."
+        + (" Il portafoglio ha già dei pesi: scrivi il peso del nuovo titolo nella tabella (o premi «Pesi uguali»)." if con_pesi else ""),
+    )
 
 
 def anteprima_broker(f, nome: str) -> None:
@@ -448,6 +468,42 @@ with st.sidebar:
     c1, c2 = st.columns(2)
     c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch", key="btn_pesi_uguali", help="Imposta pesi uguali dentro ogni portafoglio.")
     c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch", key="btn_ricarica_esempio", help="Torna ai tre portafogli di esempio.")
+
+    with st.expander("🔍 Cerca un titolo per nome", expanded=bool(ss.get("risultati_ricerca"))):
+        c1, c2 = st.columns([3, 1])
+        testo_ricerca = c1.text_input(
+            "Nome dell'azienda o dell'ETF", key="ricerca_testo", placeholder="es. Enel, MSCI World, Apple", label_visibility="collapsed"
+        )
+        if c2.button("Cerca", width="stretch", key="btn_cerca", disabled=len(testo_ricerca.strip()) < 2):
+            try:
+                with st.spinner("Cerco su Yahoo Finance…"):
+                    ss.risultati_ricerca = {"testo": testo_ricerca.strip(), "righe": R.cerca(testo_ricerca)}
+            except R.ErroreRicerca as e:
+                ss.risultati_ricerca = None
+                st.error(str(e))
+        if ss.get("msg_ricerca"):
+            tipo_m, testo_m = ss.pop("msg_ricerca")
+            (st.success if tipo_m == "ok" else st.info)(testo_m)
+        rr = ss.get("risultati_ricerca")
+        if rr:
+            if not rr["righe"]:
+                st.info(f"Nessun risultato per «{rr['testo']}». Prova con un altro nome o con l'ISIN.")
+            else:
+                nomi_esistenti = list(dict.fromkeys(str(x).strip() for x in tab["Portafoglio"] if str(x).strip() not in ("", "None")))
+                dest = st.selectbox(
+                    "Aggiungi al portafoglio",
+                    nomi_esistenti + ["➕ Nuovo portafoglio"],
+                    key="ricerca_destinazione",
+                    help="Il titolo viene aggiunto come nuova riga della tabella qui sopra.",
+                )
+                if dest == "➕ Nuovo portafoglio":
+                    dest = st.text_input("Nome del nuovo portafoglio", value="Nuovo portafoglio", key="ricerca_nuovo_nome")
+                st.caption(f"Risultati per «{rr['testo']}» (al massimo {R.MASSIMO}): nome · ticker · ISIN · borsa · valuta · tipo")
+                for i, r in enumerate(rr["righe"]):
+                    c1, c2 = st.columns([5, 1])
+                    c1.markdown(f"<small>{R.etichetta(r)}</small>", unsafe_allow_html=True)
+                    c2.button("➕", key=f"btn_aggiungi_{i}_{r['ticker']}", help=f"Aggiungi {r['ticker']}", on_click=aggiungi_da_ricerca,
+                              args=(r, dest))  # fmt: skip
 
     with st.expander("📥 Importa il portafoglio dal broker (CSV)", expanded="anteprima_broker" in ss):
         st.caption(

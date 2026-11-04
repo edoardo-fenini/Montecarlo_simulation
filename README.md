@@ -153,6 +153,13 @@ Nell'app, dopo **🔎 Controlla i dati**, sotto la tabella compare per ogni ISIN
 
 Esempio pronto con azioni ed ETF europei: `configurazioni/esempio_isin.yaml`.
 
+### Cercare un titolo per nome
+Barra a sinistra → **🔍 Cerca un titolo per nome**: scrivi il nome di un'azienda o di un ETF (es. «Enel», «MSCI World») e premi **Cerca**.
+Compaiono fino a 10 risultati con **nome · ticker · ISIN (se hai cercato un ISIN) · borsa · valuta · tipo**; scegli in **Aggiungi al portafoglio**
+dove metterlo (anche un portafoglio nuovo) e premi **➕** accanto al risultato: il titolo entra nella tabella. Se il portafoglio ha già i pesi,
+scrivi il peso del nuovo titolo (o premi «Pesi uguali»). La ricerca usa Yahoo Finance (serve internet); la ricerca di Yahoo non restituisce
+gli ISIN, quindi la colonna ISIN è piena solo se cerchi proprio un ISIN.
+
 ### Importare il portafoglio dal broker (CSV)
 Esporta dal sito del broker l'elenco dei titoli in CSV (spesso «Portafoglio» o «Dossier titoli» → «Esporta» / «Scarica in Excel/CSV»).
 
@@ -413,6 +420,7 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `dati.py` | cache dei prezzi, conversione in euro, settori |
 | `isin.py` | riconoscimento degli ISIN, cifra di controllo, conversione in ticker (OpenFIGI + ricerca Yahoo), scelta della quotazione, cache |
 | `controllo.py` | «Controllo dati» con semaforo (verde/giallo/rosso) prima della simulazione; avviso sui risultati vecchi |
+| `ricerca.py` | ricerca dei titoli per nome (Yahoo Finance) |
 | `nomi.py` | confronto tollerante tra nomi (OpenFIGI contro Yahoo, nome atteso) |
 | `importa_broker.py`, `importa_portafoglio.py` | importazione del portafoglio da un CSV del broker (app e riga di comando) |
 | `analisi.py` | rendimenti attesi, periodi A/B/C, esecuzione (anche in parallelo) dei moduli |

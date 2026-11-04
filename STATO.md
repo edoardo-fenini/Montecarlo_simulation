@@ -116,6 +116,10 @@ debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLE
       anteprima e conferma), riquadro nell'app con anteprima → conferma. Scelte: una sola virgola = decimale; il controvalore del file è
       considerato in EUR; colonne «di carico/costo/medio…» escluse; il portafoglio importato sostituisce uno con lo stesso nome; il prezzo
       del file non è usato (valuta ignota): per le righe senza controvalore si usa l'ultimo prezzo Yahoo in EUR. 26 test + prova nel browser.
+- [x] 6. Ricerca per nome: `ricerca.py` (yfinance.Search, filtro tipi, max 10, valuta letta dai dati del ticker in parallelo perché la
+      ricerca non la dà), riquadro nell'app con ➕ per riga e portafoglio di destinazione. Provata dal vivo (4/11/2026): «MSCI World» →
+      IWDA.AS, EUNL.DE, URTH…; «IE00B4L5Y983» → IWDA.L con ISIN. Scelta: ISIN mostrato solo se cercato (Yahoo non lo restituisce); un titolo
+      già presente nel portafoglio non viene duplicato; il peso del nuovo titolo resta vuoto. 7 test + prova nel browser.
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
