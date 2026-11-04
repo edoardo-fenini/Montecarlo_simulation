@@ -146,6 +146,11 @@ in 153 s (`test_release.py` leggeva `.github/workflows/release.yml`, escluso dal
       31 s su questa macchina (Linux 4 core, Python 3.13); prova reale dello zip con Installa.command qui: 179 passed, 3 skipped, 38 s.
 - [x] Job `zip-release` in «Prova su Mac» (zip costruito con `strumenti/crea_zip.sh` come la release, oppure scaricato con l'input `release`;
       cartella pulita; Installa.command non interattivo; limite di 75 s sulla prova rapida; Avvia.command).
+- [x] Pull request [#4](https://github.com/edoardo-fenini/Montecarlo_simulation/pull/4): Test, Prova su Mac e il nuovo `zip-release` verdi
+      (sul Mac dallo zip: installazione 54 s, prova rapida 179 passed / 5 skipped / 0 failed, 42 s a freddo e 24 s alla seconda esecuzione)
+      → unita (d0ff51c). **Release v1.3.1** creata dal workflow «Release» (avvio manuale, versione 1.3.1) con zip e note dal CHANGELOG.
+      Verifica finale: «Prova su Mac» avviata con `release: v1.3.1` → zip SCARICATO dalla release, Installa.command 63 s, prova rapida 27 s,
+      Avvia.command ok.
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
