@@ -112,6 +112,10 @@ debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLE
       Playwright, ripiego su /opt/pw-browsers in questa sessione), 5 prove (2 percorsi + analisi completa ×2 esempi + apertura). Falso FAIL
       del canvas: verificato il testo associato «Ticker usati: …» aggiunto all'app. Menu delle quotazioni: si scrive nella ricerca e si preme
       Invio (il clic sulle opzioni BaseWeb non è affidabile). Workflow `test.yml`: installa Playwright + Chromium. Tempo locale: ~5 min.
+- [x] 5. Importazione da CSV del broker: `importa_broker.py` (lettura, colonne IT/EN, numeri, pesi), `importa_portafoglio.py` (CLI con
+      anteprima e conferma), riquadro nell'app con anteprima → conferma. Scelte: una sola virgola = decimale; il controvalore del file è
+      considerato in EUR; colonne «di carico/costo/medio…» escluse; il portafoglio importato sostituisce uno con lo stesso nome; il prezzo
+      del file non è usato (valuta ignota): per le righe senza controvalore si usa l'ultimo prezzo Yahoo in EUR. 26 test + prova nel browser.
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;

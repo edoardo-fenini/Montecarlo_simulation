@@ -185,3 +185,32 @@ def test_motivo_risultati_vecchi_funzione_pura():
     rosso = {"chiave": "d", "esito": {"blocca": True}}
     assert "rosso" in f(stato, "k", 10.0, rosso, "d")
     assert f(stato, "k", 10.0, rosso, "altro") is None  # controllo di titoli che non sono più quelli attuali
+
+
+# ------------------------------------------------------------------ v1.3: importazione dal broker
+def test_importa_dal_broker_anteprima_e_conferma(app, monkeypatch):
+    import importa_broker
+
+    monkeypatch.setattr(importa_broker, "prezzo_da_archivio", lambda arch, opz=None: lambda c: (90.0, "VWCE.DE"))
+    csv = (RADICE / "esempi/portafoglio_broker_esempio.csv").read_bytes()
+
+    class FileFinto:
+        name = "conto.csv"
+
+        def getvalue(self):
+            return csv
+
+    # il file_uploader non si riempie da AppTest: l'anteprima si prepara come farebbe il pulsante (nel browser la prova è in tests/e2e)
+    ris = importa_broker.calcola(FileFinto().getvalue(), importa_broker.prezzo_da_archivio(None))
+    app.session_state["anteprima_broker"] = {"ris": ris, "nome": "Conto", "file": "conto.csv"}
+    app = app.run()
+    assert not app.exception
+    assert any("Anteprima di «Conto»" in m.value for m in app.markdown)
+    next(b for b in app.button if "Conferma e aggiungi" in b.label).click().run()
+    assert not app.exception and "anteprima_broker" not in app.session_state
+    t = app.session_state["tabella"]
+    conto = t[t["Portafoglio"] == "Conto"]
+    assert set(conto["Ticker"]) == {"IE00B4L5Y983", "IT0003128367", "US0378331005", "IE00BK5BQT80"}
+    assert round(conto["Peso (%)"].sum(), 6) == 100
+    assert len(t) > len(conto)  # i portafogli già presenti restano
+    assert any("aggiunto alla tabella" in m.value for m in app.success)

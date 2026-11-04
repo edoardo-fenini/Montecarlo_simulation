@@ -153,6 +153,36 @@ Nell'app, dopo **🔎 Controlla i dati**, sotto la tabella compare per ogni ISIN
 
 Esempio pronto con azioni ed ETF europei: `configurazioni/esempio_isin.yaml`.
 
+### Importare il portafoglio dal broker (CSV)
+Esporta dal sito del broker l'elenco dei titoli in CSV (spesso «Portafoglio» o «Dossier titoli» → «Esporta» / «Scarica in Excel/CSV»).
+
+**Nell'app**: barra a sinistra → **📥 Importa il portafoglio dal broker (CSV)** → scegli il file, scrivi il nome del portafoglio →
+**Mostra anteprima**. L'anteprima mostra titolo, nome, quantità, prezzo usato, controvalore in EUR, **peso %** e da dove viene il valore.
+Se va bene premi **Conferma e aggiungi**: il portafoglio entra nella tabella (se ne esisteva già uno con lo stesso nome viene sostituito).
+Poi premi «Controlla i dati» come sempre.
+
+**Da riga di comando** (anteprima e domanda di conferma prima di scrivere il file):
+```bash
+python importa_portafoglio.py esempi/portafoglio_broker_esempio.csv --nome "Il mio conto" --base configurazioni/esempio_tre_portafogli.yaml --uscita configurazioni/mio_conto.yaml
+```
+Senza `--base` il file contiene solo il nuovo portafoglio (con il benchmark predefinito); `--si` salta la conferma.
+
+**Formato del file** (esempio completo in `esempi/portafoglio_broker_esempio.csv`):
+```
+ISIN;Descrizione;Quantità;Prezzo;Controvalore (EUR)
+IE00B4L5Y983;ISHARES CORE MSCI WORLD UCITS ETF;120;105,32;12.638,40
+IE00BK5BQT80;VANGUARD FTSE ALL-WORLD UCITS ETF;40;;
+```
+- Servono **ISIN (o ticker) e quantità**, oppure **ISIN e controvalore**. Le altre colonne (prezzo, descrizione, prezzo di carico …) sono facoltative.
+- Nomi di colonna riconosciuti (maiuscole, accenti e testo tra parentesi non contano): ISIN → `ISIN`, `Codice ISIN`; ticker → `Ticker`,
+  `Simbolo`, `Symbol`, `Codice`; quantità → `Quantità`, `Qtà`, `Quantity`, `Numero`, `Pezzi`, `Nominale`, `Shares`; controvalore →
+  `Controvalore`, `Controvalore (EUR)`, `Controvalore di mercato`, `Valore di mercato`, `Market value`, `Valore`, `Importo`; nome → `Descrizione`,
+  `Nome`, `Titolo`, `Strumento`. Le colonne con «carico», «acquisto», «costo», «medio», «utile» **non** sono usate come controvalore.
+- Separatore `;`, `,` o tabulazione; numeri come `1.234,56` o `1,234.56`; con una sola virgola (`12,5`) la virgola è il decimale.
+- Le righe prima dell'intestazione (nome del cliente, data …) e le righe «Totale»/«Liquidità» sono ignorate; lo stesso titolo su più righe è sommato.
+- Il controvalore va **in euro**. Se manca, il programma calcola **quantità × ultimo prezzo in EUR** (scaricato da Yahoo; serve internet).
+- I pesi sono arrotondati a due decimali e sommano esattamente 100.
+
 ### Controllo dei dati prima della simulazione
 | ![Controllo dati con ISIN](docs/screenshot/01_controllo_dati_isin.png) | ![Menu della quotazione](docs/screenshot/02_menu_quotazione.png) | ![ISIN errato: simulazione bloccata](docs/screenshot/04_isin_errato_bloccato.png) |
 |---|---|---|
@@ -382,7 +412,9 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `fonti.py` | fonti dei prezzi (Yahoo, Stooq, BCE), tentativi ripetuti, lettura dei CSV manuali |
 | `dati.py` | cache dei prezzi, conversione in euro, settori |
 | `isin.py` | riconoscimento degli ISIN, cifra di controllo, conversione in ticker (OpenFIGI + ricerca Yahoo), scelta della quotazione, cache |
-| `controllo.py` | «Controllo dati» con semaforo (verde/giallo/rosso) prima della simulazione |
+| `controllo.py` | «Controllo dati» con semaforo (verde/giallo/rosso) prima della simulazione; avviso sui risultati vecchi |
+| `nomi.py` | confronto tollerante tra nomi (OpenFIGI contro Yahoo, nome atteso) |
+| `importa_broker.py`, `importa_portafoglio.py` | importazione del portafoglio da un CSV del broker (app e riga di comando) |
 | `analisi.py` | rendimenti attesi, periodi A/B/C, esecuzione (anche in parallelo) dei moduli |
 | `simula.py` | motore Monte Carlo (bootstrap a blocchi, Student-t, GARCH, crolli sul singolo titolo) |
 | `metriche.py` | metriche e stress test |
@@ -392,8 +424,8 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `registro.py` | file di log `log.txt` |
 | `configurazioni/` | file di esempio (tre portafogli, core + satellite 80/20, ETF europei, ISIN, prova automatica) |
 | `esempi/` | report di esempio già pronti, verifica della convergenza, file di prezzi di esempio |
-| `strumenti/` | `verifica_convergenza.py` (le simulazioni bastano?) e `verifica_fonti.py` (quali fonti rispondono) |
-| `tests/` | test automatici (`python -m pytest -q tests`), compreso il test di non regressione |
+| `strumenti/` | `verifica_convergenza.py` (le simulazioni bastano?), `verifica_fonti.py` (quali fonti rispondono), `note_release.py` (release automatica) |
+| `tests/` | test automatici (`python -m pytest -q tests`), compreso il test di non regressione; `tests/e2e/` prova nel browser |
 | `docs/immagini/` | immagini del README |
 | `CHANGELOG.md`, `STATO.md` | modifiche tra le versioni e note di sviluppo |
 

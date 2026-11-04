@@ -17,6 +17,7 @@ import configurazione as C
 import controllo
 import dati as D
 import grafici_app as G
+import importa_broker as B
 import registro
 import report
 from dati import ErroreDati
@@ -212,6 +213,31 @@ def carica_file() -> None:
         ss.msg_caricamento = ("ok", f"Configurazione «{f.name}» caricata.")
     except (C.ErroreConfig, yaml.YAMLError, UnicodeDecodeError, AttributeError) as e:
         ss.msg_caricamento = ("errore", f"Non riesco a caricare «{f.name}»: {e}")
+
+
+def conferma_broker() -> None:
+    """Aggiunge (o sostituisce, se c'è già un portafoglio con lo stesso nome) il portafoglio dell'anteprima alla tabella."""
+    a = ss.pop("anteprima_broker", None)
+    if not a:
+        return
+    t = ss.tabella_corrente.copy()
+    t = t[t["Portafoglio"].astype(str).str.strip() != a["nome"]]
+    nuove = pd.DataFrame([{"Portafoglio": a["nome"], "Ticker": k, "Peso (%)": v} for k, v in a["ris"]["pesi"].items()])
+    ss.tabella = pd.concat([t, nuove], ignore_index=True)[["Portafoglio", "Ticker", "Peso (%)"]]
+    ss.versione += 1
+    ss.msg_broker = f"Portafoglio «{a['nome']}» aggiunto alla tabella ({len(nuove)} titoli). Ora premi «Controlla i dati»."
+
+
+def anteprima_broker(f, nome: str) -> None:
+    """Legge il CSV del broker e prepara l'anteprima (scarica l'ultimo prezzo solo per i titoli senza controvalore)."""
+    try:
+        opz = C._unisci(C.DEFAULT, ss.raw)["isin"]
+        with st.spinner("Leggo il file (e cerco gli ultimi prezzi dei titoli senza controvalore)…"):
+            ris = B.calcola(f.getvalue(), B.prezzo_da_archivio(D.Archivio(log=lambda *a: None), opz))
+        ss.anteprima_broker = {"ris": ris, "nome": nome.strip() or "Portafoglio importato", "file": f.name}
+    except (B.ErroreImport, ErroreDati) as e:
+        ss.pop("anteprima_broker", None)
+        st.error(f"Non riesco a importare «{f.name}»: {e}")
 
 
 def carica_esempio() -> None:
@@ -422,6 +448,28 @@ with st.sidebar:
     c1, c2 = st.columns(2)
     c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch", key="btn_pesi_uguali", help="Imposta pesi uguali dentro ogni portafoglio.")
     c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch", key="btn_ricarica_esempio", help="Torna ai tre portafogli di esempio.")
+
+    with st.expander("📥 Importa il portafoglio dal broker (CSV)", expanded="anteprima_broker" in ss):
+        st.caption(
+            "CSV esportato dal broker con almeno **ISIN (o ticker) e quantità**, oppure **ISIN e controvalore**. Separatore «;» o «,», "
+            "decimali con la virgola o con il punto. I pesi si ricavano dai controvalori (quantità × ultimo prezzo in EUR se manca il "
+            "controvalore). Esempio: esempi/portafoglio_broker_esempio.csv."
+        )
+        f_broker = st.file_uploader("File CSV del broker", type=["csv", "txt"], key="file_broker")
+        nome_broker = st.text_input("Nome del portafoglio", value="Portafoglio importato", key="nome_broker")
+        if st.button("👀 Mostra anteprima", width="stretch", disabled=f_broker is None, key="btn_anteprima_broker"):
+            anteprima_broker(f_broker, nome_broker)
+        if ss.get("msg_broker"):
+            st.success(ss.pop("msg_broker"))
+        a_b = ss.get("anteprima_broker")
+        if a_b:
+            st.markdown(f"**Anteprima di «{a_b['nome']}»** da `{a_b['file']}` · totale {report.eur(a_b['ris']['totale'])}")
+            st.dataframe(B.tabella_anteprima(a_b["ris"]), hide_index=True, width="stretch", key="tabella_anteprima_broker")
+            for x in a_b["ris"]["avvisi"]:
+                st.warning(x)
+            c1, c2 = st.columns(2)
+            c1.button("✅ Conferma e aggiungi", type="primary", width="stretch", on_click=conferma_broker, key="btn_conferma_broker")
+            c2.button("Annulla", width="stretch", on_click=lambda: ss.pop("anteprima_broker", None), key="btn_annulla_broker")
 
     with st.expander("📄 Carica prezzi da file"):
         st.caption(

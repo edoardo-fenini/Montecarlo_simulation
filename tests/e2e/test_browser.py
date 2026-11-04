@@ -113,3 +113,20 @@ def test_analisi_completa_tutte_le_schede_senza_errori_streamlit(pagina, tmp_pat
         bottone_html.click()
     html = pathlib.Path(d.value.path()).read_text(encoding="utf-8")
     assert "<html" in html.lower() and "Fan chart" in html
+
+
+# ------------------------------------------------------------------ v1.3: importazione dal broker e ricerca per nome
+def test_importa_csv_del_broker_con_anteprima(pagina):
+    pagina.get_by_text("Importa il portafoglio dal broker (CSV)").click()
+    caricatore = pagina.locator("[data-testid=stFileUploader]").filter(has_text="File CSV del broker").locator("input[type=file]")
+    caricatore.set_input_files(str(pathlib.Path(__file__).resolve().parents[2] / "esempi/portafoglio_broker_esempio.csv"))
+    nome = pagina.get_by_role("textbox", name="Nome del portafoglio")
+    nome.fill("Conto broker")
+    nome.press("Enter")
+    pagina.get_by_role("button", name="Mostra anteprima").click()
+    expect(pagina.get_by_text("Anteprima di «Conto broker»")).to_be_visible()
+    expect(pagina.get_by_role("button", name="Conferma e aggiungi")).to_be_visible()
+    pagina.get_by_role("button", name="Conferma e aggiungi").click()
+    expect(pagina.get_by_text("Portafoglio «Conto broker» aggiunto alla tabella (4 titoli)")).to_be_visible()
+    controlla(pagina)
+    expect(pagina.get_by_text("Ticker usati:")).to_contain_text("IE00BK5BQT80 →")

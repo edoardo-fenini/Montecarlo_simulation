@@ -33,6 +33,14 @@ non regressione (1.236 numeri chiave) è rimasto identico.
   come **info** nella colonna «Dettagli» del controllo dati (senza cambiare il colore) e sono salvate nella cache degli ISIN.
 - Il confronto dei nomi è nel nuovo modulo `nomi.py` (`controllo.somiglianza_nomi` funziona come prima).
 
+### Importazione del portafoglio dal CSV del broker
+- Nell'app (riquadro «📥 Importa il portafoglio dal broker (CSV)») e da riga di comando (`importa_portafoglio.py`): si carica il CSV con
+  ISIN (o ticker) e quantità, oppure ISIN e controvalore; si vede un'**anteprima** (controvalori e pesi) e solo dopo la conferma il portafoglio
+  viene creato (nella tabella dell'app, o in un file YAML).
+- Pesi dai controvalori in EUR; se manca il controvalore, quantità × ultimo prezzo in EUR. Separatori `;` `,` e tab, decimali con la
+  virgola o con il punto, righe d'intestazione del broker e righe di totale saltate, titoli ripetuti sommati, colonne di costo ignorate.
+- Esempio `esempi/portafoglio_broker_esempio.csv`; formato documentato nel README.
+
 ### Prova nel browser nel repository
 - `tests/e2e/`: prova Playwright dell'app con una finta rete (nessun accesso a internet), eseguita nel workflow **Test** (Linux).
 - Corretto il falso FAIL della 1.2 sulla tabella in canvas: sotto la tabella «Controllo dati» c'è ora la riga di testo «Ticker usati:
