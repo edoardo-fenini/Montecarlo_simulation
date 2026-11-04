@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 
 import dati as D
+import isin
 import metriche
 from configurazione import BENCH
 from simula import Bootstrap, ConCrolli, Garch, StudentT, ricentra, simula
@@ -307,8 +308,14 @@ def esegui(
     n: int | None = None,
     solo: list | None = None,
     seed: int | None = None,
+    controllo: dict | None = None,
+    kw_isin: dict | None = None,
+    archivio: D.Archivio | None = None,
 ) -> dict:
-    """solo: lista di analisi da fare (es. ["A"]); seed: sostituisce quello della configurazione."""
+    """solo: lista di analisi da fare (es. ["A"]); seed: sostituisce quello della configurazione.
+    controllo: risultato di controllo.per_report(), salvato nel report. kw_isin: http/ispettore/ricerca finti (solo per i test).
+    archivio: archivio dei prezzi già aperto (per non riscaricare i dati dopo il controllo).
+    Gli ISIN presenti nella configurazione (se non già convertiti da controllo.controlla) vengono convertiti in ticker."""
     t0 = time.time()
     tempi = {}
     n = n or cfg["n_simulazioni"]
@@ -318,7 +325,8 @@ def esegui(
     if progresso:
         progresso(0.0, "Scarico/leggo i dati...")
     log("1/4  Dati: lettura dalla cache o download da Yahoo Finance")
-    arch = D.Archivio(cartella_cache, aggiorna_dati, log, scaricatore)
+    arch = archivio or D.Archivio(cartella_cache, aggiorna_dati, log, scaricatore)
+    cfg, _ = isin.risolvi_configurazione(cfg, arch.dir, arch.aggiorna, log_fn=log, **(kw_isin or {}))
     D.importa_da_configurazione(cfg, arch)
     dati = D.costruisci(cfg, arch)
     R = dati["R"]
@@ -355,6 +363,7 @@ def esegui(
         "modelli": {},
         "sensibilita": {},
         "convergenza": None,
+        "controllo": controllo,
     }
 
     # ---- piano dei lavori: le simulazioni indipendenti tra loro (ognuna con il suo seed)

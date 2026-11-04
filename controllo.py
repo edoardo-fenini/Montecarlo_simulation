@@ -88,6 +88,12 @@ def _titoli_della_configurazione(cfg: dict) -> list[tuple[str, str]]:
     return out
 
 
+def _nome_quotazione(r: dict) -> str:
+    """Nome dalla ricerca ISIN, se Yahoo non lo dà nei dati dei prezzi."""
+    ris = r.get("risoluzione") or {}
+    return next((q["nome"] for q in ris.get("quotazioni", []) if q["ticker"] == r["ticker"]), "")
+
+
 def _riga_vuota(inp: str, ruolo: str) -> dict:
     return {
         "input": inp, "ruolo": ruolo, "isin": "", "ticker": "", "nome": "", "borsa": "", "valuta": "", "fonte": "", "primo": None,
@@ -150,7 +156,7 @@ def controlla(
         r["trovato"] = True
         serie[t] = s
         r.update(
-            nome=meta.get("nome") or "", borsa=meta.get("borsa") or "", valuta=meta.get("valuta") or "",
+            nome=meta.get("nome") or _nome_quotazione(r), borsa=meta.get("borsa") or "", valuta=meta.get("valuta") or "",
             fonte=meta.get("fonte") or "Yahoo Finance", primo=s.index[0].date(), ultimo=s.index[-1].date(),
             anni=(s.index[-1] - s.index[0]).days / 365.25, ultimo_prezzo=float(s.iloc[-1]),
         )  # fmt: skip
@@ -185,7 +191,9 @@ def controlla(
                 f"(il maggiore {estremi[peggiore]:+.0%} il {_data(peggiore)})"
             )
         atteso = next((cfg["nomi_attesi"][k] for k in (I.normalizza(r["input"]), r["ticker"], r["isin"]) if k in cfg["nomi_attesi"]), None)
-        if atteso and r["nome"] and somiglianza_nomi(atteso, r["nome"]) < soglie["somiglianza_nome_min"]:
+        if atteso and not r["nome"]:
+            r["gialli"].append(f"non trovo il nome del titolo per confrontarlo con quello atteso («{atteso}»)")
+        elif atteso and somiglianza_nomi(atteso, r["nome"]) < soglie["somiglianza_nome_min"]:
             r["gialli"].append(f"il nome trovato («{r['nome']}») è molto diverso da quello atteso («{atteso}»)")
     for r in righe:
         r["esito"] = ROSSO if r["rossi"] else GIALLO if r["gialli"] else VERDE

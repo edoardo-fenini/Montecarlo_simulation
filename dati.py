@@ -315,6 +315,7 @@ def costruisci(cfg: dict, arch: Archivio) -> dict:
         righe.append(
             {
                 "ticker": nome,
+                "isin": (cfg.get("isin_di") or {}).get(nome, ""),
                 "nome": m.get("nome") or "",
                 "valuta": m.get("valuta"),
                 "tipo": m.get("tipo") or "",
