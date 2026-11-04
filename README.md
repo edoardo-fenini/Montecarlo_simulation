@@ -356,6 +356,19 @@ tag non nel formato `vX.Y.Z`, sezione mancante nel `CHANGELOG.md`, un test che n
 Il workflow usa solo i permessi del `GITHUB_TOKEN` del repository (**Settings → Actions → General → Workflow permissions** deve essere
 *Read and write permissions*, oppure basta il `permissions: contents: write` già scritto nel workflow se la tua organizzazione lo consente).
 
+### Prova nel browser (Playwright)
+`tests/e2e/` contiene la prova dell'app in un browser vero (Chromium headless), con una **finta rete** (`tests/e2e/app_finta.py`: prezzi
+sintetici e risposte finte di OpenFIGI/Yahoo), quindi senza internet. Controlla: ISIN errato che blocca la simulazione; controllo dei dati,
+cambio di quotazione, simulazione, report scaricato con il ticker giusto; avviso sui risultati vecchi; analisi completa (esempio precaricato
+ed esempio ISIN, tutti i moduli) con tutte le schede aperte e nessun errore Streamlit. Il contenuto della tabella «Controllo dati» (che è un
+canvas, non testo) si verifica dalla riga di testo associata «Ticker usati: …». Gira nel workflow **Test**. In locale:
+```bash
+pip install -r requirements-e2e.txt
+python -m playwright install chromium
+python -m pytest -q tests/e2e
+```
+Senza Playwright installato questi test vengono saltati (gli altri girano normalmente).
+
 ### Prova automatica su Mac
 A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, GitHub esegue su un Mac Apple Silicon: installazione con `Installa.command`, test, un report di prova e l'avvio dell'app. L'esito (spunta verde o croce rossa) si vede nella scheda **Actions** e accanto all'ultimo commit; il report di prova si scarica dagli *Artifacts* dell'esecuzione.
 

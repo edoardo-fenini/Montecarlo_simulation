@@ -33,6 +33,13 @@ non regressione (1.236 numeri chiave) è rimasto identico.
   come **info** nella colonna «Dettagli» del controllo dati (senza cambiare il colore) e sono salvate nella cache degli ISIN.
 - Il confronto dei nomi è nel nuovo modulo `nomi.py` (`controllo.somiglianza_nomi` funziona come prima).
 
+### Prova nel browser nel repository
+- `tests/e2e/`: prova Playwright dell'app con una finta rete (nessun accesso a internet), eseguita nel workflow **Test** (Linux).
+- Corretto il falso FAIL della 1.2 sulla tabella in canvas: sotto la tabella «Controllo dati» c'è ora la riga di testo «Ticker usati:
+  ISIN → ticker …» (utile anche per gli screen reader) e la prova verifica quella, oltre al report scaricato.
+- Controlli: ISIN errato → «Avvia simulazione» disattivato; cambio di quotazione dal menu (SWDA.MI → EUNL.DE) che si ritrova nel report;
+  risultati vecchi nascosti dopo un cambio; analisi completa con tutte le schede senza errori Streamlit. `requirements-e2e.txt`.
+
 ### Release automatica
 - Nuovo workflow `release.yml`: con il push di un tag `vX.Y.Z` (o avviandolo a mano da Actions → Release → Run workflow con la versione)
   lancia i test, costruisce lo zip, controlla il contenuto, crea la release con le note prese dalla sezione giusta di `CHANGELOG.md` e allega

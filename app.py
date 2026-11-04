@@ -368,6 +368,9 @@ def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
             column_config={"Dettagli": st.column_config.TextColumn(width="large")},
             key="tabella_controllo",
         )
+        usati = [f"{r['input']} → {r['ticker']}" for r in e["righe"] if r["ticker"]]
+        if usati:  # la tabella sopra è un canvas: lo stesso contenuto, in testo, per chi usa lo screen reader e per le prove automatiche
+            st.caption("Ticker usati: " + " · ".join(usati), help="Gli stessi dati della tabella, in forma di testo.")
         st.caption("🟢 tutto a posto · 🟡 avviso, si può procedere · 🔴 errore, la simulazione non parte finché non lo correggi.")
         multi = [r for r in e["righe"] if r.get("risoluzione") and len(r["risoluzione"]["quotazioni"]) > 1]
         for r in multi:

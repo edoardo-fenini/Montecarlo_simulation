@@ -108,6 +108,10 @@ debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLE
       CHANGELOG → zip), `strumenti/note_release.py` + `tests/test_release.py`. Tag vecchi (`V_1.0.1`, `V_1.1.0`, `V_1.2.0`, `prova`) intatti. Scelta:
       il sito di GitHub non crea un tag da solo, quindi il metodo A è «Actions → Release → Run workflow» (crea tag e release); il push del tag dal
       terminale e il pulsante delle release funzionano uguale. `zip-release.yml` tenuto per le release create a mano.
+- [x] 4. Prova nel browser: `tests/e2e/` (conftest avvia Streamlit su porta libera in una cartella temporanea con `app_finta.py`; Chromium di
+      Playwright, ripiego su /opt/pw-browsers in questa sessione), 5 prove (2 percorsi + analisi completa ×2 esempi + apertura). Falso FAIL
+      del canvas: verificato il testo associato «Ticker usati: …» aggiunto all'app. Menu delle quotazioni: si scrive nella ricerca e si preme
+      Invio (il clic sulle opzioni BaseWeb non è affidabile). Workflow `test.yml`: installa Playwright + Chromium. Tempo locale: ~5 min.
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
