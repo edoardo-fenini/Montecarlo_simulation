@@ -20,7 +20,7 @@ importazione del portafoglio dal CSV del broker; ricerca dei titoli per nome; re
 
 **Metodo consigliato: lo zip della release.**
 1. Apri la pagina del progetto su GitHub e clicca **Releases** (colonna di destra).
-2. Nell'ultima versione (quella con l'etichetta **Latest**, nome nel formato `vX.Y.Z`, es. `v1.3.0`) clicca il file **`confronta-portafogli-v1.3.0.zip`**.
+2. Nell'ultima versione (quella con l'etichetta **Latest**, nome nel formato `vX.Y.Z`, es. `v1.3.1`) clicca il file **`confronta-portafogli-v1.3.1.zip`**.
    Le release con nomi come `V_1.2.0` sono le vecchie: vedi «Nomi dei tag» in fondo.
 
 **In alternativa**: nella pagina principale del progetto clicca il pulsante verde **Code → Download ZIP**.
@@ -315,7 +315,7 @@ Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%).
 
 Le tue cose stanno in tre cartelle: `configurazioni/` (i file YAML), `cache_prezzi/` (i prezzi già scaricati) e `report/` (i report salvati). Il resto si può sostituire.
 
-1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella, ad esempio `Documenti/confronta-portafogli-v1.3.0`.
+1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella, ad esempio `Documenti/confronta-portafogli-v1.3.1`.
 2. Copia dalla cartella vecchia a quella nuova:
    - i tuoi file da `configurazioni/` (non sovrascrivere gli esempi nuovi, se hanno lo stesso nome rinomina i tuoi);
    - l'intera cartella `cache_prezzi/` (così non riscarichi tutto);

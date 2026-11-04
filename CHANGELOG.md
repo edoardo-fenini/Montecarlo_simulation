@@ -39,6 +39,9 @@ Versione di correzione. Nessuna funzione tolta. Il test di non regressione (1.23
   ferma `Avvia.command`. Avrebbe trovato il problema di `release.yml` prima della 1.3.0.
 - Lo zip si crea con `strumenti/crea_zip.sh`, usato sia dal workflow «Release» sia da questa prova (stesso contenuto, stessi controlli).
 
+### Altro
+- 12 nuovi test (211 in tutto). Note di rilascio v1.3.1, README e report «progresso, debolezze e sviluppi» aggiornati.
+
 ## 1.3.0 (4 novembre 2026)
 
 Versione di consolidamento. Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di

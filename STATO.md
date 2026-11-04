@@ -133,6 +133,20 @@ debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLE
       test verdi → tag `v1.3.0` su f9e09b4 creato dal GITHUB_TOKEN → release con le note della sezione 1.3.0 del CHANGELOG →
       `confronta-portafogli-v1.3.0.zip` (7,4 MB) allegato. Il percorso «push del tag» non è stato provato da qui (stesso workflow).
 
+## Versione 1.3.1 (ramo `v1.3.1`): correzioni dopo la prova su un Mac reale (4 novembre 2026)
+Segnalazione dell'utente: dallo zip della v1.3.0 su Mac Apple Silicon, prova rapida di Installa.command «1 failed, 191 passed, 1 skipped»
+in 153 s (`test_release.py` leggeva `.github/workflows/release.yml`, escluso dallo zip) + `ConvergenceWarning` (SLSQP codice 4) da simula.py:79.
+- [x] GARCH (commit separato): causa = SLSQP sul bordo (alpha≈0) per serie senza raggruppamenti di volatilità (i dati sintetici dei test)
+      o quasi costanti; codice 4 «Inequality constraints incompatible»; parametri = ultimo tentativo, usati in silenzio. Riprodotto qui
+      solo con una serie quasi costante (sui dati finti Linux converge: il caso del Mac dipende dall'aritmetica arm64). Ora: stima standard
+      (identica), poi 3 punti di partenza, poi volatilità costante + avviso (log, Sintesi, Robustezza). 5 test, uno con ottimizzatore finto «codice 4».
+- [x] Test dei file del solo repository: `tests/solo_repository.richiede` → skip con messaggio. Verificato eseguendo TUTTA la suite dentro
+      lo zip costruito come la release: era l'unico test interessato.
+- [x] Marker `rapido` (tutti i test tranne l'elenco LENTI in `tests/conftest.py` e tests/e2e); Installa.command usa `-m rapido`.
+      31 s su questa macchina (Linux 4 core, Python 3.13); prova reale dello zip con Installa.command qui: 179 passed, 3 skipped, 38 s.
+- [x] Job `zip-release` in «Prova su Mac» (zip costruito con `strumenti/crea_zip.sh` come la release, oppure scaricato con l'input `release`;
+      cartella pulita; Installa.command non interattivo; limite di 75 s sulla prova rapida; Avvia.command).
+
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
       modulo «Le simulazioni bastano?» (attivo, 3 seed); test sul numero di percorsi.

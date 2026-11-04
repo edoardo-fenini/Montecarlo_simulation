@@ -1,33 +1,17 @@
-# v1.3.0 – Consolidamento
+# v1.3.1 – Correzioni dopo la prova su un Mac reale
 
-Quarta versione dello strumento per confrontare il **rischio** di portafogli di azioni ed ETF con una simulazione Monte Carlo.
-Tutte le funzioni della 1.2 restano; **i risultati del calcolo sono identici** (verificato dal test di non regressione, 1.236 numeri).
-Le note complete della release automatica vengono dalla sezione 1.3.0 di `CHANGELOG.md`.
+Versione di correzione della 1.3.0. Nessuna funzione tolta; **i risultati del calcolo sono identici** (test di non regressione).
+Le note complete vengono dalla sezione 1.3.1 di `CHANGELOG.md`.
 
-> Non è consulenza finanziaria: è un aiuto per capire i rischi, non un consiglio di acquisto.
+## Correzioni
+- **La prova rapida di Installa.command non fallisce più nello zip**: un test leggeva un file presente solo nel repository
+  (`.github/workflows/release.yml`). Ora i test di questo tipo sono saltati con un messaggio chiaro.
+- **La prova rapida dura davvero circa 30 secondi**: esegue solo i test veloci (marker `rapido`), non tutta la suite.
+- **Modello GARCH**: se la stima non converge (avviso di scipy «Inequality constraints incompatible») il risultato non viene più usato
+  in silenzio: si riprova con altri punti di partenza e, se serve, si usa la volatilità costante per quel titolo, con un avviso nel report.
+  Riguarda solo il «Confronto tra modelli»; i risultati principali non cambiano.
+- **Prova automatica su Mac come l'utente**: zip della release, cartella pulita, Installa.command, prova rapida, Avvia.command.
 
-## Novità
-- **Correzione importante**: l'app poteva fermarsi a fine analisi con l'errore `StreamlitDuplicateElementId` (quando le analisi A e B
-  hanno grafici identici). Corretto dando una chiave univoca a ogni elemento dell'app.
-- **Risultati vecchi nascosti**: se cambi titoli, pesi, impostazioni o dati, o se il controllo dei dati diventa rosso, al posto dei
-  risultati compare «Questi risultati non corrispondono più ai dati attuali: rilancia la simulazione».
-- **Controllo incrociato dei nomi** per gli ISIN (OpenFIGI contro Yahoo): se non tornano, avviso giallo e si prova la quotazione successiva.
-  Le borse non riconosciute sono elencate come informazione.
-- **Importazione dal broker**: carichi il CSV del conto titoli (ISIN e quantità o controvalore), vedi l'anteprima e confermi. Anche da
-  riga di comando: `python importa_portafoglio.py file.csv`.
-- **Ricerca per nome**: scrivi «Enel» o «MSCI World» e aggiungi il titolo con un clic.
-- **Release automatica** dal tag `vX.Y.Z` e prova nel browser eseguita a ogni push.
-
-## Come installarla sul Mac (Apple Silicon o Intel)
-1. Scarica `confronta-portafogli-v1.3.0.zip` qui sotto, aprilo e sposta la cartella in **Documenti**.
-2. Doppio clic su **`Installa.command`** (la prima volta: Impostazioni di Sistema → Privacy e sicurezza → **Apri comunque**).
-3. Doppio clic su **`Avvia.command`**: si apre il browser con l'app.
-
-**Aggiornamento dalla 1.2**: copia nella nuova cartella `configurazioni/` (i tuoi file), `cache_prezzi/` e `report/`, poi rilancia
-`Installa.command`. I tuoi file YAML funzionano senza modifiche.
-
-## Limiti noti
-- La ricerca per nome e la conversione degli ISIN dipendono da servizi gratuiti (Yahoo Finance, OpenFIGI) che possono limitare gli accessi.
-- La ricerca di Yahoo non restituisce gli ISIN: la colonna ISIN dei risultati è piena solo se cerchi un ISIN.
-- Nel CSV del broker il controvalore è considerato in euro.
-- Il rendimento atteso è un'ipotesi, non una previsione. I file `.command` non sono firmati da Apple.
+## Come aggiornare dalla 1.3.0
+Scarica `confronta-portafogli-v1.3.1.zip` qui sotto, estrailo in una nuova cartella, copia `configurazioni/` (i tuoi file), `cache_prezzi/`
+e `report/` dalla cartella vecchia e fai doppio clic su `Installa.command`.
