@@ -11,6 +11,16 @@ non regressione (1.236 numeri chiave) è rimasto identico.
   rilancia la simulazione», con il motivo. Un interruttore permette di rivederli comunque (l'avviso resta in cima).
 - Corretto un possibile errore «plotly_chart duplicato» quando due analisi hanno grafici identici (ogni grafico ha ora una chiave).
 
+### Controllo incrociato dei nomi (ISIN)
+- Per ogni ISIN convertito, il nome di OpenFIGI è confrontato con quello di Yahoo (confronto tollerante: ignora maiuscole, accenti,
+  punteggiatura e forme societarie come Inc, SpA/S.p.A., PLC, AG, NV, UCITS, ETF). Se sono molto diversi (somiglianza sotto
+  `controllo_dati.somiglianza_nome_min`, default 0,4) la riga è **gialla** e si prova la quotazione successiva; l'avviso dice quale è stata
+  scartata e perché. Se tutte le quotazioni hanno il nome diverso, o la quotazione è forzata da te, si usa quella con l'avviso.
+- `nomi_attesi` resta come controllo aggiuntivo facoltativo.
+- Le quotazioni elencate da OpenFIGI su borse non mappate (di cui non conosco il suffisso Yahoo) non sono più ignorate in silenzio: compaiono
+  come **info** nella colonna «Dettagli» del controllo dati (senza cambiare il colore) e sono salvate nella cache degli ISIN.
+- Il confronto dei nomi è nel nuovo modulo `nomi.py` (`controllo.somiglianza_nomi` funziona come prima).
+
 ## 1.2.0 (4 novembre 2026)
 
 Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di non regressione

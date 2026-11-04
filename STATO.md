@@ -94,6 +94,10 @@ Scelte annotate: il ramo è `v1.3` come chiesto (il ramo di sessione `claude/sha
 debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
 - [x] 1. Risultati vecchi: `controllo.motivo_risultati_vecchi` + avviso e nascondimento in `app.py` (impronta di tutte le impostazioni
       + data della cache dei prezzi, registrate a fine simulazione; controllo rosso sui titoli attuali). 4 nuovi test. 116 test verdi.
+- [x] 2. Controllo incrociato dei nomi: `nomi.py` (confronto tollerante, accenti e punti tolti, somiglianza dei caratteri solo per nomi lunghi),
+      `isin.nome_discordante`, quotazioni discordanti in fondo all'ordine (si prova la successiva), `avvisi_nome` → GIALLO; borse OpenFIGI non
+      mappate → `borse_non_mappate` (cache) → «info» nel Dettagli. Scelta: l'ordine mette i nomi discordanti PRIMA di ogni altra regola; se manca
+      uno dei due nomi (o resta solo «ETF», «Inc»…) non si confronta. Nei test vecchi il nome OpenFIGI finto «X» è diventato realistico.
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;

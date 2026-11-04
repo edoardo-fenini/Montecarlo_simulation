@@ -23,9 +23,9 @@ FIGI = json.dumps(
     [
         {
             "data": [
-                {"ticker": "SWDA", "exchCode": "IM", "name": "X"},
-                {"ticker": "EUNL", "exchCode": "GY", "name": "X"},
-                {"ticker": "IWDA", "exchCode": "NA", "name": "X"},
+                {"ticker": "SWDA", "exchCode": "IM", "name": "ISHARES CORE MSCI WORLD"},
+                {"ticker": "EUNL", "exchCode": "GY", "name": "ISHARES CORE MSCI WORLD"},
+                {"ticker": "IWDA", "exchCode": "NA", "name": "ISHARES CORE MSCI WORLD"},
             ]
         }
     ]
