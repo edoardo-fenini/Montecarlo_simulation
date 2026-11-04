@@ -40,6 +40,9 @@ def finto_scarica(t):
 
 def finto_http(url, dati=None, intestazioni=None, timeout=0):
     isin_ = json.loads(dati)[0]["idValue"]
+    if isin_.startswith("LU"):  # fondo comune lussemburghese non quotato: solo la «borsa» LX, nessuna quotazione utilizzabile
+        voce = {"ticker": "FONDOLX", "exchCode": "LX", "name": "FONDO PROVA A USD ACC", "securityType": "Open-End Fund", "securityType2": "Mutual Fund"}
+        return json.dumps([{"data": [voce]}]).encode()
     noti = json.loads(FIGI)
     voci = noti.get(isin_, [(isin_[2:6], "IM"), (isin_[2:6], "GY")])  # ISIN qualsiasi: due quotazioni inventate
     nome = "APPLE INC" if isin_ == "US0378331005" else NOME_ETF.upper() if isin_ in noti else f"NOME {isin_[2:6]}"
@@ -72,7 +75,18 @@ def finta_ricerca(testo):
     ]
 
 
+import dati  # noqa: E402
+import fondi  # noqa: E402
+
+
+def _senza_fred():
+    raise OSError("prova nel browser: nessun accesso a internet")
+
+
+dati.scarica_fred_usd = _senza_fred  # il cambio storico FRED non deve usare la rete vera (tempi lunghi se è bloccata)
 fonti.scarica_con_ripiego = finto_scarica
+fondi._ricerca_yahoo = lambda q: []  # niente ricerca di fondi su Yahoo
+isin.candidati_yahoo_ricerca = lambda isin_, ricerca=None: []  # nemmeno la ricerca per ISIN
 ricerca._ricerca_yahoo = finta_ricerca
 isin._http = finto_http
 isin.ispeziona_ticker = finto_ispettore

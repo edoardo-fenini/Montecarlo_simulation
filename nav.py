@@ -56,7 +56,7 @@ def avviso_distribuzione(s: pd.Series, finestra: int = 3, soglia_sd: float = 2.5
         return None
     forte = r < -soglia_sd * sd
     anni = sorted(set(r.index.year))
-    doy = r.index.dayofyear.values
+    doy = r.index.day_of_year.values
     anno_riga, forte_v = r.index.year.values, forte.values
     migliore = (0.0, 0, 0)
     for centro in range(1, 366):

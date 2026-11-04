@@ -1073,8 +1073,8 @@ with scheda_sim:
             with st.spinner("Controllo i dati (scarico i prezzi mancanti)…"):
                 esito_c, _ = calcola_controllo(cfg_da_stato(tab), aggiorna)
             ss.controllo = {"chiave": chiave_attuale, "esito": esito_c}
-            if esito_c["blocca"]:
-                st.rerun()  # per disattivare subito «Avvia simulazione»
+            if esito_c["blocca"] or bloccato:
+                st.rerun()  # per attivare/disattivare subito «Avvia simulazione» (il pulsante è già stato disegnato)
         except C.ErroreConfig as e:
             zona_messaggi.error(f"**C'è un problema nelle impostazioni.** {e}")
         except ErroreDati as e:

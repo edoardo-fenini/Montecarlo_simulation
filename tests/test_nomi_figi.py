@@ -121,7 +121,7 @@ def test_candidati_openfigi_senza_lista_non_cambia_il_risultato():
 # ------------------------------------------------------------------ nel controllo dei dati
 def esegui(tmp_path, risposta, schede, extra_cfg=None):
     m = base(SWDA_MI=(serie(seed=7), meta(nome="x", tipo="ETF")), EUNL_DE=(serie(seed=8), meta(nome="x", tipo="ETF")))
-    cfg = config(["AAA.MI", ISIN], **(extra_cfg or {}))
+    cfg = config(["AAA.MI", ISIN], **{"costi": {ISIN: 0.002}, **(extra_cfg or {})})  # con i costi indicati l'ETF non è giallo (v1.4)
     arch = D.Archivio(str(tmp_path), log=lambda *a: None, scaricatore=m.scarica)
     return controllo.controlla(
         cfg, arch, oggi=OGGI, http=lambda *a, **k: risposta, ispettore=schede.get, ricerca=lambda q: []

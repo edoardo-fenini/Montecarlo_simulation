@@ -8,6 +8,10 @@ Uno strumento per confrontare il **rischio** di più portafogli di azioni ed ETF
 |---|---|---|
 | ![Pagina iniziale](docs/immagini/01_pagina_iniziale.png) | ![Schede con il livello di rischio](docs/immagini/02_in_una_pagina.png) | ![Fan chart](docs/immagini/03_fan_chart.png) |
 
+**Novità della versione 1.4:** fondi comuni non quotati (riconoscimento del tipo di strumento, ricerca automatica dei codici di Yahoo,
+importazione dello storico delle quote da CSV o proxy dichiarato), costi annui di fondi ed ETF sottratti dal rendimento atteso, riquadro
+«Rendimento atteso» prima della simulazione con avvisi e controllo di plausibilità dei risultati. Vedi la sezione «Fondi comuni».
+
 **Novità della versione 1.3:** risultati vecchi nascosti con un avviso quando cambi titoli, impostazioni o dati; corretto l'errore
 `StreamlitDuplicateElementId` che poteva fermare l'app a fine analisi; controllo automatico dei nomi OpenFIGI/Yahoo per ogni ISIN;
 importazione del portafoglio dal CSV del broker; ricerca dei titoli per nome; release automatica dal tag `vX.Y.Z`; prova nel browser nei test.
@@ -194,6 +198,74 @@ IE00BK5BQT80;VANGUARD FTSE ALL-WORLD UCITS ETF;40;;
 - Il controvalore va **in euro**. Se manca, il programma calcola **quantità × ultimo prezzo in EUR** (scaricato da Yahoo; serve internet).
 - I pesi sono arrotondati a due decimali e sommano esattamente 100.
 
+### Fondi comuni (non quotati in borsa)
+
+Un **fondo comune** (per esempio un fondo lussemburghese con ISIN `LU…`) non è quotato in borsa: ha un valore della quota calcolato ogni giorno
+(il «NAV»). Molte fonti online non lo hanno. Il controllo dei dati riconosce il **tipo di strumento** di ogni ISIN (azione, ETF/ETC o fondo comune,
+colonna «Tipo») e per i fondi prova tre strade, in quest'ordine:
+
+1. **Il tuo storico delle quote (CSV)**, se l'hai già caricato per quell'ISIN (resta salvato e viene riusato da solo).
+2. **Il proxy** che hai dichiarato per quel fondo (vedi sotto).
+3. **La ricerca automatica**: Yahoo conosce molti fondi con codici tipo `0P0000XXXX`. Lo strumento li cerca per nome e controlla gestore, nome,
+   valuta, classe ad accumulazione o distribuzione, lunghezza dello storico e ultimo prezzo. Il risultato ha **sempre un avviso giallo**: Yahoo
+   non indica l'ISIN, quindi la *classe* di quote (per esempio A in dollari oppure A in euro) potrebbe non essere quella giusta. Controllala.
+   I dati Morningstar di Yahoo partono in genere dal 2022: sono circa 4-5 anni di storia, pochi per simulare 15 anni.
+
+Se nessuna strada funziona compare un errore **rosso**: «È un fondo comune non quotato e non è disponibile nelle fonti online. Puoi caricare lo
+storico delle quote oppure scegliere un proxy», con due pulsanti.
+
+**Passo passo: caricare lo storico delle quote**
+1. Premi **Carica lo storico delle quote** accanto al fondo.
+2. Scegli il file CSV. Una colonna con la **data** e una con il **valore della quota**. Riconosco da solo il separatore (`;`, `,` o tabulazione),
+   i decimali con la virgola, le date `GG/MM/AAAA` o `AAAA-MM-GG` e le intestazioni in italiano o inglese («Data», «Valore quota», «NAV», «Date»…).
+3. Controlla l'**anteprima** (prime e ultime righe) e scegli la **valuta** della serie (propongo quella che si legge nel nome del fondo, altrimenti
+   euro): verrà convertita in euro come per gli altri titoli.
+4. Premi **Conferma e usa questo storico**. Il controllo dati mostra la fonte «CSV importato» e la data dell'ultimo valore. Lo storico resta in
+   `cache_prezzi/` collegato all'ISIN e le analisi successive lo riusano da sole.
+
+**Dove si trova lo storico delle quote?** Di solito sul **sito della società di gestione** (pagina del fondo → «Prezzi» o «Performance» →
+scarica / esporta in Excel o CSV) oppure sulla **piattaforma della banca o del broker** (scheda del fondo → grafico → esporta). Quello che conta controllare:
+- **Classe ad accumulazione o a distribuzione.** Con la classe a distribuzione il valore della quota *scende* quando si stacca la cedola, quindi il
+  rendimento che si legge è più basso di quello vero. Se vedo cali bruschi negli stessi giorni ogni anno, ti avviso con un giallo. Meglio la classe ad accumulazione («Acc», «Cap»).
+- **Valuta della classe.** Una classe in dollari e una in euro (o «coperta» dal cambio, «Hedged») hanno prezzi diversi. Scegli la valuta giusta.
+- **Lunghezza dello storico.** Più anni ci sono, più i risultati sono affidabili. Sotto 3 anni compare un avviso; sotto 1 anno è un errore.
+- **Ultimo valore recente.** Se l'ultimo valore ha più di 30 giorni il controllo è rosso: scarica un file aggiornato.
+
+Un file di esempio (con numeri **inventati**) è in `esempi/storico_quote_esempio.csv`. Poiché il controllo rifiuta storici vecchi di oltre 30 giorni,
+puoi rigenerarlo con date aggiornate: `python strumenti/crea_csv_esempio.py`.
+
+**Da riga di comando** (stessa cosa nel file YAML, vedi `configurazioni/esempio_fondi.yaml`):
+
+```yaml
+prezzi_da_file:
+  LU0073232471: {file: esempi/storico_quote_esempio.csv, valuta: USD}   # storico delle quote del fondo (il percorso parte da dove lanci il programma)
+proxy_titoli:
+  LU0552385295: IWDA.AS     # i dati di un ETF al posto di quelli del fondo
+costi:
+  LU0073232471: 0.0185      # costi annui del fondo: 1,85%
+```
+
+**Proxy.** Se non hai lo storico, puoi indicare un titolo sostitutivo (per esempio un ETF sullo stesso indice) con **Scegli un proxy**. È una
+approssimazione: il rischio e il rendimento storico sono quelli del sostituto, non del fondo. Il controllo dati e il report lo dicono sempre:
+«dati del proxy XYZ, non del fondo». Si toglie con **Togli il proxy**.
+
+### Costi di fondi ed ETF
+
+Per il rendimento atteso la storia viene «ricentrata» sul valore scelto: i costi già compresi nel prezzo del passato sparirebbero, e un fondo con
+costi del 2% sembrerebbe uguale a un ETF allo 0,2%. Per questo i **costi annui** (TER / spese correnti) vengono sottratti dal rendimento atteso di ogni
+fondo ed ETF. Scrivili nella colonna **Costi annui (%)** della tabella dei portafogli (o in `costi:` nel file YAML). Se il campo è vuoto uso un valore
+prudente, **con un avviso giallo** («costi non indicati, uso il default»): **1,5%** per i fondi comuni, **0,3%** per ETF/ETC. Le azioni non hanno costi.
+Il benchmark usa il suo TER, una sola volta. Con il metodo «storico» i costi non si sottraggono (i prezzi storici sono già al netto). Il report ha
+una tabella con i costi usati per ogni titolo e l'effetto sul rendimento atteso di ogni portafoglio.
+
+### Rendimento atteso: riquadro, avvisi e controllo dei risultati
+
+Nell'app, dopo **Controlla i dati**, il riquadro **Rendimento atteso che verrà usato** mostra per ogni portafoglio il rendimento annuo (e, con il
+metodo beta, il beta) che la simulazione userà. Avvisi: **giallo** se il premio di mercato è 0 o se un portafoglio ha un rendimento atteso sotto
+l'1%; **rosso** se un campo è vuoto o non è un numero (un campo vuoto non vale mai 0). A fine simulazione il rendimento medio annuo dei percorsi
+simulati viene confrontato con quello atteso (al netto dei costi), con una tolleranza basata sull'errore standard: se non coincide, errore rosso e i
+risultati non vengono presentati come validi.
+
 ### Controllo dei dati prima della simulazione
 | ![Controllo dati con ISIN](docs/screenshot/01_controllo_dati_isin.png) | ![Menu della quotazione](docs/screenshot/02_menu_quotazione.png) | ![ISIN errato: simulazione bloccata](docs/screenshot/04_isin_errato_bloccato.png) |
 |---|---|---|
@@ -301,9 +373,11 @@ portafogli:
 # Facoltativo: settore per gli stress test (tech | finanza | altro), se quello automatico non ti convince
 # settori: {AMZN: tech}
 
-# Facoltativo: costo annuo (TER) degli ETF usati come titoli. Se non lo indichi si usa ter_etf_default (0,20%).
-# ter: {CSSPX.MI: 0.0007}
-# ter_etf_default: 0.002
+# Facoltativo: costi annui (TER / spese correnti) di fondi ed ETF usati come titoli, per ticker o ISIN. Se non li indichi si usano
+# costo_fondo_default (1,5%) per i fondi comuni e ter_etf_default (0,3%) per ETF/ETC, con un avviso giallo.
+# costi: {CSSPX.MI: 0.0007, LU0073232471: 0.0185}
+# ter_etf_default: 0.003
+# Fondi non quotati: storico delle quote da CSV (prezzi_da_file) oppure un titolo sostitutivo (proxy_titoli), vedi «Fondi comuni».
 
 # Verifica "Le simulazioni bastano?" (attiva di default): ripete il calcolo con 3 seed diversi
 # verifica_convergenza: {numero_seed: 3, soglia: 0.02}
@@ -422,7 +496,8 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `configurazione.py` | lettura e controllo della configurazione YAML |
 | `fonti.py` | fonti dei prezzi (Yahoo, Stooq, BCE), tentativi ripetuti, lettura dei CSV manuali |
 | `dati.py` | cache dei prezzi, conversione in euro, settori |
-| `isin.py` | riconoscimento degli ISIN, cifra di controllo, conversione in ticker (OpenFIGI + ricerca Yahoo), scelta della quotazione, cache |
+| `fondi.py`, `nav.py`, `rendimento.py` | fondi comuni: ricerca dei codici `0P…` di Yahoo; storico delle quote da CSV; avvisi e controllo di plausibilità del rendimento atteso |
+| `isin.py` | riconoscimento degli ISIN, tipo di strumento, cifra di controllo, conversione in ticker (OpenFIGI + ricerca Yahoo), scelta della quotazione, cache |
 | `controllo.py` | «Controllo dati» con semaforo (verde/giallo/rosso) prima della simulazione; avviso sui risultati vecchi |
 | `stato_app.py` | copia di sicurezza delle impostazioni dell'app |
 | `ricerca.py` | ricerca dei titoli per nome (Yahoo Finance) |

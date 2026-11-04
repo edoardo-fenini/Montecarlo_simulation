@@ -560,8 +560,9 @@ def _fondo_comune(isin, extra, quote, metodo, oggi, ricerca, ispettore, http):
     utili = [q for q in quote if q.get("storia_anni", 0) >= fondi.STORIA_MIN_ANNI]
     nomi_yahoo = [q["nome_yahoo"] for q in quote if q.get("nome_yahoo")]
     trovati = fondi.cerca_fondo(isin, extra.get("nome_isin", ""), nomi_yahoo, oggi, ricerca, ispettore, http)
-    if trovati:
-        return utili + trovati, "Ricerca Yahoo Finance (codici fondo)"
+    if trovati:  # un codice trovato anche dalla ricerca semplice vale con le verifiche del fondo (avviso, penalità), una volta sola
+        gia = {q["ticker"] for q in trovati}
+        return [q for q in utili if q["ticker"] not in gia] + trovati, "Ricerca Yahoo Finance (codici fondo)"
     return utili, metodo
 
 

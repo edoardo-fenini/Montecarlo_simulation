@@ -1,5 +1,36 @@
 # Registro delle modifiche
 
+## 1.4.0 (4 novembre 2026)
+
+Versione «fondi comuni e costi». Nessuna funzione tolta. **Il test di non regressione (1.236 numeri) è identico.**
+Modifiche volute al calcolo (spiegate): il default dei costi per gli ETF senza TER indicato passa da 0,20% a 0,30% e i fondi comuni
+(tipo di strumento «fondo comune») non sono più trattati come azioni nel rischio sul singolo titolo e negli stress test; nessuno dei due casi
+compare nei dati finti del test di non regressione.
+Il cambio dei default del metodo beta (2,5% / 4%) **non è stato fatto**, su richiesta: restano 2% e 4%.
+
+### Tipo di strumento e fondi comuni
+- OpenFIGI (`securityType`, `securityType2`) classifica ogni ISIN come azione, ETF/ETC o fondo comune; nuova colonna «Tipo» nel controllo dati
+  (app, report, CSV, Excel). I quattro ISIN di prova (LU0073232471, LU0552385295, LU0070214290, LU0210536198) risultano fondi comuni lussemburghesi.
+- Ricerca automatica dei fondi (`fondi.py`): codici Morningstar di Yahoo («0P…»); candidato scelto dopo il confronto di gestore, nome, valuta,
+  classe a accumulazione/distribuzione, lunghezza della storia e ultimo prezzo; avviso giallo perché la classe non è certa. Esito in cache.
+- Storico delle quote da CSV collegato all'ISIN (`nav.py`): separatore, decimali con la virgola, formati di data e intestazioni italiane/inglesi
+  riconosciuti da soli, anteprima, valuta, fonte «CSV importato»; da YAML con `prezzi_da_file`; avviso giallo per le classi a distribuzione.
+- Proxy dichiarato (`proxy_titoli`), segnalato nel controllo dati e nel report. Errore rosso chiaro con i due pulsanti per i fondi non trovati.
+
+### Costi di fondi ed ETF
+- Colonna «Costi annui (%)» nell'app e chiave `costi` nel YAML; default prudente (fondi 1,5%, ETF/ETC 0,3%) con avviso giallo; tabelle dei costi
+  e dell'effetto sul rendimento atteso nel report; il benchmark usa il suo TER una sola volta.
+
+### Rendimento atteso
+- Riquadro «Rendimento atteso che verrà usato» (app e riga di comando); campo vuoto o non numerico = errore rosso (mai 0);
+  giallo con premio di mercato 0 o rendimento sotto l'1%; controllo di plausibilità dei risultati (errore rosso e report non scritto se non coincide).
+- Già presenti dalla 1.3.1 e non toccati: correzione del ConvergenceWarning del GARCH e prova rapida di `Installa.command`.
+
+### Altro
+- Corretto: dopo un controllo dati rosso risolto (per esempio caricando lo storico delle quote) «Avvia simulazione» restava disattivato fino al
+  clic successivo.
+- Nuovi test offline (`test_fondi_v14.py`, `test_rendimento.py`) e prova nel browser: fondo non trovato → errore rosso con i due pulsanti → CSV → verde → simulazione.
+
 ## 1.3.1 (4 novembre 2026)
 
 Versione di correzione. Nessuna funzione tolta. Il test di non regressione (1.236 numeri) è identico; il modello GARCH del

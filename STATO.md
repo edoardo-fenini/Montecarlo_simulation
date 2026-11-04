@@ -242,3 +242,13 @@ Baseline all'inizio: tutti i test verdi (senza browser), non regressione identic
       nessun doppio conteggio; il TER dentro il proxy storico non pesa perché la media storica viene sostituita). **Modifica voluta**: il default per gli ETF
       senza costo passa da 0,20% a 0,30% (richiesto); i fondi comuni (tipo MUTUALFUND) non sono più trattati come «azioni» nel rischio sul singolo titolo e
       negli stress test. Test di non regressione invariato (i dati finti non hanno ETF o fondi nei portafogli).
+- [x] Tappa 5 – test: `tests/test_fondi_v14.py` (30 test offline: tipo di strumento da risposte OpenFIGI simulate, codici `0P…` e scelta del
+      candidato, risoluzione/cache dei fondi trovati e non trovati, CSV con separatori/decimali/date/intestazioni italiane, anteprima, salvataggio
+      in cache e riuso senza rete, avviso classe a distribuzione, proxy nel controllo e nel report, costi: default con avviso, sottrazione, nessun
+      doppio conteggio sul benchmark) e `tests/test_rendimento.py` (campo vuoto ≠ 0, avvisi, plausibilità; i default 2,5%/4% NON sono stati
+      cambiati su richiesta). Prova nel browser: fondo non trovato → errore rosso con i due pulsanti → CSV (generato con date aggiornate) →
+      0 avvisi, 0 errori → simulazione completa senza errori Streamlit → report con «CSV importato» e «Costi annui usati».
+      Quattro test esistenti sono stati adattati perché un ETF senza costi indicati ora è giallo (voluto): aggiunto `costi` alla loro configurazione.
+      Emerso dalla prova nel browser e corretto: dopo un rosso risolto «Avvia simulazione» restava disattivato fino al clic successivo.
+      Nella prova nel browser FRED è finto (senza rete vera): altrimenti il controllo dati, che ora calcola anche il beta, aspettava il timeout di FRED.
+      Risultato: 248 test verdi in locale (8 min 34 s, prova nel browser inclusa); `ruff check` pulito; non regressione identica.
