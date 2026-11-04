@@ -21,6 +21,12 @@ Versione di correzione. Nessuna funzione tolta. Il test di non regressione (1.23
   serie (quasi) costanti non vengono nemmeno stimate. Gli avvisi di scipy non arrivano più al terminale.
 - 5 nuovi test (`tests/test_garch.py`), compreso un ottimizzatore finto che risponde sempre «codice 4».
 
+### Correzione: la prova di Installa.command falliva nello zip della release
+- `tests/test_release.py` leggeva `.github/workflows/release.yml`, che sta solo nel repository (lo zip lo esclude): sul Mac
+  «1 failed». Ora i test che dipendono da file presenti solo nel repository usano `tests/solo_repository.richiede(...)` e, se il
+  file manca, sono **saltati con un messaggio chiaro** («File presenti solo nel repository di sviluppo … non è un errore»).
+  Verificato eseguendo l'intera suite dentro lo zip costruito come nella release: era l'unico test interessato.
+
 ## 1.3.0 (4 novembre 2026)
 
 Versione di consolidamento. Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di

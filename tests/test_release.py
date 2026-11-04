@@ -10,6 +10,7 @@ import yaml
 RADICE = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RADICE / "strumenti"))
 import note_release as N  # noqa: E402
+from solo_repository import richiede  # noqa: E402
 
 CHANGELOG = """# Registro
 
@@ -65,6 +66,7 @@ def test_riga_di_comando():
 
 
 def test_workflow_release_ha_i_trigger_e_i_permessi():
+    richiede(".github/workflows/release.yml", ".github/workflows/test.yml")
     w = yaml.safe_load((RADICE / ".github/workflows/release.yml").read_text(encoding="utf-8"))
     on = w.get("on") or w[True]  # PyYAML legge «on» come True
     assert on["push"]["tags"] == ["v[0-9]+.[0-9]+.[0-9]+"] and "versione" in on["workflow_dispatch"]["inputs"]
