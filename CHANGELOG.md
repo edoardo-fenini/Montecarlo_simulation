@@ -32,6 +32,13 @@ Versione di correzione. Nessuna funzione tolta. Il test di non regressione (1.23
   AppTest, calcolo in parallelo, prova nel browser). Tempo misurato: 31 secondi su Linux a 4 core (sul Mac di GitHub la suite gira circa il 40%
   più veloce). La suite completa resta nei workflow «Test» e «Prova su Mac» e per chi sviluppa.
 
+### Prova su Mac «come l'utente»
+- Nuovo job `zip-release` in «Prova su Mac» (macOS 14, Apple Silicon): costruisce lo zip esattamente come la release (o, avviandolo a mano,
+  scarica lo zip di una release pubblicata), lo estrae in una cartella pulita fuori dal repository, esegue `Installa.command
+  --non-interattivo`, controlla che la prova rapida non abbia test falliti e duri al massimo 75 secondi (obiettivo circa 30), poi avvia e
+  ferma `Avvia.command`. Avrebbe trovato il problema di `release.yml` prima della 1.3.0.
+- Lo zip si crea con `strumenti/crea_zip.sh`, usato sia dal workflow «Release» sia da questa prova (stesso contenuto, stessi controlli).
+
 ## 1.3.0 (4 novembre 2026)
 
 Versione di consolidamento. Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di

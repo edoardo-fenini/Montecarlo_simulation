@@ -74,3 +74,26 @@ def test_workflow_release_ha_i_trigger_e_i_permessi():
     assert w["jobs"]["release"]["needs"] == "test" and w["jobs"]["test"]["uses"] == "./.github/workflows/test.yml"
     t = yaml.safe_load((RADICE / ".github/workflows/test.yml").read_text(encoding="utf-8"))
     assert "workflow_call" in (t.get("on") or t[True])
+
+
+def test_script_dello_zip_usato_da_release_e_prova_mac():
+    richiede(".github/workflows/release.yml", ".github/workflows/prova-mac.yml")
+    for nome in ("release.yml", "prova-mac.yml"):
+        assert "strumenti/crea_zip.sh" in (RADICE / ".github/workflows" / nome).read_text(encoding="utf-8")
+    w = yaml.safe_load((RADICE / ".github/workflows/prova-mac.yml").read_text(encoding="utf-8"))
+    passi = " ".join(str(p.get("run", "")) for p in w["jobs"]["zip-release"]["steps"])
+    assert "Installa.command --non-interattivo" in passi and "-m rapido" in passi and "unzip" in passi
+
+
+def test_crea_zip_esclude_i_file_del_solo_repository(tmp_path):
+    import shutil
+
+    richiede(".git", ".gitattributes")
+    if not shutil.which("zipinfo") or not shutil.which("git"):
+        pytest.skip("servono git e zipinfo")
+    r = subprocess.run(["bash", str(RADICE / "strumenti/crea_zip.sh"), "vTEST", str(tmp_path)], capture_output=True, text=True, cwd=RADICE)
+    assert r.returncode == 0, r.stderr
+    import zipfile
+
+    nomi = zipfile.ZipFile(r.stdout.strip().splitlines()[-1]).namelist()
+    assert "confronta-portafogli-vTEST/app.py" in nomi and not any("/.github/" in n for n in nomi)
