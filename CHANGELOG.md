@@ -26,6 +26,11 @@ Versione di correzione. Nessuna funzione tolta. Il test di non regressione (1.23
   «1 failed». Ora i test che dipendono da file presenti solo nel repository usano `tests/solo_repository.richiede(...)` e, se il
   file manca, sono **saltati con un messaggio chiaro** («File presenti solo nel repository di sviluppo … non è un errore»).
   Verificato eseguendo l'intera suite dentro lo zip costruito come nella release: era l'unico test interessato.
+- La prova rapida di `Installa.command` eseguiva **tutta** la suite (sul Mac 153 secondi invece dei 30 annunciati). Ora esegue solo i
+  test con il marker pytest **`rapido`** (`pytest -m rapido`): veloci, senza internet, compresi il test di non regressione, l'avvio
+  dell'app e la creazione del PDF. Sono esclusi i test lenti elencati in `tests/conftest.py` (simulazioni complete nell'app, interazioni
+  AppTest, calcolo in parallelo, prova nel browser). Tempo misurato: 31 secondi su Linux a 4 core (sul Mac di GitHub la suite gira circa il 40%
+  più veloce). La suite completa resta nei workflow «Test» e «Prova su Mac» e per chi sviluppa.
 
 ## 1.3.0 (4 novembre 2026)
 

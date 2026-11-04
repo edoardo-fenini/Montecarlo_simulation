@@ -438,7 +438,7 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `configurazioni/` | file di esempio (tre portafogli, core + satellite 80/20, ETF europei, ISIN, prova automatica) |
 | `esempi/` | report di esempio già pronti, verifica della convergenza, file di prezzi di esempio |
 | `strumenti/` | `verifica_convergenza.py` (le simulazioni bastano?), `verifica_fonti.py` (quali fonti rispondono), `note_release.py` (release automatica) |
-| `tests/` | test automatici (`python -m pytest -q tests`), compreso il test di non regressione; `tests/e2e/` prova nel browser |
+| `tests/` | test automatici: suite completa `python -m pytest -q tests` (GitHub Actions, sviluppo); prova rapida di `Installa.command` `python -m pytest -q -m rapido tests` (circa 30 secondi, senza internet: i test lenti sono elencati in `tests/conftest.py`); `tests/e2e/` prova nel browser |
 | `docs/immagini/` | immagini del README |
 | `CHANGELOG.md`, `STATO.md` | modifiche tra le versioni e note di sviluppo |
 

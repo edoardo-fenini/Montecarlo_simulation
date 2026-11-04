@@ -62,7 +62,8 @@ if ! "$UV" pip install --python .venv/bin/python -r requirements.txt; then
 fi
 
 echo "4/4  Prova rapida (circa 30 secondi, senza internet)..."
-if ! .venv/bin/python -m pytest -q tests; then
+# solo i test marcati «rapido» (vedi tests/conftest.py); la suite completa si lancia con: .venv/bin/python -m pytest -q tests
+if ! .venv/bin/python -m pytest -q -m rapido -p no:cacheprovider tests; then
   echo
   echo "ERRORE: la prova rapida non è riuscita. Copia i messaggi qui sopra e chiedi aiuto."
   fine 1
