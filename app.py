@@ -268,7 +268,7 @@ SCENARI_RENDIMENTO = {"Prudente": (2.0, 3.0), "Base": (2.5, 4.0), "Ottimista": (
 
 def salva_impostazione(k: str) -> None:
     """on_change di ogni campo delle impostazioni: solo un'azione dell'utente aggiorna la copia (vedi stato_app.py)."""
-    stato_app.registra(ss, k)
+    stato_app.segnala(ss, k)
 
 
 def imposta_scenario(rf: float, mrp: float) -> None:

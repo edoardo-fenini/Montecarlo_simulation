@@ -99,3 +99,20 @@ def test_valori_azzerati_senza_azione_dell_utente_vengono_ripristinati(app):
     assert app.number_input(key="mrp").value == 0.0 and app.number_input(key="rf").value == 2.0
     app.number_input(key="capitale").set_value(1234.0).run()
     assert app.number_input(key="capitale").value == 1234.0
+
+
+def test_cambi_simultanei_di_molti_campi_sono_un_falso_allarme_del_browser():
+    """Il browser manda insieme i valori di partenza di 5 campi (capitale 0, orizzonte 1, tasso 0, premio 0, versamento 0) e fa
+    scattare on_change di ciascuno: la copia li rifiuta. Un cambio singolo (anche a 0) è invece una scelta dell'utente."""
+    s = {"capitale": 5000.0, "orizzonte": 15, "rf": 2.0, "mrp": 4.0, "versamento": 0.0}
+    chiavi = list(s)
+    stato_app.conserva(s, chiavi)
+    s.update({"capitale": 0.0, "orizzonte": 1, "rf": 0.0, "mrp": 0.0, "versamento": 0.0})
+    for k in chiavi:
+        stato_app.segnala(s, k)
+    stato_app.conserva(s, chiavi)
+    assert (s["capitale"], s["orizzonte"], s["rf"], s["mrp"]) == (5000.0, 15, 2.0, 4.0)
+    s["mrp"] = 0.0
+    stato_app.segnala(s, "mrp")
+    stato_app.conserva(s, chiavi)
+    assert s["mrp"] == 0.0 and s["rf"] == 2.0

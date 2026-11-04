@@ -9,6 +9,15 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping, MutableMapping
 
 CHIAVE_COPIA = "_impostazioni"
+CHIAVE_CAMBIATI = "_cambiati"
+# campi numerici che il browser, dopo aver ricreato i widget, può mandare tutti insieme con il valore di partenza (0 o minimo)
+CAMPI_A_RISCHIO = frozenset({"capitale", "versamento", "orizzonte", "rf", "mrp", "uguale"})
+SOGLIA_FALSO_ALLARME = 3  # un utente non cambia 3 campi numerici nella stessa interazione
+
+
+def segnala(stato: MutableMapping, k: str) -> None:
+    """on_change di un campo: il campo è stato cambiato (dall'utente o, a volte, dal browser per errore). Si decide in `conserva`."""
+    stato.setdefault(CHIAVE_CAMBIATI, []).append(k)
 
 
 def registra(stato: MutableMapping, k: str) -> None:
@@ -24,6 +33,12 @@ def conserva(stato: MutableMapping, chiavi: Iterable[str], predefiniti: Mapping 
     nella copia con `registra` (on_change dei campi). Una chiave senza copia la prende dallo stato, o dal valore predefinito.
     Ritorna le chiavi il cui valore è stato ripristinato."""
     copia = stato.setdefault(CHIAVE_COPIA, {})
+    cambiati = list(dict.fromkeys(stato.pop(CHIAVE_CAMBIATI, [])))
+    falso_allarme = len([k for k in cambiati if k in CAMPI_A_RISCHIO]) >= SOGLIA_FALSO_ALLARME
+    if not falso_allarme:  # cambi voluti dall'utente: entrano nella copia
+        for k in cambiati:
+            if k in stato:
+                copia[k] = stato[k]
     ripristinate = []
     for k in chiavi:
         if k in copia:
