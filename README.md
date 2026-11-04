@@ -16,7 +16,8 @@ Uno strumento per confrontare il **rischio** di più portafogli di azioni ed ETF
 
 **Metodo consigliato: lo zip della release.**
 1. Apri la pagina del progetto su GitHub e clicca **Releases** (colonna di destra).
-2. Nell'ultima versione (es. `v1.0.0`) clicca il file **`confronta-portafogli-v1.0.0.zip`**.
+2. Nell'ultima versione (quella con l'etichetta **Latest**, nome nel formato `vX.Y.Z`, es. `v1.3.0`) clicca il file **`confronta-portafogli-v1.3.0.zip`**.
+   Le release con nomi come `V_1.2.0` sono le vecchie: vedi «Nomi dei tag» in fondo.
 
 **In alternativa**: nella pagina principale del progetto clicca il pulsante verde **Code → Download ZIP**.
 
@@ -165,7 +166,7 @@ Il pulsante **🔎 Controlla i dati** (barra laterale) verifica tutti i titoli, 
 | 🟡 **Giallo** | meno di 3 anni di storia; più del 5% di giorni mancanti; ultimo prezzo più vecchio di 7 giorni; movimenti giornalieri oltre ±30%; nome trovato molto diverso da quello atteso | Avviso: si può procedere |
 | 🟢 **Verde** | tutto a posto | – |
 
-I «giorni mancanti» si contano rispetto ai giorni in cui almeno metà dei titoli ha scambiato: le festività di una sola borsa non contano. Il **nome atteso** si indica in configurazione (`nomi_attesi`, vedi `configurazioni/esempio_isin.yaml`). Le soglie si cambiano in configurazione (`controllo_dati`, qui i valori predefiniti):
+I «giorni mancanti» si contano rispetto ai giorni in cui almeno metà dei titoli ha scambiato: le festività di una sola borsa non contano. Per ogni ISIN il programma confronta da solo il nome di OpenFIGI con quello di Yahoo (ignorando maiuscole, punteggiatura e forme societarie come Inc, SpA, PLC, AG): se sono molto diversi la riga è gialla e viene provata la quotazione successiva; le quotazioni su borse che il programma non sa tradurre sono elencate come «info». Il **nome atteso** resta un controllo facoltativo in più (`nomi_attesi`, vedi `configurazioni/esempio_isin.yaml`). Le soglie si cambiano in configurazione (`controllo_dati`, qui i valori predefiniti):
 
 ```yaml
 controllo_dati:
@@ -311,12 +312,49 @@ Il codice di riferimento sta nel ramo **`main`**. Per renderlo il ramo predefini
 2. Nel menu a sinistra clicca **General**; nella sezione **Default branch** premi il pulsante con le due frecce (⇄ *Switch to another branch*).
 3. Scegli **`main`**, premi **Update** e conferma con **I understand, update the default branch**.
 
-### Creare una release
-1. Apri il repository e clicca **Releases → Draft a new release** (o **Create a new release**).
-2. In **Choose a tag** scrivi il numero di versione (es. `v1.1.0`) e scegli **Create new tag … on publish**. In **Target** scegli **`main`**.
-3. Titolo: ad esempio `v1.1.0`. Nella descrizione incolla il contenuto di `RELEASE_NOTES.md`.
-4. Premi **Publish release**.
-5. Dopo uno o due minuti la GitHub Action **"Zip per la release"** allega automaticamente `confronta-portafogli-v1.1.0.zip` alla release (puoi seguirla nella scheda **Actions**). Lo zip non contiene `.venv`, cache e report generati.
+### Nomi dei tag: da ora solo `vX.Y.Z`
+Dalla versione 1.3 i tag (e quindi le release) hanno **un solo formato: `vX.Y.Z`**, con la «v» minuscola e tre numeri separati da punti
+(`v1.3.0`, `v1.3.1`, `v2.0.0`). Formati come `V_1.3.0`, `v1.3` o `1.3.0-beta` sono rifiutati dal workflow di release.
+
+I tag e le release **vecchi non sono stati cancellati**, ma hanno un nome diverso e non sono creati dalla release automatica:
+
+| Tag | Cosa è | Cosa fare |
+|---|---|---|
+| `V_1.0.1`, `V_1.1.0`, `V_1.2.0` | release delle versioni 1.0.1, 1.1.0, 1.2.0, create a mano con il vecchio nome (maiuscola e trattino basso) | Non servono più: sono versioni superate. Restano disponibili per consultazione. |
+| `prova` | prima prova di release (titolo «V 1.0.0») | Ignorala. |
+| `v1.3.0` e successivi | release automatiche, con note dal `CHANGELOG.md` e lo zip `confronta-portafogli-vX.Y.Z.zip` | **Scarica sempre l'ultima di questo tipo** (quella con l'etichetta *Latest*). |
+
+Non puoi rinominare un tag esistente senza ricrearlo: per questo i vecchi restano come sono. Se vuoi, dal sito puoi aprire la
+vecchia release e premere **Edit** per aggiungere in cima «Versione superata: scarica l'ultima `vX.Y.Z`».
+
+### Pubblicare una nuova versione (dal sito di GitHub, passo passo)
+Prima, nel codice: aggiungi a `CHANGELOG.md` una sezione `## X.Y.Z (data)` con le novità (diventa il testo della release) e unisci il lavoro in `main`.
+
+**Metodo A – senza terminale (consigliato).** Il sito di GitHub non permette di creare *soltanto* un tag: lo crea il workflow per te.
+1. Apri il repository e clicca la scheda **Actions**.
+2. Nell'elenco a sinistra scegli **Release**.
+3. Clicca **Run workflow** (a destra); in **Use workflow from** lascia **`main`**.
+4. Nel campo **Versione da pubblicare** scrivi per esempio `1.3.1` (va bene anche `v1.3.1`) e clicca **Run workflow** (pulsante verde).
+5. Attendi qualche minuto (puoi cliccare l'esecuzione per seguirla): il workflow lancia i test (compresa la prova nel browser), crea il tag
+   `v1.3.1`, costruisce lo zip, crea la release con le note prese dalla sezione `## 1.3.1` del `CHANGELOG.md` e allega lo zip.
+6. Torna nella pagina principale e clicca **Releases**: trovi la nuova release con lo zip.
+
+**Metodo B – tag dal terminale** (se preferisci creare il tag tu):
+```bash
+git checkout main && git pull
+git tag v1.3.1
+git push origin v1.3.1
+```
+Il push del tag avvia da solo lo stesso workflow.
+
+**Metodo C – dal sito, con il pulsante delle release.** **Releases → Draft a new release → Choose a tag**: scrivi `v1.3.1`, scegli
+**Create new tag: v1.3.1 on publish**, **Target `main`**, lascia vuota la descrizione e premi **Publish release**. La creazione del tag avvia il
+workflow, che sostituisce le note con quelle del `CHANGELOG.md` e allega lo zip.
+
+Se il workflow fallisce (croce rossa in **Actions**) non viene pubblicato nulla: leggi il messaggio del passo rosso. Cause tipiche: nome del
+tag non nel formato `vX.Y.Z`, sezione mancante nel `CHANGELOG.md`, un test che non passa. Corretto il problema, rilancia con il Metodo A.
+Il workflow usa solo i permessi del `GITHUB_TOKEN` del repository (**Settings → Actions → General → Workflow permissions** deve essere
+*Read and write permissions*, oppure basta il `permissions: contents: write` già scritto nel workflow se la tua organizzazione lo consente).
 
 ### Prova automatica su Mac
 A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, GitHub esegue su un Mac Apple Silicon: installazione con `Installa.command`, test, un report di prova e l'avvio dell'app. L'esito (spunta verde o croce rossa) si vede nella scheda **Actions** e accanto all'ultimo commit; il report di prova si scarica dagli *Artifacts* dell'esecuzione.

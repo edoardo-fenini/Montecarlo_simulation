@@ -98,6 +98,10 @@ debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLE
       `isin.nome_discordante`, quotazioni discordanti in fondo all'ordine (si prova la successiva), `avvisi_nome` → GIALLO; borse OpenFIGI non
       mappate → `borse_non_mappate` (cache) → «info» nel Dettagli. Scelta: l'ordine mette i nomi discordanti PRIMA di ogni altra regola; se manca
       uno dei due nomi (o resta solo «ETF», «Inc»…) non si confronta. Nei test vecchi il nome OpenFIGI finto «X» è diventato realistico.
+- [x] 3. Release automatica: `.github/workflows/release.yml` (tag `vX.Y.Z` o avvio manuale con la versione; test → zip → release con note da
+      CHANGELOG → zip), `strumenti/note_release.py` + `tests/test_release.py`. Tag vecchi (`V_1.0.1`, `V_1.1.0`, `V_1.2.0`, `prova`) intatti. Scelta:
+      il sito di GitHub non crea un tag da solo, quindi il metodo A è «Actions → Release → Run workflow» (crea tag e release); il push del tag dal
+      terminale e il pulsante delle release funzionano uguale. `zip-release.yml` tenuto per le release create a mano.
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;

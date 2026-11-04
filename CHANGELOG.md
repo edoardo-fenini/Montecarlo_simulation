@@ -21,6 +21,13 @@ non regressione (1.236 numeri chiave) è rimasto identico.
   come **info** nella colonna «Dettagli» del controllo dati (senza cambiare il colore) e sono salvate nella cache degli ISIN.
 - Il confronto dei nomi è nel nuovo modulo `nomi.py` (`controllo.somiglianza_nomi` funziona come prima).
 
+### Release automatica
+- Nuovo workflow `release.yml`: con il push di un tag `vX.Y.Z` (o avviandolo a mano da Actions → Release → Run workflow con la versione)
+  lancia i test, costruisce lo zip, controlla il contenuto, crea la release con le note prese dalla sezione giusta di `CHANGELOG.md` e allega
+  lo zip. Usa solo il `GITHUB_TOKEN` del repository. `test.yml` è richiamabile dagli altri workflow.
+- `strumenti/note_release.py` valida il nome del tag (solo `vX.Y.Z`) ed estrae le note. `zip-release.yml` resta per le release create a mano.
+- README: spiegazione dei tag vecchi (`V_1.0.1`, `V_1.1.0`, `V_1.2.0`, `prova`, non cancellati) e della procedura passo passo dal sito.
+
 ## 1.2.0 (4 novembre 2026)
 
 Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di non regressione

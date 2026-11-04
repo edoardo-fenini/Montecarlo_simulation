@@ -1,0 +1,77 @@
+# Release automatica. Si avvia da sola quando fai push di un tag vX.Y.Z (per esempio v1.3.0), oppure a mano
+# (Actions → Release → Run workflow, indicando la versione). Passi: test (compresa la prova nel browser) → zip → release con le
+# note prese dalla sezione giusta di CHANGELOG.md → zip allegato. Usa solo il GITHUB_TOKEN del repository (nessun segreto da creare).
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      versione:
+        description: "Versione da pubblicare, per esempio 1.3.0 oppure v1.3.0 (il ramo scelto sopra deve contenere già il CHANGELOG di quella versione)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  release:
+    needs: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Nome del tag (solo vX.Y.Z)
+        id: tag
+        env:
+          RIF: ${{ github.event_name == 'push' && github.ref_name || inputs.versione }}
+        run: echo "tag=$(python3 strumenti/note_release.py tag "$RIF")" >> "$GITHUB_OUTPUT"
+
+      - name: Note dalla sezione giusta di CHANGELOG.md
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          python3 strumenti/note_release.py note "$TAG" CHANGELOG.md > note_release.md
+          echo "--- note della release $TAG ---"; cat note_release.md
+
+      - name: Crea lo zip
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          NOME="confronta-portafogli-${TAG}"
+          git archive --format=zip --prefix="${NOME}/" -o "${NOME}.zip" HEAD
+          unzip -l "${NOME}.zip" | tail -3
+
+      - name: Controlla il contenuto dello zip
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          NOME="confronta-portafogli-${TAG}"
+          # Installa.command e Avvia.command devono essere eseguibili (permessi -rwx)
+          zipinfo "${NOME}.zip" | grep -E "(Installa|Avvia)\.command" | tee comandi.txt
+          test "$(grep -c '^-rwx' comandi.txt)" = "2"
+          # niente ambienti, cache o report generati
+          if unzip -l "${NOME}.zip" | grep -E "/(\.venv|\.python|cache_prezzi|report)/"; then echo "ERRORE: file che non devono stare nello zip"; exit 1; fi
+          for f in isin.py controllo.py nomi.py app.py configurazioni/esempio_isin.yaml; do unzip -l "${NOME}.zip" | grep -q "$f"; done
+
+      - name: Crea (o aggiorna) la release e allega lo zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          NOME="confronta-portafogli-${TAG}.zip"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "La release $TAG esiste già: aggiorno le note e sostituisco lo zip."
+            gh release edit "$TAG" --title "$TAG" --notes-file note_release.md
+            gh release upload "$TAG" "$NOME" --clobber
+          else
+            # se il tag non esiste (avvio a mano) viene creato sul commit di questo workflow
+            gh release create "$TAG" "$NOME" --title "$TAG" --notes-file note_release.md --target "$GITHUB_SHA"
+          fi
+          gh release view "$TAG" --json tagName,assets --jq '"Release \(.tagName): " + ([.assets[].name] | join(", "))'
