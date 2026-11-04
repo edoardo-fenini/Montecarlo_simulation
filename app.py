@@ -169,6 +169,7 @@ def applica_cfg(raw: dict) -> None:
     ss.pop("azione_titolo", None)
     ss.scelte_isin = {str(k).replace(" ", "").upper(): str(v).strip().upper() for k, v in (cfg.get("isin_scelte") or {}).items()}
     ss.pop("controllo", None)
+    ss.pop(stato_app.CHIAVE_COPIA, None)  # nuovi valori scritti dal programma: la copia si rifà dallo stato
 
 
 def cfg_da_stato(tabella: pd.DataFrame) -> dict:
@@ -265,9 +266,16 @@ if ripristinate := stato_app.conserva(ss, IMPOSTAZIONI, PREDEFINITI):
 SCENARI_RENDIMENTO = {"Prudente": (2.0, 3.0), "Base": (2.5, 4.0), "Ottimista": (2.5, 5.0)}  # (tasso privo di rischio %, premio %)
 
 
+def salva_impostazione(k: str) -> None:
+    """on_change di ogni campo delle impostazioni: solo un'azione dell'utente aggiorna la copia (vedi stato_app.py)."""
+    stato_app.registra(ss, k)
+
+
 def imposta_scenario(rf: float, mrp: float) -> None:
     """Scelta rapida: compila i due campi (restano modificabili). Usata come callback: gira prima del disegno dei campi."""
     ss.rf, ss.mrp = rf, mrp
+    stato_app.registra(ss, "rf")
+    stato_app.registra(ss, "mrp")
 
 
 def pesi_uguali() -> None:
@@ -619,7 +627,7 @@ def pannello_rendimento(chiave_attuale: str | None) -> None:
 # ------------------------------------------------------------------ barra laterale
 with st.sidebar:
     st.title("📊 Impostazioni")
-    st.text_input("Nome del confronto", key="nome", help=AIUTO["nome"])
+    st.text_input("Nome del confronto", key="nome", on_change=salva_impostazione, args=("nome",), help=AIUTO["nome"])
 
     st.header("1 · Portafogli", divider="gray")
     st.caption(
@@ -740,25 +748,25 @@ with st.sidebar:
 
     st.header("2 · Capitale e orizzonte", divider="gray")
     c1, c2 = st.columns(2)
-    c1.number_input("Capitale iniziale (€)", min_value=0.0, step=500.0, key="capitale", help=AIUTO["capitale"])
-    c2.number_input("Versamento mensile (€)", min_value=0.0, step=50.0, key="versamento", help=AIUTO["versamento"])
-    c1.number_input("Orizzonte (anni)", min_value=1, max_value=50, step=1, key="orizzonte", help=AIUTO["orizzonte"])
-    c2.text_input("Orizzonti intermedi", key="intermedi", help=AIUTO["intermedi"])
+    c1.number_input("Capitale iniziale (€)", min_value=0.0, step=500.0, key="capitale", on_change=salva_impostazione, args=("capitale",), help=AIUTO["capitale"])
+    c2.number_input("Versamento mensile (€)", min_value=0.0, step=50.0, key="versamento", on_change=salva_impostazione, args=("versamento",), help=AIUTO["versamento"])
+    c1.number_input("Orizzonte (anni)", min_value=1, max_value=50, step=1, key="orizzonte", on_change=salva_impostazione, args=("orizzonte",), help=AIUTO["orizzonte"])
+    c2.text_input("Orizzonti intermedi", key="intermedi", on_change=salva_impostazione, args=("intermedi",), help=AIUTO["intermedi"])
 
     st.header("3 · Rendimento atteso", divider="gray")
-    st.radio("Metodo", list(SPIEGA_METODO), key="metodo", horizontal=True, help=AIUTO["metodo"])
+    st.radio("Metodo", list(SPIEGA_METODO), key="metodo", on_change=salva_impostazione, args=("metodo",), horizontal=True, help=AIUTO["metodo"])
     st.caption(SPIEGA_METODO[ss.metodo])
     if ss.metodo == "beta":
         c1, c2 = st.columns(2)
-        c1.number_input("Tasso privo di rischio (%)", step=0.25, key="rf", help=AIUTO["rf"])
-        c2.number_input("Premio di mercato (%)", step=0.25, key="mrp", help=AIUTO["mrp"])
+        c1.number_input("Tasso privo di rischio (%)", step=0.25, key="rf", on_change=salva_impostazione, args=("rf",), help=AIUTO["rf"])
+        c2.number_input("Premio di mercato (%)", step=0.25, key="mrp", on_change=salva_impostazione, args=("mrp",), help=AIUTO["mrp"])
         b1, b2, b3 = st.columns(3)
         for col, (nome_p, (v_rf, v_mrp)) in zip((b1, b2, b3), SCENARI_RENDIMENTO.items(), strict=True):
             col.button(nome_p, key=f"scenario_{nome_p}", width="stretch", on_click=imposta_scenario, args=(v_rf, v_mrp),
                        help=f"Tasso privo di rischio {v_rf:g}% · premio di mercato {v_mrp:g}%. Poi puoi modificare i valori.")  # fmt: skip
         st.caption("Valori indicativi basati su tassi BCE e stime di premio per il rischio di fine 2026, non previsioni.")
     elif ss.metodo == "uguale":
-        st.number_input("Rendimento medio annuo per tutti (%)", step=0.5, key="uguale", help=AIUTO["uguale"])
+        st.number_input("Rendimento medio annuo per tutti (%)", step=0.5, key="uguale", on_change=salva_impostazione, args=("uguale",), help=AIUTO["uguale"])
     elif ss.metodo == "personalizzato":
         nomi = list(dict.fromkeys(str(x).strip() for x in tab["Portafoglio"] if str(x).strip() not in ("", "None"))) + ["benchmark"]
         dfp = pd.DataFrame({"Portafoglio": nomi, "Rendimento (%)": [ss.personalizzato.get(n, ss.uguale) for n in nomi]})
@@ -770,6 +778,8 @@ with st.sidebar:
         "Modello di simulazione",
         list(SPIEGA_MODELLO),
         key="modello",
+        on_change=salva_impostazione,
+        args=("modello",),
         horizontal=True,
         format_func=lambda x: SPIEGA_MODELLO[x][0],
         help="Storico: si rimescolano pezzi di storia reale dei titoli (come nelle versioni precedenti). Fattori: ogni titolo è "
@@ -778,16 +788,16 @@ with st.sidebar:
     )
     st.caption(SPIEGA_MODELLO[ss.modello][1])
     for k, (et, aiuto) in MODULI.items():
-        st.checkbox(et, key=f"mod_{k}", help=aiuto)
-    st.number_input("Numero di simulazioni", min_value=500, max_value=100000, step=1000, key="nsim", help=AIUTO["nsim"])
+        st.checkbox(et, key=f"mod_{k}", on_change=salva_impostazione, args=(f"mod_{k}",), help=aiuto)
+    st.number_input("Numero di simulazioni", min_value=500, max_value=100000, step=1000, key="nsim", on_change=salva_impostazione, args=("nsim",), help=AIUTO["nsim"])
     with st.expander("Benchmark e impostazioni avanzate"):
-        st.text_input("Nome del benchmark", key="b_nome")
-        st.text_input("Ticker (o ISIN) del benchmark", key="b_ticker", help=AIUTO["b_ticker"])
-        st.number_input("TER del benchmark (%)", min_value=0.0, max_value=3.0, step=0.01, key="b_ter", help="Costo annuo dell'ETF.")
-        st.text_input("Indice prima della nascita dell'ETF", key="b_proxy", help=AIUTO["b_proxy"])
-        st.selectbox("Ribilanciamento", list(C.RIBILANCIAMENTO_MESI), key="rib", help=AIUTO["rib"])
-        st.number_input("Costo di ribilanciamento (%)", min_value=0.0, max_value=5.0, step=0.05, key="costo", help=AIUTO["costo"])
-        st.number_input("Seed", min_value=0, step=1, key="seed", help=AIUTO["seed"])
+        st.text_input("Nome del benchmark", key="b_nome", on_change=salva_impostazione, args=("b_nome",))
+        st.text_input("Ticker (o ISIN) del benchmark", key="b_ticker", on_change=salva_impostazione, args=("b_ticker",), help=AIUTO["b_ticker"])
+        st.number_input("TER del benchmark (%)", min_value=0.0, max_value=3.0, step=0.01, key="b_ter", on_change=salva_impostazione, args=("b_ter",), help="Costo annuo dell'ETF.")
+        st.text_input("Indice prima della nascita dell'ETF", key="b_proxy", on_change=salva_impostazione, args=("b_proxy",), help=AIUTO["b_proxy"])
+        st.selectbox("Ribilanciamento", list(C.RIBILANCIAMENTO_MESI), key="rib", on_change=salva_impostazione, args=("rib",), help=AIUTO["rib"])
+        st.number_input("Costo di ribilanciamento (%)", min_value=0.0, max_value=5.0, step=0.05, key="costo", on_change=salva_impostazione, args=("costo",), help=AIUTO["costo"])
+        st.number_input("Seed", min_value=0, step=1, key="seed", on_change=salva_impostazione, args=("seed",), help=AIUTO["seed"])
     aggiorna = st.checkbox("Aggiorna i dati (riscarica i prezzi)", value=False, help=AIUTO["aggiorna"], key="aggiorna_dati")
     chiave_attuale = chiave_dati(tab)
     cc = ss.get("controllo")

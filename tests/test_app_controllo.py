@@ -124,10 +124,10 @@ def test_isin_con_cifra_errata_blocca(app):
 
 # ------------------------------------------------------------------ v1.3: risultati vecchi
 def simula_piccola(app):
-    app.session_state["nsim"] = 500
-    app.session_state["orizzonte"] = 2
+    app.number_input(key="nsim").set_value(500)
+    app.number_input(key="orizzonte").set_value(2)
     for k in ("stress_test", "rischio_singolo_titolo", "verifica_convergenza", "confronto_modelli", "analisi_C"):
-        app.session_state[f"mod_{k}"] = False
+        app.checkbox(key=f"mod_{k}").set_value(False)
     app = con_tabella(app, [["P", "AAPL", None], ["P", "ENEL.MI", None]])
     app = bottone(app, "Avvia simulazione").click().run()
     assert not app.exception and "ris" in app.session_state
@@ -141,13 +141,13 @@ def errori_in_testo(app):
 def test_risultati_nascosti_se_cambiano_le_impostazioni(app):
     app = simula_piccola(app)
     assert "non corrispondono più" not in errori_in_testo(app) and len(app.tabs) > 3
-    app.session_state["capitale"] = 7777.0
+    app.number_input(key="capitale").set_value(7777.0)
     app = app.run()
     assert not app.exception
     assert "Questi risultati non corrispondono più ai dati attuali: rilancia la simulazione." in errori_in_testo(app)
     assert not [t for t in app.tabs if t.label == "Sintesi"]  # risultati nascosti
     # tornando al valore di prima l'avviso scompare
-    app.session_state["capitale"] = 5000.0
+    app.number_input(key="capitale").set_value(5000.0)
     app = app.run()
     assert "non corrispondono più" not in errori_in_testo(app)
 
@@ -262,8 +262,8 @@ def test_ricerca_in_un_nuovo_portafoglio_e_avviso_sui_pesi(app, monkeypatch):
 def test_impostazioni_ripristinate_se_streamlit_cancella_lo_stato_dei_widget(app):
     import stato_app
 
-    app.session_state["capitale"] = 12345.0
-    app.session_state["orizzonte"] = 7
+    app.number_input(key="capitale").set_value(12345.0)
+    app.number_input(key="orizzonte").set_value(7)
     app = app.run()
     copia = app.session_state["_impostazioni"]
     assert copia["capitale"] == 12345.0 and copia["orizzonte"] == 7 and copia["rf"] == 2.0  # la copia segue i valori attuali

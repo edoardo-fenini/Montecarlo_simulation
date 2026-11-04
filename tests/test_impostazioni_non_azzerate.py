@@ -83,3 +83,19 @@ def test_conserva_unitario():
     assert stato_app.conserva(s, ["a", "b"], {"b": 7}) == ["b"] and s["b"] == 7
     del s["a"]
     assert stato_app.conserva(s, ["a", "b"]) == ["a"] and s["a"] == 1
+
+
+def test_valori_azzerati_senza_azione_dell_utente_vengono_ripristinati(app):
+    """Il difetto visto in CI (capitale 0, orizzonte 1, tasso e premio 0 dopo un clic su ➕): valori di partenza dei campi
+    nello stato senza che l'utente li abbia scritti. La copia li rimette a posto; un valore scritto dall'utente (anche 0) resta."""
+    for k, v in (("capitale", 0.0), ("orizzonte", 1), ("rf", 0.0), ("mrp", 0.0), ("versamento", 0.0)):
+        app.session_state[k] = v
+    app.run()
+    assert not app.exception
+    assert app.number_input(key="capitale").value == 5000.0 and app.number_input(key="orizzonte").value == 15
+    assert app.number_input(key="rf").value == 2.0 and app.number_input(key="mrp").value == 4.0
+    app.number_input(key="mrp").set_value(0.0).run()  # scelta dell'utente: resta 0
+    app.run()
+    assert app.number_input(key="mrp").value == 0.0 and app.number_input(key="rf").value == 2.0
+    app.number_input(key="capitale").set_value(1234.0).run()
+    assert app.number_input(key="capitale").value == 1234.0

@@ -52,9 +52,9 @@ def test_simulazione_completa_tutti_i_moduli_senza_elementi_duplicati(tmp_path, 
     monkeypatch.setattr(isin, "_http", finto_http)
     monkeypatch.setattr(isin, "ispeziona_ticker", finto_ispettore)
     at = AppTest.from_file(str(RADICE / "app.py"), default_timeout=900).run()
-    at.session_state["nsim"] = 500
+    at.number_input(key="nsim").set_value(500)
     for k in MODULI:
-        at.session_state[f"mod_{k}"] = True
+        at.checkbox(key=f"mod_{k}").set_value(True)
     at = at.run()
     at = next(b for b in at.button if "Avvia simulazione" in b.label).click().run()
     assert not at.exception, [e.value for e in at.exception]
@@ -79,9 +79,9 @@ def test_simulazione_completa_con_modello_a_fattori(tmp_path, monkeypatch):
     monkeypatch.setattr(isin, "_http", finto_http)
     monkeypatch.setattr(isin, "ispeziona_ticker", finto_ispettore)
     at = AppTest.from_file(str(RADICE / "app.py"), default_timeout=900).run()
-    at.session_state["nsim"] = 500
-    at.session_state["modello"] = "fattori"
-    at.session_state["mod_backtest_var"] = True
+    at.number_input(key="nsim").set_value(500)
+    at.radio(key="modello").set_value("fattori")
+    at.checkbox(key="mod_backtest_var").set_value(True)
     at = at.run()
     at = next(b for b in at.button if "Avvia simulazione" in b.label).click().run()
     assert not at.exception, [e.value for e in at.exception]
