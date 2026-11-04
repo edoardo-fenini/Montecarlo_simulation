@@ -334,6 +334,11 @@ def esegui(
     cfg, _ = isin.risolvi_configurazione(cfg, arch.dir, arch.aggiorna, log_fn=log, **(kw_isin or {}))
     D.importa_da_configurazione(cfg, arch)
     dati = D.costruisci(cfg, arch)
+    for titolo, sost in (cfg.get("proxy_usati") or {}).items():  # proxy dichiarato: sempre segnalato nel report
+        dati["avvisi"].append(f"{titolo}: dati del proxy {sost}, non del fondo. Rischio e rendimento storico sono quelli del sostituto.")
+    for t, riga in dati["info"].iterrows():
+        if riga["fonte"] == D.FONTE_NAV:
+            dati["avvisi"].append(f"{t}: storico delle quote importato da CSV (ultimo valore del {riga['ultimo dato']:%d/%m/%Y}).")
     R = dati["R"]
     proxy_info = None
     if mod["stress_test"] or mod["analisi_C"]:

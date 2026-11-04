@@ -225,4 +225,4 @@ Baseline all'inizio: tutti i test verdi (senza browser), non regressione identic
       | LU0070214290 | trovato | `0P00000DTX` | JPM US Select Equity A acc USD | USD | 4,7 |
       | LU0210536198 | trovato | `0P00000C2V` | JPM US Growth A dist USD | USD | 4,7 |
       Limite: la ricerca di Yahoo per nome è capricciosa; per fondi di altri gestori può non trovare nulla → tappa 3 (CSV o proxy).
-      Una storia di 4,7 anni è corta per simulare 15 anni: l'avviso «storia corta» (sotto 5 anni di storia comune) resta quello esistente.
+      Una storia di 4,7 anni è corta per simulare 15 anni, ma sopra la soglia gialla esistente (3 anni): nessun avviso di storia corta, la serie va solo valutata con attenzione.

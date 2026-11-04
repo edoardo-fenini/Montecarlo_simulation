@@ -577,16 +577,31 @@ def isin_nella_configurazione(cfg: dict) -> list[str]:
     return visti
 
 
+def storico_importato(cartella: str, isin: str) -> bool:
+    """True se in cache c'è uno storico delle quote importato dall'utente per questo ISIN."""
+    try:
+        with open(os.path.join(cartella, re.sub(r"[^A-Za-z0-9._-]", "_", isin) + ".json"), encoding="utf-8") as f:
+            return json.load(f).get("fonte") in ("CSV importato", "File CSV caricato a mano")
+    except (OSError, ValueError):
+        return False
+
+
 def risolvi_configurazione(cfg: dict, cartella: str, aggiorna=False, http=None, log_fn=None, oggi=None, ricerca=None, ispettore=None):
     """Sostituisce gli ISIN con i ticker scelti. Ritorna (cfg nuova, {ISIN: risoluzione}). Gli ISIN senza risposta
-    sollevano ErroreIsin. Aggiunge `cfg['isin_di']` = {TICKER: ISIN} per il report."""
-    isins = isin_nella_configurazione(cfg)
-    if not isins:
+    sollevano ErroreIsin. Aggiunge `cfg['isin_di']` = {TICKER: ISIN} per il report.
+    Gli ISIN con uno storico importato (CSV) restano ISIN (la cache li contiene); quelli con un proxy dichiarato usano il proxy."""
+    proxy_dich = {k: v for k, v in (cfg.get("proxy_titoli") or {}).items()}
+    tutti = isin_nella_configurazione(cfg)
+    importati = {i for i in tutti if i in (cfg.get("prezzi_da_file") or {}) or storico_importato(cartella, i)}
+    proxy_attivi = {k: v for k, v in proxy_dich.items() if k in {normalizza(x) for x in _titoli_cfg(cfg)} and k not in importati}
+    da_cercare = [i for i in tutti if i not in importati and i not in proxy_attivi and (cfg.get("isin_mappa") or {}).get(i) != i]
+    da_cercare += [v for v in proxy_attivi.values() if riconosci(v)[0] == "isin" and v not in da_cercare]
+    if not da_cercare and not importati and not proxy_attivi:
         return cfg, {}
     opz = cfg["isin"]
     scelte = {normalizza(k): str(v).strip().upper() for k, v in (cfg.get("isin_scelte") or {}).items()}
     ris = {}
-    for i in isins:
+    for i in da_cercare:
         if log_fn:
             log_fn(f"  converto l'ISIN {i} in ticker ...")
         ris[i] = risolvi(
@@ -603,18 +618,31 @@ def risolvi_configurazione(cfg: dict, cartella: str, aggiorna=False, http=None, 
             ispettore,
             cfg["controllo_dati"]["somiglianza_nome_min"],
         )
-    return applica_mappa(cfg, {i: r["ticker"] for i, r in ris.items()}), ris
+    mappa = {i: r["ticker"] for i, r in ris.items()}
+    mappa.update({i: i for i in importati})
+    proxy_ris = {k: mappa.get(v, ris[v]["ticker"] if v in ris else v) for k, v in proxy_attivi.items()}
+    return applica_mappa(cfg, mappa, proxy_ris), ris
 
 
-def applica_mappa(cfg: dict, mappa: dict[str, str]) -> dict:
-    """Copia della configurazione con ISIN -> ticker in portafogli, benchmark e impostazioni per ticker."""
+def _titoli_cfg(cfg: dict) -> list[str]:
+    return [k for p in cfg["portafogli"] for k in p["pesi"]] + [cfg["benchmark"]["ticker"]]
+
+
+def applica_mappa(cfg: dict, mappa: dict[str, str], proxy: dict[str, str] | None = None) -> dict:
+    """Copia della configurazione con ISIN -> ticker in portafogli, benchmark e impostazioni per ticker.
+    `proxy` = {titolo: ticker sostitutivo}: i dati del sostituto prendono il posto di quelli del titolo (resta traccia in `proxy_usati`)."""
     cfg = copy.deepcopy(cfg)
+    proxy = proxy or {}
 
     def conv(k):
-        return mappa.get(normalizza(k), k)
+        return proxy.get(normalizza(k)) or mappa.get(normalizza(k), k)
 
     for p in cfg["portafogli"]:
-        p["pesi"] = {conv(k): v for k, v in p["pesi"].items()}
+        nuovi: dict = {}
+        for k, v in p["pesi"].items():  # se due titoli finiscono sullo stesso ticker i pesi si sommano
+            nuovi[conv(k)] = nuovi.get(conv(k), 0.0) + v
+        p["pesi"] = nuovi
+    cfg["proxy_usati"] = {**(cfg.get("proxy_usati") or {}), **proxy}
     b = cfg["benchmark"]
     b["ticker"] = conv(b["ticker"])
     for chiave in ("settori", "ter", "proxy", "prezzi_da_file"):

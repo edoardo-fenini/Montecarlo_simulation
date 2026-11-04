@@ -230,26 +230,36 @@ def scarica_con_ripiego(ticker: str, fonti=None):
 
 
 # ------------------------------------------------------------------ CSV manuali
-def leggi_csv_prezzi(contenuto: bytes) -> pd.Series:
-    """Legge un CSV di prezzi scaricato a mano. Formato: una colonna con la data e una con il prezzo.
-    Accetta separatore virgola o punto e virgola, decimali con punto o virgola, date AAAA-MM-GG o GG/MM/AAAA.
-    Nomi di colonna riconosciuti: Date/Data e Adj Close/Close/Prezzo/Chiusura (altrimenti la prima e l'ultima colonna)."""
+COLONNE_DATA = ("date", "data", "giorno", "data valorizzazione", "data riferimento", "data valore", "data quota", "data nav", "nav date", "as of date", "datetime")
+COLONNE_PREZZO = (
+    "adj close", "adj_close", "prezzo", "close", "chiusura", "price", "nav", "valore quota", "valore della quota", "valore unitario",
+    "valore unitario quota", "valore unitario della quota", "quota", "valore", "value", "net asset value", "nav per share", "prezzo quota",
+)  # fmt: skip
+
+
+def leggi_csv_prezzi(contenuto: bytes, minimo: int = 30) -> pd.Series:
+    """Legge un CSV di prezzi o di valori della quota (NAV) scaricato a mano. Formato: una colonna con la data e una con il valore.
+    Accetta separatore virgola, punto e virgola o tabulazione; decimali con punto o virgola; date AAAA-MM-GG o GG/MM/AAAA;
+    intestazioni in italiano o in inglese (Data/Date, Valore quota/NAV/Prezzo/Close ...). Se le intestazioni non si riconoscono
+    usa la prima colonna come data e l'ultima come valore. Righe in qualsiasi ordine."""
     testo = contenuto.decode("utf-8-sig", errors="replace")
     righe = [r for r in testo.splitlines() if r.strip() and not r.lstrip().startswith("#")]
     if len(righe) < 2:
         raise ValueError("il file è vuoto o ha una sola riga")
-    sep = ";" if righe[0].count(";") >= righe[0].count(",") and ";" in righe[0] else ","
+    sep = max((";", "\t", ","), key=lambda c: righe[0].count(c))
     df = pd.read_csv(io.StringIO("\n".join(righe)), sep=sep, dtype=str)
     cols = {c.strip().lower(): c for c in df.columns}
-    c_data = next((cols[k] for k in ("date", "data", "giorno") if k in cols), df.columns[0])
-    c_prezzo = next((cols[k] for k in ("adj close", "adj_close", "prezzo", "close", "chiusura", "price") if k in cols), df.columns[-1])
-    valori = df[c_prezzo].astype(str).str.strip().str.replace("€", "", regex=False).str.replace(" ", "", regex=False)
+    c_data = next((cols[k] for k in COLONNE_DATA if k in cols), None) or next((c for k, c in cols.items() if k.startswith("data") or "date" in k), df.columns[0])
+    c_prezzo = next((cols[k] for k in COLONNE_PREZZO if k in cols), None)
+    if c_prezzo is None:
+        c_prezzo = next((c for k, c in cols.items() if c != c_data and any(x in k for x in ("nav", "quota", "valore", "prezzo", "price", "close"))), df.columns[-1])
+    valori = df[c_prezzo].astype(str).str.strip().str.replace("€", "", regex=False).str.replace("$", "", regex=False).str.replace(" ", "", regex=False)
     if valori.str.contains(",", regex=False).any():  # decimali con la virgola (eventuali punti = migliaia)
         valori = valori.str.replace(".", "", regex=False).str.replace(",", ".", regex=False)
     date_testo = df[c_data].astype(str).str.strip()
     giorno_prima = date_testo.str.match(r"^\d{1,2}[/.-]\d{1,2}[/.-]\d{4}$").all()
-    date = pd.to_datetime(date_testo, dayfirst=bool(giorno_prima), errors="coerce")
+    date = pd.to_datetime(date_testo, dayfirst=bool(giorno_prima), errors="coerce", format="mixed" if not giorno_prima else None)
     s = _pulisci(pd.Series(pd.to_numeric(valori, errors="coerce").values, index=date)).loc[lambda x: x.index.notna()]
-    if len(s) < 30:
-        raise ValueError(f"servono almeno 30 prezzi validi, ne ho trovati {len(s)}: controlla le colonne data e prezzo")
+    if len(s) < minimo:
+        raise ValueError(f"servono almeno {minimo} valori validi, ne ho trovati {len(s)}: controlla le colonne data e valore")
     return s

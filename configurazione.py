@@ -60,6 +60,7 @@ DEFAULT = {
     "ter": {},  # opzionale: TICKER_ETF: TER annuo (es. CSSPX.MI: 0.0007)
     "settori": {},  # opzionale: TICKER: tech | finanza | altro  (per gli stress test)
     "proxy": {},  # opzionale: TICKER: TICKER_PROXY            (per l'analisi C)
+    "proxy_titoli": {},  # opzionale: ISIN_O_TICKER: TICKER_O_ISIN_SOSTITUTIVO (i dati del sostituto al posto di quelli del titolo, sempre segnalato)
     "prezzi_da_file": {},  # opzionale: TICKER: {file: percorso.csv, valuta: EUR} (prezzi scaricati a mano)
     "isin": {
         # regola per scegliere la quotazione di un ISIN: nell'ordine, valuta ("EUR") o suffisso di borsa (".MI" Milano,
@@ -255,6 +256,13 @@ def prepara(dati: dict) -> dict:
         raise ErroreConfig("«prezzi_da_file»: per ogni ticker indica almeno «file» (es. XYZ: {file: dati/xyz.csv, valuta: EUR}).")
     cfg["prezzi_da_file"] = {str(k).upper(): v for k, v in pf.items()}
     cfg["proxy"] = {str(k).upper(): str(v).upper() for k, v in (cfg.get("proxy") or {}).items()}
+    pt = cfg.get("proxy_titoli") or {}
+    if not isinstance(pt, dict):
+        raise ErroreConfig("«proxy_titoli» deve essere un elenco «titolo: sostituto» (es. LU0073232471: IWDA.AS).")
+    cfg["proxy_titoli"] = {re.sub(r"\s+", "", str(k)).upper(): re.sub(r"\s+", "", str(v)).upper() for k, v in pt.items() if str(v or "").strip()}
+    for k, v in cfg["proxy_titoli"].items():
+        if k == v:
+            raise ErroreConfig(f"«proxy_titoli»: «{k}» non può essere il proxy di sé stesso.")
     return cfg
 
 

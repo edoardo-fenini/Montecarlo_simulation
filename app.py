@@ -16,8 +16,11 @@ import analisi
 import configurazione as C
 import controllo
 import dati as D
+import fondi
 import grafici_app as G
 import importa_broker as B
+import isin as I
+import nav
 import registro
 import rendimento
 import report
@@ -135,6 +138,8 @@ def applica_cfg(raw: dict) -> None:
     ss.costo = float(cfg["costo_ribilanciamento"]) * 100
     b = cfg["benchmark"]
     ss.b_nome, ss.b_ticker, ss.b_ter, ss.b_proxy = b["nome"], b["ticker"], float(b["ter"]) * 100, b.get("proxy_storico") or ""
+    ss.proxy_scelti = {str(k).replace(" ", "").upper(): str(v).replace(" ", "").upper() for k, v in (cfg.get("proxy_titoli") or {}).items()}
+    ss.pop("azione_titolo", None)
     ss.scelte_isin = {str(k).replace(" ", "").upper(): str(v).strip().upper() for k, v in (cfg.get("isin_scelte") or {}).items()}
     ss.pop("controllo", None)
 
@@ -183,6 +188,10 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
         },
     }
     raw["moduli"] = {k: bool(ss[f"mod_{k}"]) for k in C.DEFAULT["moduli"]}
+    if ss.get("proxy_scelti"):
+        raw["proxy_titoli"] = dict(ss.proxy_scelti)
+    else:
+        raw.pop("proxy_titoli", None)
     if ss.get("scelte_isin"):
         raw["isin_scelte"] = dict(ss.scelte_isin)
     else:
@@ -374,7 +383,7 @@ def chiave_dati(tabella: pd.DataFrame) -> str | None:
         g = cfg_da_stato(tabella)
     except C.ErroreConfig:
         return None
-    parti = {k: g.get(k) for k in ("portafogli", "isin", "isin_scelte", "nomi_attesi", "controllo_dati", "prezzi_da_file")}
+    parti = {k: g.get(k) for k in ("portafogli", "isin", "isin_scelte", "nomi_attesi", "controllo_dati", "prezzi_da_file", "proxy_titoli")}
     parti["benchmark"] = (g.get("benchmark") or {}).get("ticker")
     return yaml.safe_dump(parti, sort_keys=True, allow_unicode=True)
 
@@ -413,6 +422,82 @@ def etichetta_quotazione(q: dict) -> str:
     )
 
 
+def form_storico_quote(r: dict, cod: str) -> None:
+    """Caricamento del CSV dello storico delle quote: anteprima, valuta, conferma. Salvato in cache con l'ISIN come chiave."""
+    f = st.file_uploader(
+        "File CSV dello storico delle quote (una colonna con la data e una con il valore della quota)",
+        type=["csv", "txt"],
+        key=f"up_nav_{cod}",
+        help="Separatore ; o , · decimali con la virgola o il punto · date GG/MM/AAAA o AAAA-MM-GG · intestazioni in italiano o inglese.",
+    )
+    if not f:
+        return
+    try:
+        serie = nav.leggi(f.getvalue())
+    except ErroreDati as err:
+        st.error(str(err))
+        return
+    st.caption("**Anteprima** (controlla che date e valori siano letti bene): " + nav.riassunto(serie))
+    st.dataframe(nav.anteprima(serie), hide_index=True, width="stretch", key=f"prev_nav_{cod}")
+    if (avviso := nav.avviso_distribuzione(serie)) is not None:
+        st.warning("🟡 Attenzione: " + avviso)
+    attesa = fondi.valuta_attesa(r.get("nome") or "") or "EUR"
+    valuta = st.selectbox(
+        "Valuta della serie",
+        nav.VALUTE,
+        index=nav.VALUTE.index(attesa),
+        key=f"val_nav_{cod}",
+        help="La valuta in cui è espresso il valore della quota (la classe del fondo). Verrà convertita in euro.",
+    )
+    if st.button("✅ Conferma e usa questo storico", type="primary", key=f"ok_nav_{cod}"):
+        try:
+            nav.salva(D.Archivio(log=lambda *a: None), cod, serie, valuta, r.get("nome") or "")
+        except ErroreDati as err:
+            st.error(str(err))
+            return
+        ss.pop("azione_titolo", None)
+        ss.ricontrolla = True
+        st.rerun()
+
+
+def form_proxy(cod: str) -> None:
+    p = st.text_input(
+        "Ticker o ISIN sostitutivo (es. un ETF sullo stesso indice)",
+        key=f"in_prx_{cod}",
+        help="I dati di questo titolo prenderanno il posto di quelli del fondo. Nel controllo dati e nel report comparirà sempre «dati del proxy».",
+    )
+    if st.button("✅ Usa questo proxy", type="primary", key=f"ok_prx_{cod}") and p.strip():
+        ss.proxy_scelti[cod] = p.replace(" ", "").upper()
+        ss.pop("azione_titolo", None)
+        ss.ricontrolla = True
+        st.rerun()
+
+
+def pannello_non_trovati(e: dict) -> None:
+    """Per ogni titolo non trovato: errore rosso con i due pulsanti (storico delle quote da CSV, proxy). Per i proxy in uso: «Togli il proxy»."""
+    for r in e["righe"]:
+        cod = I.normalizza(r["input"])
+        if r.get("proxy"):
+            if st.button(f"↩️ Togli il proxy {r['proxy']} per {r['input']}", key=f"btn_noprx_{cod}"):
+                ss.proxy_scelti.pop(cod, None)
+                ss.ricontrolla = True
+                st.rerun()
+            continue
+        if r["trovato"] or not r["rossi"] or I.riconosci(r["input"])[0] == "isin_errato":
+            continue
+        with st.container(border=True):
+            testo = I.MESSAGGIO_FONDO_NON_TROVATO if r["fondo_non_trovato"] else "Non trovo questo titolo nelle fonti online: " + "; ".join(r["rossi"]) + ". Puoi caricare lo storico delle quote oppure scegliere un proxy."
+            st.error(f"**{r['input']}**{' · ' + r['nome'] if r['nome'] else ''}: {testo}")
+            c1, c2 = st.columns(2)
+            if c1.button("📥 Carica lo storico delle quote", key=f"btn_nav_{cod}", width="stretch"):
+                ss.azione_titolo = (cod, "csv")
+            if c2.button("🔁 Scegli un proxy", key=f"btn_prx_{cod}", width="stretch"):
+                ss.azione_titolo = (cod, "proxy")
+            az = ss.get("azione_titolo")
+            if az and az[0] == cod:
+                (form_storico_quote(r, cod) if az[1] == "csv" else form_proxy(cod))
+
+
 def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
     cc = ss.get("controllo")
     if not cc:
@@ -435,6 +520,7 @@ def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
         if usati:  # la tabella sopra è un canvas: lo stesso contenuto, in testo, per chi usa lo screen reader e per le prove automatiche
             st.caption("Ticker usati: " + " · ".join(usati), help="Gli stessi dati della tabella, in forma di testo.")
         st.caption("🟢 tutto a posto · 🟡 avviso, si può procedere · 🔴 errore, la simulazione non parte finché non lo correggi.")
+        pannello_non_trovati(e)
         multi = [r for r in e["righe"] if r.get("risoluzione") and len(r["risoluzione"]["quotazioni"]) > 1]
         for r in multi:
             ris_i = r["risoluzione"]
