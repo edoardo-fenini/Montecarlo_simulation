@@ -21,6 +21,7 @@ import analisi
 import controllo
 import dati as D
 import registro
+import rendimento
 import report
 from configurazione import ErroreConfig, carica
 from dati import ErroreDati
@@ -58,12 +59,23 @@ def main(argv=None, scaricatore=None, kw_isin=None, oggi=None, cartella_cache=D.
             log.error("controllo dati: %s", esito["riepilogo"])
             print(f"\nERRORE: {esito['messaggio']}", file=sys.stderr)
             return 1
+        rend = controllo.rendimenti_attesi(esito, arch)
+        if rend is not None:
+            print("\nRendimento atteso annuo che verrà usato (con il metodo beta anche il beta):")
+            print(rend.T.to_string(float_format=lambda x: f"{x:.3f}"))
+        ra = cfg["rendimento_atteso"]
+        for livello, testo in rendimento.avvisi_campi(ra["metodo"], ra["tasso_privo_rischio"] * 100, ra["premio_mercato"] * 100, ra["valore_uguale"] * 100) + rendimento.avvisi_tabella(rend):
+            print(f"  {livello}: {testo}")
         if a.solo_controllo:
             print(f"\nControllo terminato: {esito['riepilogo']}. Nessun errore: puoi lanciare la simulazione.")
             return 0
         ris = analisi.esegui(
             esito["cfg"], aggiorna_dati=a.aggiorna_dati, n=n, log=print, archivio=arch, controllo=controllo.per_report(esito)
         )
+        if ris.get("errore_plausibilita"):
+            log.error("%s", ris["errore_plausibilita"])
+            print(f"\nERRORE: {ris['errore_plausibilita']}\nIl report non viene scritto.", file=sys.stderr)
+            return 1
         out = a.uscita or cartella_uscita(cfg, a.config)
         print("Scrivo il report ...")
         f = report.salva(ris, out, pdf=not a.senza_pdf)

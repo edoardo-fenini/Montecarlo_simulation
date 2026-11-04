@@ -1,0 +1,35 @@
+# Esempio con fondi comuni non quotati (v1.4).
+#   python confronta.py --config configurazioni/esempio_fondi.yaml --solo-controllo
+#
+# Per un fondo non trovato online hai due strade (vedi README, sezione «Fondi comuni»):
+#  1) prezzi_da_file: lo storico delle quote in un file CSV, collegato all'ISIN (qui un file di ESEMPIO con numeri inventati!)
+#  2) proxy_titoli: un ETF (o un altro titolo) che sostituisce il fondo; il report lo segnala sempre.
+# Il percorso del file è relativo alla cartella da cui lanci il programma.
+
+nome: Esempio fondi
+capitale_iniziale: 10000
+orizzonte_anni: 10
+orizzonti_intermedi: [5]
+rendimento_atteso:
+  metodo: beta
+n_simulazioni: 20000
+
+prezzi_da_file:
+  LU0073232471:                       # fondo: storico delle quote da CSV (file di esempio con dati inventati)
+    file: esempi/storico_quote_esempio.csv
+    valuta: USD                       # valuta della classe del fondo (la converto in euro)
+    nome: MS INVF US Growth A (dati di esempio)
+
+proxy_titoli:
+  LU0552385295: IWDA.AS               # fondo sostituito da un ETF sull'indice mondiale (segnalato nel report)
+
+# Costi annui (TER / spese correnti, in frazione: 0.015 = 1,5%). Se non li indichi: fondi 1,5%, ETF 0,3% (con avviso giallo).
+costi:
+  LU0073232471: 0.0185
+  LU0552385295: 0.0210
+
+portafogli:
+  - nome: Fondi
+    titoli:
+      LU0073232471: 50
+      LU0552385295: 50

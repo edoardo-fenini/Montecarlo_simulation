@@ -75,6 +75,8 @@ def sommario(res: dict, cfg: dict, n_sim: int) -> dict:
         s["var_es"][k] = {"VaR 95% 1 anno": -q, "Expected Shortfall 95% 1 anno": -p[p <= q].mean()}
     s["var_es"] = pd.DataFrame(s["var_es"])
     s["corr_sim"] = pd.DataFrame(res["_corr"][1], index=nomi, columns=nomi)
+    if "_rend" in res:
+        s["rend_sim"] = res["_rend"]
     return s
 
 

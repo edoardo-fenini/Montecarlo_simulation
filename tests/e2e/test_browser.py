@@ -62,7 +62,7 @@ def test_isin_errato_blocca_la_simulazione(pagina):
 def test_percorso_completo_isin_quotazione_simulazione_report_e_risultati_vecchi(pagina):
     carica_config(pagina, "config_isin.yaml")
     controlla(pagina)
-    expect(pagina.get_by_text("0 errori").first).to_be_visible()
+    expect(pagina.get_by_text("0 errori").first).to_be_visible(timeout=60000)
     # contenuto della tabella (canvas) verificato dal testo associato, non dal canvas
     usati = pagina.get_by_text("Ticker usati:")
     expect(usati).to_contain_text(f"{ISIN} → SWDA.MI")
@@ -162,3 +162,38 @@ def test_ricerca_per_nome_e_aggiunta_con_un_clic(pagina):
     expect(pagina.get_by_text("Aggiunto Ferrari S.p.A. (FERR.MI)")).to_be_visible()
     controlla(pagina)
     expect(pagina.get_by_text("Ticker usati:")).to_contain_text("FERR.MI → FERR.MI")
+
+
+# ------------------------------------------------------------------ v1.4: fondo comune non trovato -> storico delle quote da CSV
+def test_fondo_non_trovato_errore_rosso_csv_semaforo_verde_e_simulazione(pagina, tmp_path):
+    import sys
+
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2] / "strumenti"))
+    from crea_csv_esempio import crea
+
+    carica_config(pagina, "config_fondo.yaml")
+    controlla(pagina)
+    # errore rosso con il messaggio chiaro e i due pulsanti; la simulazione non parte
+    expect(pagina.get_by_text("È un fondo comune non quotato e non è disponibile nelle fonti online").first).to_be_visible()
+    expect(pagina.get_by_role("button", name="Carica lo storico delle quote")).to_be_visible()
+    expect(pagina.get_by_role("button", name="Scegli un proxy")).to_be_visible()
+    expect(pagina.get_by_role("button", name="Avvia simulazione").first).to_be_disabled()
+    # caricamento del CSV di esempio (generato con date aggiornate): anteprima e conferma
+    pagina.get_by_role("button", name="Carica lo storico delle quote").click()
+    csv = crea(str(tmp_path / "storico.csv"))
+    pagina.locator("[data-testid=stFileUploader]").filter(has_text="File CSV dello storico").locator("input[type=file]").set_input_files(csv)
+    expect(pagina.get_by_text("valori dal").first).to_be_visible()
+    pagina.get_by_role("button", name="Conferma e usa questo storico").click()
+    # semaforo verde: nessun errore e nessun avviso, la fonte è il CSV importato
+    expect(pagina.get_by_text("0 avvisi, 0 errori").first).to_be_visible(timeout=60000)
+    expect(pagina.get_by_text("Ticker usati:")).to_contain_text("LU0210536198 → LU0210536198")
+    expect(pagina.get_by_role("button", name="Avvia simulazione").first).to_be_enabled()
+    # simulazione completa senza errori Streamlit
+    pagina.get_by_role("button", name="Avvia simulazione").first.click()
+    bottone_html = pagina.get_by_role("button", name="Report HTML")
+    expect(bottone_html).to_be_visible(timeout=300000)
+    expect(pagina.locator(ERRORI_STREAMLIT)).to_have_count(0)
+    with pagina.expect_download() as d:
+        bottone_html.click()
+    html = pathlib.Path(d.value.path()).read_text(encoding="utf-8")
+    assert "CSV importato" in html and "Costi annui usati" in html

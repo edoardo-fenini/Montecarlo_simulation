@@ -198,3 +198,57 @@ L'analisi iniziale (rendimento uguale 6%) è in `esempi/2026-11-03_analisi_inizi
 - App: tema chiaro fisso (`.streamlit/config.toml`); le schede mostrano gli stessi blocchi del report HTML; default 20.000 simulazioni.
 - Avvia.command avvia Streamlit in modalità headless e apre il browser con `open`: così Streamlit non chiede l'email al primo avvio.
 - requirements.txt: versioni fissate delle librerie dirette, verificate su PyPI con pacchetti per Mac arm64 e x86_64 (Python 3.12/3.13).
+
+## Versione 1.4 (ramo `v1.4`): fondi comuni e costi (4 novembre 2026)
+Baseline all'inizio: tutti i test verdi (senza browser), non regressione identica.
+- [x] Tappa 0 – correzioni in sospeso. **Già presenti** (1.3.1): ConvergenceWarning GARCH/SLSQP risolto e mai usato in silenzio;
+      prova rapida di `Installa.command` con marker `rapido` (~30 s) e test del solo repository saltati con messaggio.
+      **Applicate ora**: riquadro «Rendimento atteso che verrà usato» (app e riga di comando: beta e rendimento per portafoglio);
+      campo vuoto o non numerico = ROSSO, mai 0 (`rendimento.numero_pct`); GIALLO con premio di mercato 0 o rendimento sotto l'1%;
+      controllo di plausibilità (`rendimento.controlla_plausibilita`: rendimento medio dei percorsi simulati contro l'atteso al netto
+      dei costi, tolleranza = 5 errori standard + 0,3%); se fallisce: errore ROSSO, l'app non mostra i risultati e `confronta.py` non scrive il report.
+      **NON applicata, su richiesta dell'utente («la parte dei default lasciala stare»)**: il cambio dei default a 2,5% / 4%
+      (restano 2% / 4% in `configurazione.py`, app, YAML di esempio e README). Il test di non regressione resta quindi identico.
+- [x] Tappa 1 – tipo di strumento: `isin.classifica_tipo` (OpenFIGI `securityType`/`securityType2`: ETP → ETF/ETC; Open-End Fund → fondo comune;
+      Common Stock/ADR → azione), salvato nella cache degli ISIN; nuova colonna «Tipo» nel controllo dati (app, report, CSV, Excel).
+      **Verificato dal vivo (4/11/2026)**: i quattro ISIN sono tutti «Open-End Fund» (borsa OpenFIGI «LX») = fondi comuni lussemburghesi non quotati.
+      Prima la ricerca li convertiva in codici tedeschi (es. `MSJ6.F`) che su Yahoo hanno solo 1d/5d di dati: da qui «storia 0 anni».
+- [x] Tappa 2 – ricerca automatica (`fondi.py`): ricerche Yahoo per ISIN e per nome (con sigle dei gestori note: MS INVF, JPM, BGF…), codici
+      `0P…` o tipo MUTUALFUND; verifiche: stesso gestore, nome simile a OpenFIGI/Yahoo (≥0,5), valuta, accumulazione/distribuzione, lettera della
+      classe, parole in più (es. «Plus»), copertura del cambio, storia ≥1 anno, ultimo prezzo ≤30 giorni; poi le regole di `ordina_quotazioni`.
+      Sempre un avviso GIALLO: Yahoo non indica l'ISIN, quindi la classe non è certa. Cache come gli altri ISIN (anche l'esito negativo).
+      **Prova reale (4/11/2026)**, storia ≈ 4,7 anni per tutti (Yahoo ha i dati Morningstar solo dal 07/03/2022):
+      | ISIN | esito | codice | nome | valuta | storia |
+      |---|---|---|---|---|---|
+      | LU0073232471 | trovato (classe NON certa: A in EUR scelta, l'ISIN è probabilmente la classe in USD) | `0P0001LLAM.F` | MS INVF US Growth A EUR | EUR | 4,7 |
+      | LU0552385295 | trovato | `0P0000RZ2H` | MS INVF Global Opportunity A | USD | 4,7 |
+      | LU0070214290 | trovato | `0P00000DTX` | JPM US Select Equity A acc USD | USD | 4,7 |
+      | LU0210536198 | trovato | `0P00000C2V` | JPM US Growth A dist USD | USD | 4,7 |
+      Limite: la ricerca di Yahoo per nome è capricciosa; per fondi di altri gestori può non trovare nulla → tappa 3 (CSV o proxy).
+      Una storia di 4,7 anni è corta per simulare 15 anni, ma sopra la soglia gialla esistente (3 anni): nessun avviso di storia corta, la serie va solo valutata con attenzione.
+- [x] Tappa 3 – alternative per i fondi non trovati. 3a: `nav.py` + `fonti.leggi_csv_prezzi` più tollerante (separatori `;` `,` tab, decimali con la
+      virgola, date GG/MM/AAAA e AAAA-MM-GG, intestazioni IT/EN, righe in qualsiasi ordine); anteprima e conferma nell'app; valuta chiesta (default dal
+      nome del fondo, poi EUR); storico salvato in cache con l'**ISIN come chiave**, fonte «CSV importato», riusato in automatico (ha la precedenza sulla
+      ricerca online); da YAML: `prezzi_da_file: {ISIN: {file, valuta}}`; avviso GIALLO per classi a distribuzione (`nav.avviso_distribuzione`: calo
+      brusco >2,5 volte la variabilità normale negli stessi giorni dell'anno in ≥60% degli anni, almeno 3). CSV di esempio `esempi/storico_quote_esempio.csv`
+      (numeri INVENTATI; si rigenera con `strumenti/crea_csv_esempio.py` perché il controllo dati rifiuta uno storico con l'ultimo valore oltre 30 giorni fa).
+      3b: `proxy_titoli: {titolo: sostituto}` (YAML e app), sempre segnalato (controllo dati giallo, avviso nel report, riga «proxy» nella tabella dei costi);
+      il tipo mostrato è quello del titolo vero. 3c: messaggio ROSSO «È un fondo comune non quotato…» con i pulsanti «Carica lo storico delle quote» e
+      «Scegli un proxy» (anche per altri titoli non trovati). Scelta: CSV e proxy dichiarati vincono sulla ricerca automatica; il CSV vince sul proxy.
+- [x] Tappa 4 – costi: colonna «Costi annui (%)» nella tabella dell'app e chiave YAML `costi` (per ticker o ISIN); `analisi.costo_titolo`: indicato →
+      default per tipo (fondo comune 1,5% `costo_fondo_default`, ETF/ETC 0,3% `ter_etf_default`) con avviso GIALLO «costi non indicati, uso il default»;
+      azioni 0. Sottratti dal rendimento atteso solo con la ricentratura (con il metodo storico i prezzi sono già al netto, come per gli ETF prima).
+      Report: tabelle «Costi annui usati» e «effetto dei costi» per portafoglio. Benchmark: usa il suo TER una sola volta (colonna BENCH separata,
+      nessun doppio conteggio; il TER dentro il proxy storico non pesa perché la media storica viene sostituita). **Modifica voluta**: il default per gli ETF
+      senza costo passa da 0,20% a 0,30% (richiesto); i fondi comuni (tipo MUTUALFUND) non sono più trattati come «azioni» nel rischio sul singolo titolo e
+      negli stress test. Test di non regressione invariato (i dati finti non hanno ETF o fondi nei portafogli).
+- [x] Tappa 5 – test: `tests/test_fondi_v14.py` (30 test offline: tipo di strumento da risposte OpenFIGI simulate, codici `0P…` e scelta del
+      candidato, risoluzione/cache dei fondi trovati e non trovati, CSV con separatori/decimali/date/intestazioni italiane, anteprima, salvataggio
+      in cache e riuso senza rete, avviso classe a distribuzione, proxy nel controllo e nel report, costi: default con avviso, sottrazione, nessun
+      doppio conteggio sul benchmark) e `tests/test_rendimento.py` (campo vuoto ≠ 0, avvisi, plausibilità; i default 2,5%/4% NON sono stati
+      cambiati su richiesta). Prova nel browser: fondo non trovato → errore rosso con i due pulsanti → CSV (generato con date aggiornate) →
+      0 avvisi, 0 errori → simulazione completa senza errori Streamlit → report con «CSV importato» e «Costi annui usati».
+      Quattro test esistenti sono stati adattati perché un ETF senza costi indicati ora è giallo (voluto): aggiunto `costi` alla loro configurazione.
+      Emerso dalla prova nel browser e corretto: dopo un rosso risolto «Avvia simulazione» restava disattivato fino al clic successivo.
+      Nella prova nel browser FRED è finto (senza rete vera): altrimenti il controllo dati, che ora calcola anche il beta, aspettava il timeout di FRED.
+      Risultato: 248 test verdi in locale (8 min 34 s, prova nel browser inclusa); `ruff check` pulito; non regressione identica.

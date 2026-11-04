@@ -1,0 +1,13 @@
+# Prova nel browser: un fondo comune non quotato (ISIN LU...) che si trova solo caricando lo storico delle quote.
+nome: Prova fondo
+capitale_iniziale: 5000
+versamento_mensile: 0
+orizzonte_anni: 2
+orizzonti_intermedi: [1]
+n_simulazioni: 500
+moduli: {stress_test: true, rischio_singolo_titolo: true, verifica_convergenza: false, confronto_modelli: false, analisi_C: false}
+benchmark: {nome: Benchmark prova, ticker: BMK.AS, ter: 0.002}
+costi: {LU0210536198: 0.0185}
+portafogli:
+  - nome: Con fondo
+    titoli: {LU0210536198: 50, US0378331005: 50}

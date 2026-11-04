@@ -20,6 +20,7 @@ import pandas as pd
 import dati as D
 import isin
 import metriche
+import rendimento
 from configurazione import BENCH
 from simula import Bootstrap, ConCrolli, Garch, StudentT, ricentra, simula
 
@@ -71,16 +72,46 @@ def rendimento_colonne(
     return np.array(out)
 
 
-def ter_titolo(cfg, t, tipi=None):
-    """Costo annuo (TER) sottratto con la ricentratura: quello del benchmark, quello indicato in
-    configurazione per gli ETF, oppure il default per gli ETF senza TER noto. Le azioni non hanno TER."""
+def tipo_titolo(cfg, t, tipi=None) -> str:
+    """'azione', 'ETF/ETC' o 'fondo comune' ('' se non si sa). Prima il tipo trovato dal controllo dati (OpenFIGI; con un proxy è quello del
+    titolo vero), poi quello di Yahoo."""
+    return (cfg.get("tipi_titolo") or {}).get(t) or isin.tipo_da_yahoo((tipi or {}).get(t))
+
+
+def costo_titolo(cfg, t, tipi=None) -> tuple[float, str]:
+    """(costo annuo, origine) sottratto con la ricentratura. Benchmark: il suo TER. Altrimenti il costo indicato (`costi`, o `ter`),
+    altrimenti il default prudente per tipo: fondi comuni 1,5%, ETF/ETC 0,3%. Le azioni non hanno costi.
+    Origine: 'benchmark', 'indicato', 'default' o 'azione'/'non applicabile'. Nessun doppio conteggio: il TER del benchmark vale solo per la
+    colonna del benchmark (BENCH), gli altri titoli non lo ereditano."""
     if t == BENCH:
-        return cfg["benchmark"]["ter"]
+        return cfg["benchmark"]["ter"], "benchmark"
+    if t in cfg["costi"]:
+        return cfg["costi"][t], "indicato"
     if t in cfg["ter"]:
-        return cfg["ter"][t]
-    if str((tipi or {}).get(t, "")).upper() == "ETF":
-        return cfg["ter_etf_default"]
-    return 0.0
+        return cfg["ter"][t], "indicato"
+    tipo = tipo_titolo(cfg, t, tipi)
+    if tipo == isin.TIPO_FONDO:
+        return cfg["costo_fondo_default"], "default"
+    if tipo == isin.TIPO_ETF:
+        return cfg["ter_etf_default"], "default"
+    return 0.0, "azione"
+
+
+def ter_titolo(cfg, t, tipi=None):
+    return costo_titolo(cfg, t, tipi)[0]
+
+
+def tabella_costi(cfg: dict, tipi: dict | None = None, nomi: dict | None = None) -> pd.DataFrame:
+    """Una riga per ogni titolo dei portafogli (e il benchmark): tipo, costo annuo usato e origine (indicato / default)."""
+    righe = []
+    for t in dict.fromkeys(t for pesi in cfg["composizione"].values() for t in pesi):
+        c, orig = costo_titolo(cfg, t, tipi)
+        tipo = "benchmark (ETF)" if t == BENCH else tipo_titolo(cfg, t, tipi) or "non noto"
+        titolo = cfg["benchmark"]["ticker"] if t == BENCH else t
+        vero = next((k for k, v in (cfg.get("proxy_usati") or {}).items() if v == t), None) if t != BENCH else None
+        etichetta = f"{vero} (proxy {t})" if vero else titolo
+        righe.append({"Titolo": etichetta, "Nome": (nomi or {}).get(titolo, ""), "Tipo": tipo, "Costo annuo": c, "Origine": orig})
+    return pd.DataFrame(righe, columns=["Titolo", "Nome", "Tipo", "Costo annuo", "Origine"])
 
 
 def spiega_rendimenti(cfg: dict, beta: dict, tipi: dict | None = None) -> pd.DataFrame:
@@ -333,6 +364,11 @@ def esegui(
     cfg, _ = isin.risolvi_configurazione(cfg, arch.dir, arch.aggiorna, log_fn=log, **(kw_isin or {}))
     D.importa_da_configurazione(cfg, arch)
     dati = D.costruisci(cfg, arch)
+    for titolo, sost in (cfg.get("proxy_usati") or {}).items():  # proxy dichiarato: sempre segnalato nel report
+        dati["avvisi"].append(f"{titolo}: dati del proxy {sost}, non del fondo. Rischio e rendimento storico sono quelli del sostituto.")
+    for t, riga in dati["info"].iterrows():
+        if riga["fonte"] == D.FONTE_NAV:
+            dati["avvisi"].append(f"{t}: storico delle quote importato da CSV (ultimo valore del {riga['ultimo dato']:%d/%m/%Y}).")
     R = dati["R"]
     proxy_info = None
     if mod["stress_test"] or mod["analisi_C"]:
@@ -357,6 +393,7 @@ def esegui(
         "bench_nome": cfg["benchmark"]["nome"],
         "beta": beta,
         "rend_attesi": spiega_rendimenti(cfg, beta, tipi),
+        "costi": tabella_costi(cfg, tipi, dati["info"]["nome"].to_dict()),
         "proxy_info": proxy_info,
         "note": note,
         "periodi": {},
@@ -371,12 +408,13 @@ def esegui(
     }
 
     # ---- piano dei lavori: le simulazioni indipendenti tra loro (ognuna con il suo seed)
-    lavori, stress_da_fare, nomi_sens = [], {}, {}
+    lavori, stress_da_fare, nomi_sens, mats = [], {}, {}, {}
     for a in anal:
         M, porte, colonne, idx = matrice(cfg, per[a])
         ris["periodi"][a] = (idx[0], idx[-1], len(idx))
         ris["storico"][a] = storico(cfg, M, porte, colonne, idx)
         Mr = prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta), tipi)
+        mats[a] = (Mr, porte)
         lavori.append(Lavoro(f"base_{a}", "bootstrap", f"Analisi {a}: simulazione principale", 1.0, Mr, porte))
         if a == "A":
             ris["matrici"] = {"A": (Mr, porte)}  # per la prova rapida dei pesi nell'app
@@ -387,7 +425,7 @@ def esegui(
         if a == "C":
             continue
         if mod["rischio_singolo_titolo"]:
-            azioni = [i for i, (_, t) in enumerate(colonne) if t != BENCH and str(tipi.get(t, "")).upper() != "ETF"]
+            azioni = [i for i, (_, t) in enumerate(colonne) if t != BENCH and tipo_titolo(cfg, t, tipi) not in (isin.TIPO_ETF, isin.TIPO_FONDO)]
             lavori.append(
                 Lavoro(f"idio_{a}", "crolli", f"Analisi {a}: rischio sul singolo titolo", 1.2, Mr, porte, extra={"azioni": azioni})
             )
@@ -395,7 +433,7 @@ def esegui(
             cat = {p: [proxy_info[colonne[i][1]]["categoria"] for i in c] for p, (c, _) in porte.items()}
             singolo = {}
             for p, pesi_p in cfg["composizione"].items():
-                ws = [w for t, w in pesi_p.items() if t != BENCH and str(tipi.get(t, "")).upper() != "ETF"]
+                ws = [w for t, w in pesi_p.items() if t != BENCH and tipo_titolo(cfg, t, tipi) not in (isin.TIPO_ETF, isin.TIPO_FONDO)]
                 singolo[p] = max(ws) if ws else None
             stress_da_fare[a] = (Mr, porte, cat, singolo)
         if mod["confronto_modelli"]:
@@ -445,6 +483,15 @@ def esegui(
                 ris.setdefault("avvisi_modelli", []).append(f"Analisi {a}: {x}")
                 log(f"  ATTENZIONE {x}")
             ris["sensibilita"][a] = [(nomi_sens[k], risultati[k]) for k in sorted(nomi_sens) if k.endswith(f"_{a}")]
+    # controllo di plausibilità: il rendimento medio dei percorsi simulati deve coincidere con quello atteso (al netto dei costi)
+    attesi = None
+    if cfg["rendimento_atteso"]["metodo"] != "storico":
+        t = ris["rend_attesi"]
+        attesi = {p: float(t.loc["Rendimento atteso annuo", p] - t.loc["di cui costi ETF (TER)", p]) for p in t.columns}
+    ris["plausibilita"] = {a: rendimento.controlla_plausibilita(ris["sim"][a], *mats[a], attesi=attesi) for a in anal}
+    ris["errore_plausibilita"] = rendimento.messaggio_plausibilita(ris["plausibilita"])
+    if ris["errore_plausibilita"]:
+        log(f"  ERRORE {ris['errore_plausibilita']}")
     if "A" in anal and n_seed > 1:
         ris["convergenza"] = confronto_seed(cfg, [ris["sim"]["A"]] + [risultati[f"conv{j}"] for j in range(1, n_seed)], n)
     if progresso:

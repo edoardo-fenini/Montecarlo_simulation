@@ -232,7 +232,7 @@ def kw_isin():
 
 def test_isin_nel_controllo_mostra_isin_e_ticker(tmp_path):
     m = base(SWDA_MI=(serie(seed=7), meta(nome="ETF", tipo="ETF")))
-    cfg = config(["AAA.MI", "IE00B4L5Y983"])
+    cfg = config(["AAA.MI", "IE00B4L5Y983"], costi={"IE00B4L5Y983": 0.002})  # senza costi indicati un ETF sarebbe giallo (v1.4)
     arch = D.Archivio(str(tmp_path), log=lambda *a: None, scaricatore=m.scarica)
     e = controllo.controlla(cfg, arch, oggi=OGGI, **kw_isin())
     r = riga(e, "IE00B4L5Y983")

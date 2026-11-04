@@ -55,6 +55,8 @@ class ErroreDati(Exception):
 
 # ------------------------------------------------------------------ download
 FONTE_MANUALE = "File CSV caricato a mano"
+FONTE_NAV = "CSV importato"  # storico delle quote di un fondo importato dall'utente (collegato all'ISIN)
+FONTI_MANUALI = (FONTE_MANUALE, FONTE_NAV)
 
 
 def settore_yahoo(ticker):
@@ -103,7 +105,7 @@ class Archivio:
         return os.path.join(self.dir, re.sub(r"[^A-Za-z0-9._-]", "_", t))
 
     def _da_scaricare(self, t, f):
-        if os.path.exists(f) and self._meta(t).get("fonte") == FONTE_MANUALE:
+        if os.path.exists(f) and self._meta(t).get("fonte") in FONTI_MANUALI:
             return False
         return not os.path.exists(f) or (self.aggiorna and t not in self.fatti)
 
@@ -173,7 +175,7 @@ class Archivio:
         finally:
             self.aggiorna = vecchio
 
-    def importa_csv(self, t, contenuto, valuta, tipo="EQUITY", nome=""):
+    def importa_csv(self, t, contenuto, valuta, tipo="EQUITY", nome="", fonte=FONTE_MANUALE):
         """Salva in cache i prezzi di un CSV scaricato a mano. Ritorna la serie letta."""
         t = t.strip().upper()
         if not t:
@@ -182,6 +184,11 @@ class Archivio:
             s = fonti.leggi_csv_prezzi(contenuto)
         except ValueError as e:
             raise ErroreDati(f"Non riesco a leggere il file di prezzi per «{t}»: {e}.") from e
+        return self.importa_serie(t, s, valuta, tipo, nome, fonte)
+
+    def importa_serie(self, t, s, valuta, tipo="EQUITY", nome="", fonte=FONTE_MANUALE):
+        """Salva in cache una serie di prezzi già letta (es. lo storico delle quote di un fondo, con l'ISIN come chiave)."""
+        t = t.strip().upper()
         base = self._base(t)
         s.rename("prezzo").to_csv(base + ".csv", index_label="Date")
         meta = {
@@ -189,13 +196,17 @@ class Archivio:
             "tipo": tipo,
             "nome": nome or f"{t} (prezzi da file)",
             "borsa": "file",
-            "fonte": FONTE_MANUALE,
+            "fonte": fonte,
             "prezzi_non_positivi": s.attrs.get("non_positivi", 0),
             "scaricato_il": datetime.date.today().isoformat(),
         }
         json.dump(meta, open(base + ".json", "w"))
         self.memoria.pop(t, None)
         return s
+
+    def importato(self, t):
+        """True se per `t` (ticker o ISIN) c'è in cache una serie importata dall'utente da un CSV."""
+        return self.in_cache(t) and self._meta(t).get("fonte") in FONTI_MANUALI
 
     def _meta(self, t):
         f = self._base(t) + ".json"
@@ -372,7 +383,11 @@ def importa_da_configurazione(cfg: dict, arch: Archivio) -> None:
             contenuto = open(v["file"], "rb").read()
         except (OSError, KeyError, TypeError) as e:
             raise ErroreDati(f"prezzi_da_file: non riesco a leggere il file per «{t}» ({e}).") from e
-        arch.importa_csv(t, contenuto, v.get("valuta", "EUR"), v.get("tipo", "EQUITY"), v.get("nome", ""))
+        isin_ = bool(re.match(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$", t))  # per un ISIN: storico delle quote di un fondo
+        arch.importa_csv(
+            t, contenuto, v.get("valuta", "EUR"), v.get("tipo", "MUTUALFUND" if isin_ else "EQUITY"), v.get("nome", ""),
+            FONTE_NAV if isin_ else FONTE_MANUALE,
+        )  # fmt: skip
 
 
 def settimanali(r):

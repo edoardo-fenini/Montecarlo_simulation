@@ -15,13 +15,14 @@ import pandas as pd
 
 import dati as D
 import isin as I
+import nav
 from dati import ErroreDati
 from nomi import somiglianza_nomi
 
 VERDE, GIALLO, ROSSO = "VERDE", "GIALLO", "ROSSO"
 SEMAFORO = {VERDE: "🟢", GIALLO: "🟡", ROSSO: "🔴"}
 COLONNE_TABELLA = [
-    "Esito", "Input", "ISIN", "Ticker usato", "Nome", "Borsa", "Valuta", "Fonte", "Prima data", "Ultima data", "Anni di storia",
+    "Esito", "Input", "ISIN", "Ticker usato", "Nome", "Tipo", "Borsa", "Valuta", "Fonte", "Prima data", "Ultima data", "Anni di storia",
     "% giorni mancanti", "Ultimo prezzo", "Dettagli",
 ]  # fmt: skip
 
@@ -99,9 +100,9 @@ def _nome_quotazione(r: dict) -> str:
 
 def _riga_vuota(inp: str, ruolo: str) -> dict:
     return {
-        "input": inp, "ruolo": ruolo, "isin": "", "ticker": "", "nome": "", "borsa": "", "valuta": "", "fonte": "", "primo": None,
+        "input": inp, "ruolo": ruolo, "isin": "", "ticker": "", "nome": "", "tipo": "", "fondo_non_trovato": False, "borsa": "", "valuta": "", "fonte": "", "primo": None,
         "ultimo": None, "anni": None, "mancanti": None, "ultimo_prezzo": None, "esito": VERDE, "rossi": [], "gialli": [],
-        "trovato": False, "risoluzione": None, "info": [],
+        "trovato": False, "risoluzione": None, "info": [], "proxy": "",
     }  # fmt: skip
 
 
@@ -113,11 +114,41 @@ def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, ht
     opz = cfg["isin"]
     D.importa_da_configurazione(cfg, arch)
     righe, mappa = [], {}
+    proxy_map: dict[str, str] = {}
     for inp, ruolo in _titoli_della_configurazione(cfg):
         r = _riga_vuota(inp, ruolo)
         tipo, codice = I.riconosci(inp)
         r["ticker"] = codice
-        if tipo == "isin_errato":
+        proxy_cod = cfg["proxy_titoli"].get(I.normalizza(inp))
+        if tipo == "isin" and arch.importato(codice):  # storico delle quote importato dall'utente (CSV): ha la precedenza
+            r["isin"], r["ticker"] = codice, codice
+            mappa[codice] = codice
+        elif proxy_cod:  # proxy dichiarato: i dati del sostituto al posto di quelli del titolo
+            r["isin"] = codice if tipo.startswith("isin") else ""
+            if tipo.startswith("isin"):  # che tipo di strumento è il titolo vero? (anche se non si trova online)
+                try:
+                    r["tipo"] = I.risolvi(codice, arch.dir, opz["preferenze"], None, False, http, opz.get("openfigi_chiave"), opz["max_quotazioni"], oggi, ricerca, ispettore).get("tipo_strumento", "")
+                except ErroreDati as e:
+                    r["tipo"] = getattr(e, "tipo", "")
+            ptipo, pcod = I.riconosci(proxy_cod)
+            r["ticker"], r["proxy"] = pcod, pcod
+            if ptipo == "isin":
+                try:
+                    ris = I.risolvi(
+                        pcod, arch.dir, opz["preferenze"], cfg["isin_scelte"].get(pcod), arch.aggiorna, http, opz.get("openfigi_chiave"),
+                        opz["max_quotazioni"], oggi, ricerca, ispettore, soglie["somiglianza_nome_min"],
+                    )  # fmt: skip
+                    r["risoluzione"], r["ticker"] = ris, ris["ticker"]
+                except ErroreDati as e:
+                    r["ticker"] = ""
+                    r["rossi"].append(f"il proxy {pcod} non si trova: {e}")
+            elif ptipo == "isin_errato":
+                r["ticker"] = ""
+                r["rossi"].append(f"il proxy {pcod} non ha la cifra di controllo giusta")
+            if r["ticker"]:
+                proxy_map[I.normalizza(inp)] = r["ticker"]
+                r["gialli"].append(f"dati del proxy {r['ticker']}, non del fondo {inp}: il rischio e il rendimento storico sono quelli del sostituto")
+        elif tipo == "isin_errato":
             r["isin"] = codice
             r["ticker"] = ""
             r["rossi"].append(f"l'ISIN {codice} non ha la cifra di controllo giusta (errore di battitura?)")
@@ -131,12 +162,16 @@ def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, ht
                 r["risoluzione"], r["ticker"] = ris, ris["ticker"]
                 mappa[codice] = ris["ticker"]
                 r["nome_figi_avvisi"] = ris.get("avvisi_nome", [])
+                r["tipo"] = ris.get("tipo_strumento", "")
                 if ris.get("borse_non_mappate"):
                     elenco_b = ", ".join(f"{b['borsa']} ({b['ticker']})" if b.get("ticker") else b["borsa"] for b in ris["borse_non_mappate"])
                     r["info"].append(f"OpenFIGI elenca quotazioni su borse non mappate, ignorate: {elenco_b}")
             except ErroreDati as e:
                 r["ticker"] = ""
                 r["rossi"].append(str(e))
+                r["tipo"] = getattr(e, "tipo", "")
+                r["nome"] = getattr(e, "nome", "")
+                r["fondo_non_trovato"] = r["tipo"] == I.TIPO_FONDO
         righe.append(r)
 
     serie = {}
@@ -168,6 +203,7 @@ def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, ht
             anni=(s.index[-1] - s.index[0]).days / 365.25, ultimo_prezzo=float(s.iloc[-1]),
         )  # fmt: skip
         r["_meta"] = meta
+        r["tipo"] = r["tipo"] or I.tipo_da_yahoo(meta.get("tipo"))
     manc = giorni_mancanti(serie)
 
     for r in righe:
@@ -200,14 +236,25 @@ def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, ht
                 f"(il maggiore {estremi[peggiore]:+.0%} il {_data(peggiore)})"
             )
         r["gialli"] += r.pop("nome_figi_avvisi", [])
+        if meta.get("fonte") in D.FONTI_MANUALI:
+            r["info"].append(f"storico importato da CSV, ultimo valore del {_data(r['ultimo'])}")
+        if meta.get("fonte") == D.FONTE_NAV and (avviso := nav.avviso_distribuzione(s)):
+            r["gialli"].append(avviso)
         atteso = next((cfg["nomi_attesi"][k] for k in (I.normalizza(r["input"]), r["ticker"], r["isin"]) if k in cfg["nomi_attesi"]), None)
         if atteso and not r["nome"]:
             r["gialli"].append(f"non trovo il nome del titolo per confrontarlo con quello atteso («{atteso}»)")
         elif atteso and somiglianza_nomi(atteso, r["nome"]) < soglie["somiglianza_nome_min"]:
             r["gialli"].append(f"il nome trovato («{r['nome']}») è molto diverso da quello atteso («{atteso}»)")
+    cfg2 = I.applica_mappa(cfg, mappa, proxy_map) if (mappa or proxy_map) else cfg
+    # tipo di ogni titolo (azione, ETF/ETC, fondo comune): serve ai costi di default; con un proxy vale il tipo del titolo vero
+    cfg2["tipi_titolo"] = {r["ticker"]: r["tipo"] for r in righe if r["ticker"] and r["tipo"] and r["ruolo"] == "titolo"}
+    for r in righe:  # costi non indicati per fondi ed ETF: avviso giallo (si userà il default prudente)
+        if cfg["rendimento_atteso"]["metodo"] != "storico" and r["ruolo"] == "titolo" and r["trovato"] and r["tipo"] in (I.TIPO_FONDO, I.TIPO_ETF) and r["ticker"] not in cfg2["costi"] and r["ticker"] not in cfg2["ter"]:
+            d = cfg2["costo_fondo_default"] if r["tipo"] == I.TIPO_FONDO else cfg2["ter_etf_default"]
+            r["gialli"].append(f"costi non indicati, uso il default {_it(d * 100, 2)}% l'anno ({r['tipo']}): scrivi il costo vero in «costi»")
     for r in righe:
         r["esito"] = ROSSO if r["rossi"] else GIALLO if r["gialli"] else VERDE
-    return costruisci_esito(righe, I.applica_mappa(cfg, mappa) if mappa else cfg)
+    return costruisci_esito(righe, cfg2)
 
 
 def costruisci_esito(righe: list[dict], cfg: dict) -> dict:
@@ -236,6 +283,22 @@ def costruisci_esito(righe: list[dict], cfg: dict) -> dict:
     }
 
 
+# ------------------------------------------------------------------ rendimento atteso (prima della simulazione)
+def rendimenti_attesi(esito: dict, arch: D.Archivio):
+    """Tabella (beta e rendimento atteso annuo per portafoglio) che verrà usata dalla simulazione, calcolata con i prezzi già in cache.
+    None se non si può calcolare (controllo rosso o dati insufficienti): in quel caso la simulazione dirà il motivo."""
+    import analisi
+
+    if esito["blocca"]:
+        return None
+    try:
+        dati = D.costruisci(esito["cfg"], arch)
+        tipi = dati["info"]["tipo"].to_dict()
+        return analisi.spiega_rendimenti(esito["cfg"], analisi.stima_beta(dati["R"]), tipi)
+    except (ErroreDati, KeyError, ValueError):
+        return None
+
+
 # ------------------------------------------------------------------ presentazione
 def dettagli(r: dict) -> str:
     parti = [f"ERRORE: {x}" for x in r["rossi"]] + [f"avviso: {x}" for x in r["gialli"]]
@@ -255,6 +318,7 @@ def tabella(righe: list[dict], emoji: bool = True) -> pd.DataFrame:
                 "ISIN": r["isin"],
                 "Ticker usato": r["ticker"],
                 "Nome": r["nome"],
+                "Tipo": r["tipo"],
                 "Borsa": r["borsa"],
                 "Valuta": r["valuta"],
                 "Fonte": r["fonte"],
@@ -271,7 +335,7 @@ def tabella(righe: list[dict], emoji: bool = True) -> pd.DataFrame:
 
 def testo_tabella(esito: dict) -> str:
     """Tabella per il terminale: riepilogo + una riga per titolo (colonne essenziali) + dettagli di avvisi ed errori."""
-    t = tabella(esito["righe"], emoji=False)[["Esito", "Input", "Ticker usato", "Nome", "Borsa", "Valuta", "Anni di storia", "Ultima data"]]
+    t = tabella(esito["righe"], emoji=False)[["Esito", "Input", "Ticker usato", "Nome", "Tipo", "Borsa", "Valuta", "Anni di storia", "Ultima data"]]
     t["Nome"] = t["Nome"].str.slice(0, 28)
     corpo = t.to_string(index=False)
     note = [f"  {r['input']}: {dettagli(r)}" for r in esito["righe"] if r["esito"] != VERDE or r.get("info")]

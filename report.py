@@ -626,6 +626,30 @@ def blocco_controllo_dati(ris: dict) -> list:
     return B
 
 
+def blocchi_costi(ris: dict) -> list:
+    """Tabella dei costi usati per ogni titolo e effetto dei costi sul rendimento atteso di ogni portafoglio (solo con la ricentratura)."""
+    cfg, ra, costi = ris["cfg"], ris["rend_attesi"], ris.get("costi")
+    if costi is None or not len(costi):
+        return []
+    orig = {"indicato": "indicato da te", "default": "default prudente (non indicato)", "benchmark": "TER del benchmark", "azione": "azione: nessun costo"}
+    righe = [[esc(c["Titolo"]), esc(c["Nome"] or "–"), c["Tipo"], pct(c["Costo annuo"], 2), orig.get(c["Origine"], c["Origine"])] for _, c in costi.iterrows()]
+    B = [("h3", "Costi annui usati"), T(["Nome", "Tipo", "Costo annuo", "Origine"], righe)]
+    eff = [
+        [k, pct(ra.loc["Rendimento atteso annuo", k]), pct(-ra.loc["di cui costi ETF (TER)", k], 2), pct(ra.loc["Rendimento atteso annuo", k] - ra.loc["di cui costi ETF (TER)", k])]
+        for k in ris["nomi"]
+    ]
+    B.append(T(["Rendimento atteso prima dei costi", "Effetto dei costi", "Rendimento atteso dopo i costi"], eff))
+    B.append(
+        (
+            "nota",
+            "I costi di fondi ed ETF riducono il rendimento atteso: con la ricentratura il rendimento storico viene sostituito, quindi i costi già "
+            "inclusi nel prezzo non contano più e si sottraggono qui. Dove il costo non è indicato si usa un default prudente "
+            f"(fondi comuni {pct(cfg['costo_fondo_default'], 2)}, ETF/ETC {pct(cfg['ter_etf_default'], 2)}). Il benchmark usa il suo TER, una volta sola.",
+        )
+    )
+    return B
+
+
 def sezioni(ris: dict) -> dict[str, list]:
     """Ritorna {scheda: [blocchi]}."""
     cfg, n, nomi = ris["cfg"], ris["n"], ris["nomi"]
@@ -652,7 +676,7 @@ def sezioni(ris: dict) -> dict[str, list]:
         for k in nomi
     ]
     B.append(("h3", "Rendimento atteso usato"))
-    B.append(T(["Beta", "Rendimento atteso annuo", "Costo ETF sottratto"], righe))
+    B.append(T(["Beta", "Rendimento atteso annuo", "Costi sottratti (fondi, ETF)"], righe))
     if cfg["rendimento_atteso"]["metodo"] != "storico":
         B.append(
             (
@@ -661,6 +685,7 @@ def sezioni(ris: dict) -> dict[str, list]:
                 f"(valore indicato in configurazione o, se non indicato, {pct(cfg['ter_etf_default'], 2)}). Le azioni non hanno TER.",
             )
         )
+        B += blocchi_costi(ris)
     B.append(("h3", "Come leggere i termini"))
     B.append(
         (

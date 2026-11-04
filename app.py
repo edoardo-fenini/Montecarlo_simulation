@@ -16,9 +16,13 @@ import analisi
 import configurazione as C
 import controllo
 import dati as D
+import fondi
 import grafici_app as G
 import importa_broker as B
+import isin as I
+import nav
 import registro
+import rendimento
 import report
 import ricerca as R
 import stato_app
@@ -95,7 +99,19 @@ div[data-testid='stMetricValue']{font-size:1.45rem}
 
 
 # ------------------------------------------------------------------ stato (configurazione <-> controlli)
+COLONNE_TAB = ["Portafoglio", "Ticker", "Peso (%)", "Costi annui (%)"]
+
+
+def con_costi(t: pd.DataFrame) -> pd.DataFrame:
+    """Tabella dei portafogli con la colonna dei costi (vuota se manca) e le colonne nell'ordine giusto."""
+    t = t.copy()
+    if "Costi annui (%)" not in t:
+        t["Costi annui (%)"] = None
+    return t[COLONNE_TAB]
+
+
 def tabella_da_cfg(raw: dict) -> pd.DataFrame:
+    costi = {re.sub(r"\s+", "", str(k)).upper(): float(v) * 100 for k, v in (raw.get("costi") or {}).items()}
     righe = []
     for p in raw.get("portafogli", []):
         tit = p.get("titoli") or []
@@ -107,7 +123,9 @@ def tabella_da_cfg(raw: dict) -> pd.DataFrame:
             righe += [
                 {"Portafoglio": p["nome"], "Ticker": t, "Peso (%)": (float(w) if w not in (None, "") else None)} for t, w in tit.items()
             ]
-    return pd.DataFrame(righe, columns=["Portafoglio", "Ticker", "Peso (%)"])
+    t = pd.DataFrame(righe, columns=["Portafoglio", "Ticker", "Peso (%)"])
+    t["Costi annui (%)"] = [costi.get(re.sub(r"\s+", "", str(x)).upper()) for x in t["Ticker"]]
+    return t
 
 
 def applica_cfg(raw: dict) -> None:
@@ -134,6 +152,8 @@ def applica_cfg(raw: dict) -> None:
     ss.costo = float(cfg["costo_ribilanciamento"]) * 100
     b = cfg["benchmark"]
     ss.b_nome, ss.b_ticker, ss.b_ter, ss.b_proxy = b["nome"], b["ticker"], float(b["ter"]) * 100, b.get("proxy_storico") or ""
+    ss.proxy_scelti = {str(k).replace(" ", "").upper(): str(v).replace(" ", "").upper() for k, v in (cfg.get("proxy_titoli") or {}).items()}
+    ss.pop("azione_titolo", None)
     ss.scelte_isin = {str(k).replace(" ", "").upper(): str(v).strip().upper() for k, v in (cfg.get("isin_scelte") or {}).items()}
     ss.pop("controllo", None)
 
@@ -143,6 +163,7 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
     ss = st.session_state
     raw = copy.deepcopy(ss.raw)
     portafogli: dict[str, dict] = {}
+    costi: dict[str, float] = {}
     for _, r in tabella.iterrows():
         nome, tick = str(r["Portafoglio"] or "").strip(), str(r["Ticker"] or "").strip()
         if nome in ("", "None") and tick in ("", "None"):
@@ -151,6 +172,13 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
             raise C.ErroreConfig("Nella tabella dei portafogli ogni riga deve avere sia il nome del portafoglio sia il ticker.")
         peso = r["Peso (%)"]
         portafogli.setdefault(nome, {})[tick] = None if pd.isna(peso) else float(peso)
+        costo = r.get("Costi annui (%)")  # costi del titolo (TER / spese correnti): vuoto = default prudente con avviso
+        if costo is not None and not pd.isna(costo):
+            costi[re.sub(r"\s+", "", tick).upper()] = float(costo) / 100
+    if costi:
+        raw["costi"] = costi
+    else:
+        raw.pop("costi", None)
     raw["portafogli"] = [{"nome": n, "titoli": (list(t) if all(v is None for v in t.values()) else t)} for n, t in portafogli.items()]
     try:
         inter = [int(x) for x in str(ss.intermedi).replace(";", ",").split(",") if x.strip()]
@@ -169,14 +197,23 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
             "costo_ribilanciamento": ss.costo / 100,
         }
     )
+    # un campo vuoto o non numerico non diventa mai 0: errore chiaro (solo per i campi del metodo scelto)
+    ra_vecchio = C.DEFAULT["rendimento_atteso"]
     raw["rendimento_atteso"] = {
         "metodo": ss.metodo,
-        "tasso_privo_rischio": ss.rf / 100,
-        "premio_mercato": ss.mrp / 100,
-        "valore_uguale": ss.uguale / 100,
-        "personalizzato": {k: v / 100 for k, v in ss.personalizzato.items()},
+        "tasso_privo_rischio": rendimento.numero_pct(ss.rf, "Tasso privo di rischio") if ss.metodo == "beta" else ra_vecchio["tasso_privo_rischio"],
+        "premio_mercato": rendimento.numero_pct(ss.mrp, "Premio di mercato") if ss.metodo == "beta" else ra_vecchio["premio_mercato"],
+        "valore_uguale": rendimento.numero_pct(ss.uguale, "Rendimento medio annuo") if ss.metodo == "uguale" else ra_vecchio["valore_uguale"],
+        "personalizzato": {
+            k: (rendimento.numero_pct(v, f"Rendimento di «{k}»") if ss.metodo == "personalizzato" else 0.0)
+            for k, v in ss.personalizzato.items()
+        },
     }
     raw["moduli"] = {k: bool(ss[f"mod_{k}"]) for k in C.DEFAULT["moduli"]}
+    if ss.get("proxy_scelti"):
+        raw["proxy_titoli"] = dict(ss.proxy_scelti)
+    else:
+        raw.pop("proxy_titoli", None)
     if ss.get("scelte_isin"):
         raw["isin_scelte"] = dict(ss.scelte_isin)
     else:
@@ -233,7 +270,7 @@ def conferma_broker() -> None:
     t = ss.tabella_corrente.copy()
     t = t[t["Portafoglio"].astype(str).str.strip() != a["nome"]]
     nuove = pd.DataFrame([{"Portafoglio": a["nome"], "Ticker": k, "Peso (%)": v} for k, v in a["ris"]["pesi"].items()])
-    ss.tabella = pd.concat([t, nuove], ignore_index=True)[["Portafoglio", "Ticker", "Peso (%)"]]
+    ss.tabella = con_costi(pd.concat([t, nuove], ignore_index=True))
     ss.versione += 1
     ss.msg_broker = f"Portafoglio «{a['nome']}» aggiunto alla tabella ({len(nuove)} titoli). Ora premi «Controlla i dati»."
 
@@ -247,7 +284,7 @@ def aggiungi_da_ricerca(r: dict, portafoglio: str) -> None:
         ss.msg_ricerca = ("info", f"{r['ticker']} è già nel portafoglio «{portafoglio}».")
         return
     nuova = pd.DataFrame([{"Portafoglio": portafoglio, "Ticker": r["ticker"], "Peso (%)": None}])
-    ss.tabella = pd.concat([t, nuova], ignore_index=True)[["Portafoglio", "Ticker", "Peso (%)"]]
+    ss.tabella = con_costi(pd.concat([t, nuova], ignore_index=True))
     ss.versione += 1
     con_pesi = stesso["Peso (%)"].notna().any()
     ss.msg_ricerca = (
@@ -368,7 +405,7 @@ def chiave_dati(tabella: pd.DataFrame) -> str | None:
         g = cfg_da_stato(tabella)
     except C.ErroreConfig:
         return None
-    parti = {k: g.get(k) for k in ("portafogli", "isin", "isin_scelte", "nomi_attesi", "controllo_dati", "prezzi_da_file")}
+    parti = {k: g.get(k) for k in ("portafogli", "isin", "isin_scelte", "nomi_attesi", "controllo_dati", "prezzi_da_file", "proxy_titoli", "costi")}
     parti["benchmark"] = (g.get("benchmark") or {}).get("ticker")
     return yaml.safe_dump(parti, sort_keys=True, allow_unicode=True)
 
@@ -385,7 +422,9 @@ def calcola_controllo(grezza: dict, aggiorna: bool):
     """Controlla tutti i titoli (scarica i prezzi mancanti). Ritorna (esito, archivio dei prezzi già aperto)."""
     cfg = C.prepara(copy.deepcopy(grezza))
     arch = D.Archivio(aggiorna=bool(aggiorna), log=lambda *a: None)
-    return controllo.controlla(cfg, arch, log=lambda *a: None), arch
+    esito = controllo.controlla(cfg, arch, log=lambda *a: None)
+    esito["rendimenti"] = controllo.rendimenti_attesi(esito, arch)
+    return esito, arch
 
 
 def scegli_quotazione(isin_cod: str, chiave_widget: str, predefinita: str) -> None:
@@ -403,6 +442,82 @@ def etichetta_quotazione(q: dict) -> str:
         f"{q['ticker']} · {q['borsa']} · {q['valuta']} · {report.num(q['storia_anni'])} anni di storia · "
         f"volume medio {report.num_it(int(q['volume_medio']))}"
     )
+
+
+def form_storico_quote(r: dict, cod: str) -> None:
+    """Caricamento del CSV dello storico delle quote: anteprima, valuta, conferma. Salvato in cache con l'ISIN come chiave."""
+    f = st.file_uploader(
+        "File CSV dello storico delle quote (una colonna con la data e una con il valore della quota)",
+        type=["csv", "txt"],
+        key=f"up_nav_{cod}",
+        help="Separatore ; o , · decimali con la virgola o il punto · date GG/MM/AAAA o AAAA-MM-GG · intestazioni in italiano o inglese.",
+    )
+    if not f:
+        return
+    try:
+        serie = nav.leggi(f.getvalue())
+    except ErroreDati as err:
+        st.error(str(err))
+        return
+    st.caption("**Anteprima** (controlla che date e valori siano letti bene): " + nav.riassunto(serie))
+    st.dataframe(nav.anteprima(serie), hide_index=True, width="stretch", key=f"prev_nav_{cod}")
+    if (avviso := nav.avviso_distribuzione(serie)) is not None:
+        st.warning("🟡 Attenzione: " + avviso)
+    attesa = fondi.valuta_attesa(r.get("nome") or "") or "EUR"
+    valuta = st.selectbox(
+        "Valuta della serie",
+        nav.VALUTE,
+        index=nav.VALUTE.index(attesa),
+        key=f"val_nav_{cod}",
+        help="La valuta in cui è espresso il valore della quota (la classe del fondo). Verrà convertita in euro.",
+    )
+    if st.button("✅ Conferma e usa questo storico", type="primary", key=f"ok_nav_{cod}"):
+        try:
+            nav.salva(D.Archivio(log=lambda *a: None), cod, serie, valuta, r.get("nome") or "")
+        except ErroreDati as err:
+            st.error(str(err))
+            return
+        ss.pop("azione_titolo", None)
+        ss.ricontrolla = True
+        st.rerun()
+
+
+def form_proxy(cod: str) -> None:
+    p = st.text_input(
+        "Ticker o ISIN sostitutivo (es. un ETF sullo stesso indice)",
+        key=f"in_prx_{cod}",
+        help="I dati di questo titolo prenderanno il posto di quelli del fondo. Nel controllo dati e nel report comparirà sempre «dati del proxy».",
+    )
+    if st.button("✅ Usa questo proxy", type="primary", key=f"ok_prx_{cod}") and p.strip():
+        ss.proxy_scelti[cod] = p.replace(" ", "").upper()
+        ss.pop("azione_titolo", None)
+        ss.ricontrolla = True
+        st.rerun()
+
+
+def pannello_non_trovati(e: dict) -> None:
+    """Per ogni titolo non trovato: errore rosso con i due pulsanti (storico delle quote da CSV, proxy). Per i proxy in uso: «Togli il proxy»."""
+    for r in e["righe"]:
+        cod = I.normalizza(r["input"])
+        if r.get("proxy"):
+            if st.button(f"↩️ Togli il proxy {r['proxy']} per {r['input']}", key=f"btn_noprx_{cod}"):
+                ss.proxy_scelti.pop(cod, None)
+                ss.ricontrolla = True
+                st.rerun()
+            continue
+        if r["trovato"] or not r["rossi"] or I.riconosci(r["input"])[0] == "isin_errato":
+            continue
+        with st.container(border=True):
+            testo = I.MESSAGGIO_FONDO_NON_TROVATO if r["fondo_non_trovato"] else "Non trovo questo titolo nelle fonti online: " + "; ".join(r["rossi"]) + ". Puoi caricare lo storico delle quote oppure scegliere un proxy."
+            st.error(f"**{r['input']}**{' · ' + r['nome'] if r['nome'] else ''}: {testo}")
+            c1, c2 = st.columns(2)
+            if c1.button("📥 Carica lo storico delle quote", key=f"btn_nav_{cod}", width="stretch"):
+                ss.azione_titolo = (cod, "csv")
+            if c2.button("🔁 Scegli un proxy", key=f"btn_prx_{cod}", width="stretch"):
+                ss.azione_titolo = (cod, "proxy")
+            az = ss.get("azione_titolo")
+            if az and az[0] == cod:
+                (form_storico_quote(r, cod) if az[1] == "csv" else form_proxy(cod))
 
 
 def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
@@ -427,6 +542,7 @@ def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
         if usati:  # la tabella sopra è un canvas: lo stesso contenuto, in testo, per chi usa lo screen reader e per le prove automatiche
             st.caption("Ticker usati: " + " · ".join(usati), help="Gli stessi dati della tabella, in forma di testo.")
         st.caption("🟢 tutto a posto · 🟡 avviso, si può procedere · 🔴 errore, la simulazione non parte finché non lo correggi.")
+        pannello_non_trovati(e)
         multi = [r for r in e["righe"] if r.get("risoluzione") and len(r["risoluzione"]["quotazioni"]) > 1]
         for r in multi:
             ris_i = r["risoluzione"]
@@ -447,6 +563,28 @@ def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
                 help=f"Trovate {len(elenco)} quotazioni con {ris_i['metodo']}. Scelta automatica: {ris_i['predefinito']} "
                 "(preferisce EUR, poi Borsa Italiana, Xetra, Amsterdam; poi più storia e volumi).",
             )
+
+
+def pannello_rendimento(chiave_attuale: str | None) -> None:
+    """Riquadro «Rendimento atteso»: cosa userà la simulazione (e il beta), con avvisi gialli e rossi."""
+    avvisi = rendimento.avvisi_campi(ss.metodo, ss.rf, ss.mrp, ss.uguale, ss.personalizzato)
+    cc = ss.get("controllo")
+    rend = cc["esito"].get("rendimenti") if cc and cc["chiave"] == chiave_attuale else None
+    avvisi += rendimento.avvisi_tabella(rend)
+    with st.expander("📈 Rendimento atteso che verrà usato", expanded=bool(avvisi) or rend is not None):
+        for livello, testo in avvisi:
+            (st.error if livello == rendimento.ROSSO else st.warning)(("🔴 " if livello == rendimento.ROSSO else "🟡 ") + testo)
+        if rend is not None:
+            t = rend.T.copy()
+            t.columns = ["Beta", "Rendimento atteso annuo", "di cui costi (TER)"]
+            if ss.metodo != "beta":
+                t = t.drop(columns="Beta")
+            st.dataframe(t.style.format({c: "{:.2%}" if c != "Beta" else "{:.2f}" for c in t.columns}), width="stretch", key="tabella_rendimenti")
+            st.caption("Rendimento medio annuo (prima dei costi) che la simulazione assegna a ogni portafoglio; i costi (TER) vengono sottratti.")
+        elif ss.metodo == "beta":
+            st.caption("Premi «Controlla i dati» per vedere il beta e il rendimento atteso di ogni portafoglio.")
+        elif ss.metodo == "storico":
+            st.caption("Con il metodo storico si usano i rendimenti del passato: nessun valore da mostrare prima della simulazione.")
 
 
 # ------------------------------------------------------------------ barra laterale
@@ -470,6 +608,14 @@ with st.sidebar:
             "Ticker": st.column_config.TextColumn("Ticker o ISIN", width="small", help=AIUTO["tabella"]),
             "Peso (%)": st.column_config.NumberColumn(
                 min_value=0.0, max_value=100.0, format="%.2f", width="small", help="Peso in percentuale; vuoto = pesi uguali"
+            ),
+            "Costi annui (%)": st.column_config.NumberColumn(
+                min_value=0.0,
+                max_value=10.0,
+                format="%.2f",
+                width="small",
+                help="Costi annui del fondo o ETF (TER / spese correnti), in %. Vuoto = default prudente (fondi 1,5%, ETF 0,3%) con avviso giallo. "
+                "Per le azioni lascia vuoto.",
             ),
         },
     )
@@ -698,6 +844,11 @@ def esegui_simulazione(contenitore) -> None:
             )
             cache.clear()  # una sola simulazione in memoria, per non occupare troppa RAM
             cache[chiave] = ris
+        if ris.get("errore_plausibilita"):  # i risultati non coincidono con il rendimento atteso: non si presentano come validi
+            cache.clear()
+            barra.empty()
+            contenitore.error("🔴 **Risultati non validi.** " + ris["errore_plausibilita"])
+            return
         barra.progress(1.0, text="Preparo il report…")
         S = report.sezioni(ris)
         ss.ris, ss.sezioni = ris, S
@@ -922,8 +1073,8 @@ with scheda_sim:
             with st.spinner("Controllo i dati (scarico i prezzi mancanti)…"):
                 esito_c, _ = calcola_controllo(cfg_da_stato(tab), aggiorna)
             ss.controllo = {"chiave": chiave_attuale, "esito": esito_c}
-            if esito_c["blocca"]:
-                st.rerun()  # per disattivare subito «Avvia simulazione»
+            if esito_c["blocca"] or bloccato:
+                st.rerun()  # per attivare/disattivare subito «Avvia simulazione» (il pulsante è già stato disegnato)
         except C.ErroreConfig as e:
             zona_messaggi.error(f"**C'è un problema nelle impostazioni.** {e}")
         except ErroreDati as e:
@@ -942,6 +1093,7 @@ with scheda_sim:
             chiave_attuale,
         )
     pannello_controllo(chiave_attuale, "ris" in ss)
+    pannello_rendimento(chiave_attuale)
 
     if motivo_vecchi:
         st.error(f"### ⚠️ {controllo.AVVISO_RISULTATI_VECCHI}\n\nMotivo: {motivo_vecchi}.", icon="⚠️")
