@@ -42,6 +42,11 @@ def url_app(tmp_path_factory):
         p.kill()
         pytest.fail("L'app non si avvia:\n" + (lavoro / "streamlit.log").read_text())
     yield url
+    testo_log = (lavoro / "streamlit.log").read_text(errors="replace")
+    if "Traceback" in testo_log:  # errori dell'app durante le prove: visibili nel riepilogo di pytest (anche in CI)
+        import warnings
+
+        warnings.warn("Errori nel log di Streamlit durante la prova nel browser:\n" + testo_log[-4000:], stacklevel=1)
     p.terminate()
     try:
         p.wait(10)

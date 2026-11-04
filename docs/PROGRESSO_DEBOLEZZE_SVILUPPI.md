@@ -14,7 +14,7 @@ insieme al codice.
 | **1.3** | Correzione di `StreamlitDuplicateElementId`, risultati vecchi nascosti, controllo incrociato dei nomi, importazione dal broker, ricerca per nome, release automatica, prova nel browser nel repository |
 
 Numeri della 1.3:
-- **Test automatici: 198** (112 a inizio 1.3), tutti senza internet, compresi 7 nel browser vero (Playwright + Chromium) e il test di
+- **Test automatici: 199** (112 a inizio 1.3), tutti senza internet, compresi 7 nel browser vero (Playwright + Chromium) e il test di
   non regressione (1.236 numeri, identici dalla 1.1).
 - Workflow: **Test** (Linux, a ogni push, con la prova nel browser), **Prova su Mac** (macOS 14 Apple Silicon, installazione vera e dati
   reali), **Release** (dal tag `vX.Y.Z`: test, zip, release con le note del CHANGELOG).

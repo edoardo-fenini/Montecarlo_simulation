@@ -424,6 +424,7 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `dati.py` | cache dei prezzi, conversione in euro, settori |
 | `isin.py` | riconoscimento degli ISIN, cifra di controllo, conversione in ticker (OpenFIGI + ricerca Yahoo), scelta della quotazione, cache |
 | `controllo.py` | «Controllo dati» con semaforo (verde/giallo/rosso) prima della simulazione; avviso sui risultati vecchi |
+| `stato_app.py` | copia di sicurezza delle impostazioni dell'app |
 | `ricerca.py` | ricerca dei titoli per nome (Yahoo Finance) |
 | `nomi.py` | confronto tollerante tra nomi (OpenFIGI contro Yahoo, nome atteso) |
 | `importa_broker.py`, `importa_portafoglio.py` | importazione del portafoglio da un CSV del broker (app e riga di comando) |

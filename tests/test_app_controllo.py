@@ -256,3 +256,19 @@ def test_ricerca_in_un_nuovo_portafoglio_e_avviso_sui_pesi(app, monkeypatch):
     next(b for b in app.button if b.key == "btn_aggiungi_0_ENEL.MI").click().run()
     t = app.session_state["tabella"]
     assert list(t[t["Portafoglio"] == "Italia"]["Ticker"]) == ["ENEL.MI"]
+
+
+# ------------------------------------------------------------------ v1.3: impostazioni conservate
+def test_impostazioni_ripristinate_se_streamlit_cancella_lo_stato_dei_widget(app):
+    import stato_app
+
+    app.session_state["capitale"] = 12345.0
+    app.session_state["orizzonte"] = 7
+    app = app.run()
+    copia = app.session_state["_impostazioni"]
+    assert copia["capitale"] == 12345.0 and copia["orizzonte"] == 7 and copia["rf"] == 2.0  # la copia segue i valori attuali
+    # ripristino: come dopo un'esecuzione interrotta da un errore, quando Streamlit ha cancellato lo stato dei widget
+    stato = {"capitale": 1.0, stato_app.CHIAVE_COPIA: dict(copia)}
+    assert stato_app.conserva(stato, ["capitale", "orizzonte", "rf"]) == ["orizzonte", "rf"]
+    assert stato["capitale"] == 1.0 and stato["orizzonte"] == 7 and stato["rf"] == 2.0
+    assert stato[stato_app.CHIAVE_COPIA]["capitale"] == 1.0

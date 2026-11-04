@@ -21,6 +21,7 @@ import importa_broker as B
 import registro
 import report
 import ricerca as R
+import stato_app
 from dati import ErroreDati
 
 log = registro.configura()
@@ -193,6 +194,14 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
 if "raw" not in st.session_state:
     applica_cfg(yaml.safe_load(open(ESEMPIO, encoding="utf-8")))
 ss = st.session_state
+
+# copia di sicurezza delle impostazioni: vedi stato_app.py (Streamlit può cancellare lo stato dei widget dopo un errore)
+IMPOSTAZIONI = [
+    "nome", "capitale", "versamento", "orizzonte", "intermedi", "metodo", "rf", "mrp", "uguale", "nsim", "seed", "rib", "costo",
+    "b_nome", "b_ticker", "b_ter", "b_proxy", *(f"mod_{k}" for k in C.DEFAULT["moduli"]),
+]  # fmt: skip
+if ripristinate := stato_app.conserva(ss, IMPOSTAZIONI):
+    log.warning("Impostazioni ripristinate dalla copia di sicurezza: %s", ", ".join(ripristinate))
 
 
 def pesi_uguali() -> None:

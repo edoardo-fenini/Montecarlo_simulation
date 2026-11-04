@@ -9,7 +9,7 @@ select = ["E", "F", "W", "I", "B", "UP"]
 ignore = ["E501", "E731", "B905", "UP031", "B008"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["analisi", "configurazione", "controllo", "isin", "dati", "fonti", "grafici_app", "metriche", "registro", "report", "simula", "stile"]
+known-first-party = ["analisi", "importa_broker", "nomi", "ricerca", "stato_app", "configurazione", "controllo", "isin", "dati", "fonti", "grafici_app", "metriche", "registro", "report", "simula", "stile"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -16,6 +16,9 @@ non regressione (1.236 numeri chiave) è rimasto identico.
 - **Test**: simulazione completa nell'app con tutti i moduli per entrambi gli esempi (`tests/test_app_simulazione_completa.py`) e un
   controllo automatico che nessun elemento con ID resti senza `key` e che nessuna key si ripeta (`tests/test_chiavi_streamlit.py`).
   La prova nel browser (Playwright) completa un'analisi intera, apre tutte le schede, verifica che non compaiano errori Streamlit e scarica il report.
+- Correzione collegata: se un'esecuzione dell'app si interrompe con un errore, Streamlit cancella lo stato dei widget non ancora disegnati e
+  le impostazioni della barra laterale tornavano ai minimi (capitale 0 €, orizzonte 1 anno, tassi 0%). Ora una copia di sicurezza delle
+  impostazioni (`stato_app.py`) le ripristina all'esecuzione successiva (e lo annota in `log.txt`).
 - Gli expander, le immagini e le metriche non ricevono un ID da Streamlit (se non hanno una key) e non possono causare questo errore.
 
 ### Risultati vecchi nascosti
@@ -61,7 +64,7 @@ non regressione (1.236 numeri chiave) è rimasto identico.
 
 ### Altro
 - Report «progresso, debolezze e sviluppi» ora nel repository: `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
-- 86 nuovi test (198 in tutto), tutti senza internet; i workflow «Test» e «Prova su Mac» girano a ogni push.
+- 87 nuovi test (199 in tutto), tutti senza internet; i workflow «Test» e «Prova su Mac» girano a ogni push.
 
 ## 1.2.0 (4 novembre 2026)
 
