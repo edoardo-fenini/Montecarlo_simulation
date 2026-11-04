@@ -1,0 +1,45 @@
+# Fattori di rischio del modello a fattori (v1.5). Modificabile: aggiungi, togli o cambia i ticker.
+# Tutti i rendimenti sono in EUR (i ticker in dollari vengono convertiti), salvo `valuta_locale: true`.
+#
+# Ogni fattore è un rendimento "lungo" meno (facoltativo) un rendimento "corto":
+#   - il fattore «mercato» è il mercato azionario mondiale;
+#   - regioni, settori e stile sono DIFFERENZE rispetto al mercato (o a SPY): così misurano di quanto un titolo si discosta dal mercato
+#     e i fattori sono poco sovrapposti tra loro (la regressione è più stabile e la scomposizione del rischio più leggibile);
+#   - tassi e valute: obbligazioni USA a lungo termine (in dollari) e valore del dollaro in euro.
+# Parole speciali: @MERCATO = serie del fattore «mercato»; @USD_EUR = valore di 1 dollaro in euro (cambio BCE/FRED/Yahoo).
+# La data di inizio di ogni fattore è quella del primo prezzo disponibile (la tabella è nel report e nel README).
+# Prima di quella data il fattore vale 0 nelle simulazioni (nessuna esposizione nota) e non entra nelle regressioni.
+
+inizio_storia: "2000-01-03"     # la storia dei fattori usata per simulare parte da qui (include 2000-2002 e 2008)
+passo_regressione: settimanale  # i rendimenti dei titoli si regrediscono su base settimanale (riduce i fusi orari)
+ridge:
+  lambda: auto                  # "auto" = scelta per convalida incrociata (GCV); oppure un numero (es. 5)
+  minimo: 0.5                   # penalità minima assoluta (sui fattori standardizzati)
+  frazione_minima: 0.5          # penalità minima = questa frazione del numero di settimane: provata fuori campione su titoli reali, dà
+                                # R² migliori di 0 / 0,1 (esposizioni meno estreme). Il fattore «mercato» non viene penalizzato.
+min_settimane: 52               # sotto questa storia il titolo non è stimato: esposizione 1 al mercato e resto specifico
+r2_minimo_avviso: 0.30          # sotto questo R² il titolo è spiegato poco dai fattori (avviso nel report)
+
+fattori:
+  - {nome: Mercato mondiale, gruppo: mercato, lungo: "^990100-USD-STRD", valuta: USD, descrizione: Indice azionario MSCI World}
+
+  - {nome: USA, gruppo: regioni, lungo: SPY, corto: "@MERCATO", valuta: USD, descrizione: S&P 500 meno mondo}
+  - {nome: Europa, gruppo: regioni, lungo: IEV, corto: "@MERCATO", valuta: USD, descrizione: iShares Europe 350 meno mondo}
+  - {nome: Giappone, gruppo: regioni, lungo: EWJ, corto: "@MERCATO", valuta: USD, descrizione: Giappone meno mondo}
+  - {nome: Emergenti, gruppo: regioni, lungo: EEM, corto: "@MERCATO", valuta: USD, descrizione: Mercati emergenti meno mondo}
+
+  - {nome: Tecnologia, gruppo: settori, lungo: XLK, corto: SPY, valuta: USD, descrizione: Settore tecnologico USA meno S&P 500}
+  - {nome: Finanziari, gruppo: settori, lungo: XLF, corto: SPY, valuta: USD, descrizione: Settore finanziario USA meno S&P 500}
+  - {nome: Salute, gruppo: settori, lungo: XLV, corto: SPY, valuta: USD, descrizione: Settore salute USA meno S&P 500}
+  - {nome: Energia, gruppo: settori, lungo: XLE, corto: SPY, valuta: USD, descrizione: Settore energia USA meno S&P 500}
+  - {nome: Industriali, gruppo: settori, lungo: XLI, corto: SPY, valuta: USD, descrizione: Settore industriale USA meno S&P 500}
+  - {nome: Consumi ciclici, gruppo: settori, lungo: XLY, corto: SPY, valuta: USD, descrizione: Consumi discrezionali USA meno S&P 500}
+  - {nome: Consumi difensivi, gruppo: settori, lungo: XLP, corto: SPY, valuta: USD, descrizione: Beni di prima necessità USA meno S&P 500}
+
+  - {nome: Growth contro value, gruppo: stile, lungo: IWF, corto: IWD, valuta: USD, descrizione: Russell 1000 Growth meno Value (positivo = growth)}
+  - {nome: Piccole imprese, gruppo: stile, lungo: IWM, corto: SPY, valuta: USD, descrizione: Russell 2000 meno S&P 500}
+  - {nome: Momentum, gruppo: stile, lungo: MTUM, corto: SPY, valuta: USD, descrizione: iShares MSCI USA Momentum meno S&P 500 (solo dal 2013)}
+  - {nome: Qualità, gruppo: stile, lungo: QUAL, corto: SPY, valuta: USD, descrizione: iShares MSCI USA Quality meno S&P 500 (solo dal 2013)}
+
+  - {nome: Obbligazioni lunghe, gruppo: tassi_valute, lungo: TLT, valuta_locale: true, valuta: USD, descrizione: Titoli di Stato USA 20+ anni (in dollari)}
+  - {nome: Dollaro contro euro, gruppo: tassi_valute, lungo: "@USD_EUR", descrizione: Valore del dollaro in euro}

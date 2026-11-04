@@ -18,6 +18,7 @@ BENCH = "BENCH"  # simbolo interno della serie del benchmark
 
 RIBILANCIAMENTO_MESI = {"annuale": 12, "semestrale": 6, "trimestrale": 3, "mensile": 1, "mai": 0}
 METODI = ("beta", "uguale", "storico", "personalizzato")
+MODELLI = ("storico", "fattori")  # modello di simulazione dei rendimenti: bootstrap sullo storico oppure modello a fattori (v1.5)
 
 DEFAULT = {
     "nome": "confronto",
@@ -30,6 +31,8 @@ DEFAULT = {
     "costo_ribilanciamento": 0.001,
     "ribilanciamento": "annuale",
     "blocco_medio_giorni": 20,
+    "modello_simulazione": "storico",  # storico (default) | fattori: titoli = esposizioni ai fattori comuni + parte specifica
+    "fattori_file": None,  # file dei fattori (None = modelli/fattori.yaml)
     "parallelo": "auto",  # auto | si | no: simulazioni indipendenti in parallelo su più processori (stessi risultati)
     "rendimento_atteso": {
         "metodo": "beta",
@@ -52,6 +55,8 @@ DEFAULT = {
         "confronto_modelli": False,
         "analisi_C": False,
         "verifica_convergenza": True,
+        "scomposizione_rischio": False,  # «Da dove viene il rischio» (scarica i fattori; sempre attivo con il modello a fattori)
+        "backtest_var": False,  # validazione del VaR (Kupiec, Christoffersen): lento, disattivato di default
     },
     "verifica_convergenza": {"numero_seed": 3, "soglia": 0.02},  # seed totali (incluso quello principale)
     "analisi": {"inizio_B": "2007-01-01", "inizio_C": "1999-01-04"},
@@ -184,6 +189,8 @@ def prepara(dati: dict) -> dict:
     if cfg["ribilanciamento"] not in RIBILANCIAMENTO_MESI:
         raise ErroreConfig(f"«ribilanciamento» deve essere uno tra: {', '.join(RIBILANCIAMENTO_MESI)}.")
     cfg["ribilanciamento_mesi"] = RIBILANCIAMENTO_MESI[cfg["ribilanciamento"]]
+    if cfg["modello_simulazione"] not in MODELLI:
+        raise ErroreConfig(f"«modello_simulazione» deve essere uno tra: {', '.join(MODELLI)}.")
 
     ra = cfg["rendimento_atteso"]
     if ra["metodo"] not in METODI:

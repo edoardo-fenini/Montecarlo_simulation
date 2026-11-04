@@ -252,3 +252,34 @@ Baseline all'inizio: tutti i test verdi (senza browser), non regressione identic
       Emerso dalla prova nel browser e corretto: dopo un rosso risolto «Avvia simulazione» restava disattivato fino al clic successivo.
       Nella prova nel browser FRED è finto (senza rete vera): altrimenti il controllo dati, che ora calcola anche il beta, aspettava il timeout di FRED.
       Risultato: 248 test verdi in locale (8 min 34 s, prova nel browser inclusa); `ruff check` pulito; non regressione identica.
+
+## Versione 1.5 (ramo `v1.5`): modello di rischio a fattori (4 novembre 2026, lavoro notturno autonomo)
+Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con modello fattori, tappa 3 (backtest VaR, modulo `backtest_var.py`), poi confronto modelli, README/CHANGELOG, PR e tag.
+- [x] Tappa 0 – impostazioni azzerate. Verificato con AppTest: cambio metodo (beta→uguale→personalizzato→beta), pesi uguali, scelte rapide:
+      con la copia di sicurezza della 1.3 (`stato_app.conserva`) i valori non si azzerano mai. Causa più probabile: Streamlit cancella lo stato dei
+      campi non disegnati (rf/mrp esistono solo con metodo «beta») e un number_input senza valore riparte da 0/minimo (capitale 0, orizzonte 1,
+      premio 0). Non riprodotto in locale (come già annotato nella 1.3). Rafforzato: `conserva` accetta valori predefiniti (mai 0 se la chiave
+      manca anche nella copia); pulsanti Prudente (2/3), Base (2,5/4), Ottimista (2,5/5) con callback + didascalia; default 2%/4% invariati;
+      campi sempre liberi (anche 0). Test: `tests/test_impostazioni_non_azzerate.py`.
+- [x] Tappa 1 – `fattori.py` + `modelli/fattori.yaml` (18 fattori in EUR: mercato MSCI World; regioni USA/Europa/Giappone/Emergenti come scarti dal mondo;
+      7 settori USA come scarti da SPY; growth-value, piccole, momentum, qualità; obbligazioni lunghe TLT e dollaro/euro). Inizio storia 2000-01-03; momentum e qualità
+      solo dal 2013, emergenti 2003, obbligazioni 2002: prima valgono 0 e non entrano nelle regressioni. Ridge su rendimenti settimanali, penalità per GCV con minimo
+      0,5×settimane (scelto con prova fuori campione su titoli reali), mercato NON penalizzato. Simulazione: fattori con block bootstrap + residui iid per titolo
+      (stesso residuo per lo stesso titolo in portafogli diversi), media ricentrata come per il metodo storico. Con `modello_simulazione: fattori` si fa solo l'analisi A.
+      Scelta: il file dei fattori sta in `modelli/` perché un test valida ogni YAML di `configurazioni/` come portafoglio.
+      Limite noto: il benchmark ETF ha correlazione giornaliera 0,6 con l'indice MSCI (fusi orari/qualità del dato Yahoo): i suoi scarti regionali sono rumore.
+- [x] Tappa 2 – `report_fattori.py`: scheda «Da dove viene il rischio» (barre impilate, esposizioni, R², avvisi R²<0,3, sintesi in italiano), anche con modello storico
+      (modulo `scomposizione_rischio`). App: selettore del modello + due moduli nuovi.
+- [x] Tappa 3 – `backtest_var.py`: VaR 1 giorno 95/99% su finestra mobile 504 giorni, modelli storico (quantile) e fattori (beta ricalcolati ogni 21 giorni, covarianza
+      dei fattori su tutta la storia fino a ieri + varianza specifica, VaR normale); Kupiec, Christoffersen, semaforo; scheda «Validazione del modello» (tabelle + grafico);
+      modulo `backtest_var` disattivato di default. Test: `tests/test_backtest_var.py`. Primo esito reale (Cyber/Big tech/MSCI World, 5,4 anni): vedi il riepilogo finale.
+  Ora: prova nel browser con modello fattori, confronto dei due modelli sull'esempio, README/CHANGELOG/RELEASE_NOTES, PR, tag.
+- [x] Confronto dei modelli sull'esempio (dati reali, 20.000 simulazioni): `esempi/confronto_modelli_v1_5/risultati.md`. Emerso e corretto: il benchmark ETF veniva
+      trattato come titolo qualsiasi (vol 20,5% con rumore di orario come «rischio specifico»); ora è esposizione 1 al fattore mercato senza residuo (vol 19,0%).
+      Backtest VaR reale: storico generalmente verde; fattori troppo prudente su banche/benchmark, troppo poco su Cyber al 99%.
+      OSSERVAZIONE (non toccata): controllo di plausibilità FALLITO sul modello storico, analisi B, portafoglio Banche (atteso 7,40%, simulato 6,58%, tolleranza ±0,59%) con i dati
+      reali di oggi. Da esaminare in una versione futura (codice 1.4 invariato).
+  Ora: CHANGELOG, RELEASE_NOTES, suite completa, PR verso main, merge, tag v1.5.0 (Actions → Release → Run workflow se il push del tag è bloccato).
+- [x] PR #6 aperta verso main (v1.5). Da verificare: controlli GitHub (Test, Prova su Mac); poi merge e tag v1.5.0 (Actions → Release → Run workflow, versione 1.5.0).
+- Correzione tappa 0 (dopo CI rossa sulla PR 6: test_ricerca_per_nome, capitale 0/orizzonte 1/tasso 0/premio 0 dopo il clic su ➕, stato presente ma azzerato): la copia delle impostazioni è ora autorevole (`stato_app.conserva` rimette ogni volta lo stato uguale alla copia; solo `on_change` dei campi o codice dell app aggiornano la copia). Test app adattati all API dei widget. Da verificare: test lenti + browser, poi merge PR 6 e tag.
+- Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).

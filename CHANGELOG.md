@@ -1,5 +1,33 @@
 # Registro delle modifiche
 
+## 1.5.0 (4 novembre 2026)
+
+Versione «modello di rischio a fattori». Nessuna funzione tolta; **il test di non regressione (1.236 numeri) è identico**. Il modello `storico` resta il default.
+
+### Modello a fattori
+- Nuova opzione `modello_simulazione: fattori` (YAML) / «Modello di simulazione» (app). Ogni titolo = esposizioni a fattori comuni + parte specifica;
+  regressione ridge su rendimenti settimanali in euro (penalità scelta per GCV, minimo 0,5 × settimane, mercato non penalizzato); simulazione con block
+  bootstrap dei fattori (storia dal 2000) e residui ricampionati per titolo, indipendenti tra titoli; rendimento atteso e costi applicati come prima.
+- Fattori in `modelli/fattori.yaml` (modificabile): mercato mondiale (MSCI World), regioni (USA, Europa, Giappone, Emergenti), 7 settori USA, growth-value,
+  piccole imprese, momentum, qualità, obbligazioni lunghe USA, dollaro/euro. Le date di inizio sono nel report e nel README. Il benchmark è trattato come il fattore mercato.
+- Con i fattori si esegue solo l'analisi A (la storia lunga entra dai fattori).
+
+### Da dove viene il rischio
+- Scheda del report e dell'app: quota di rischio per gruppo (barre impilate), esposizioni dei portafogli, R² dei titoli con avviso sotto 0,3, sintesi in italiano
+  sulle scommesse comuni. Disponibile anche con il modello storico (modulo `scomposizione_rischio`). CSV: `fattori_*.csv`.
+
+### Validazione del modello (backtest del VaR)
+- Modulo `backtest_var` (disattivato di default): VaR a 1 giorno 95%/99% su finestra mobile di 2 anni per benchmark e portafogli, modelli storico e fattori,
+  test di Kupiec e di Christoffersen con semaforo, grafico dei rendimenti contro il VaR. CSV `backtest_var.csv`.
+
+### Impostazioni non azzerate
+- `stato_app.conserva` ricorre ai valori predefiniti se un campo manca anche nella copia di sicurezza (mai 0 per caso); pulsanti Prudente (2% / 3%), Base (2,5% / 4%),
+  Ottimista (2,5% / 5%) per tasso privo di rischio e premio di mercato (campi sempre modificabili, anche a 0). Default invariati (2% / 4%). La causa dell'azzeramento
+  osservato non è stata riprodotta; verificate le sequenze con `AppTest` (test nuovi).
+
+### Test
+- `test_fattori.py`, `test_fattori_e2e.py`, `test_backtest_var.py`, `test_impostazioni_non_azzerate.py`; app completa con i fattori (AppTest e browser Playwright).
+
 ## 1.4.0 (4 novembre 2026)
 
 Versione «fondi comuni e costi». Nessuna funzione tolta. **Il test di non regressione (1.236 numeri) è identico.**

@@ -61,6 +61,10 @@ SPIEGA_METODO = {
     "storico": "**Storico:** i rendimenti del passato. ⚠️ Proietta il passato nel futuro: troppo ottimista se scegli titoli che sono già andati bene.",
     "personalizzato": "**Personalizzato:** scegli tu il rendimento medio di ogni portafoglio.",
 }
+SPIEGA_MODELLO = {
+    "storico": ("Storico", "Rimescola pezzi di storia reale dei titoli (metodo attuale)."),
+    "fattori": ("A fattori", "Ogni titolo = esposizioni a fattori comuni (storia dal 2000) + parte specifica. Scarica una ventina di serie in più."),
+}
 MODULI = {
     "stress_test": (
         "Stress test",
@@ -77,6 +81,14 @@ MODULI = {
     "confronto_modelli": (
         "Confronto tra modelli",
         "Rifà i conti con altri due modelli (Student-t e GARCH) e varia il rendimento atteso. Lento.",
+    ),
+    "scomposizione_rischio": (
+        "Da dove viene il rischio",
+        "Scompone il rischio in mercato, regioni, settori, stile, tassi e valute (sempre attivo con il modello a fattori).",
+    ),
+    "backtest_var": (
+        "Validazione del VaR (backtest)",
+        "Confronta il VaR a 1 giorno con la realtà (test di Kupiec e Christoffersen). Lento.",
     ),
     "analisi_C": (
         "Storia dal 1999 (analisi C)",
@@ -146,6 +158,7 @@ def applica_cfg(raw: dict) -> None:
     ss.personalizzato = {str(k): float(v) * 100 for k, v in (ra.get("personalizzato") or {}).items()}
     for k in C.DEFAULT["moduli"]:
         ss[f"mod_{k}"] = bool(cfg["moduli"][k])
+    ss.modello = cfg["modello_simulazione"]
     ss.nsim = max(500, int(cfg["n_simulazioni"]))
     ss.seed = int(cfg["seed"])
     ss.rib = cfg["ribilanciamento"]
@@ -156,6 +169,7 @@ def applica_cfg(raw: dict) -> None:
     ss.pop("azione_titolo", None)
     ss.scelte_isin = {str(k).replace(" ", "").upper(): str(v).strip().upper() for k, v in (cfg.get("isin_scelte") or {}).items()}
     ss.pop("controllo", None)
+    ss.pop(stato_app.CHIAVE_COPIA, None)  # nuovi valori scritti dal programma: la copia si rifà dallo stato
 
 
 def cfg_da_stato(tabella: pd.DataFrame) -> dict:
@@ -195,6 +209,7 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
             "seed": int(ss.seed),
             "ribilanciamento": ss.rib,
             "costo_ribilanciamento": ss.costo / 100,
+            "modello_simulazione": ss.modello,
         }
     )
     # un campo vuoto o non numerico non diventa mai 0: errore chiaro (solo per i campi del metodo scelto)
@@ -234,11 +249,33 @@ ss = st.session_state
 
 # copia di sicurezza delle impostazioni: vedi stato_app.py (Streamlit può cancellare lo stato dei widget dopo un errore)
 IMPOSTAZIONI = [
-    "nome", "capitale", "versamento", "orizzonte", "intermedi", "metodo", "rf", "mrp", "uguale", "nsim", "seed", "rib", "costo",
+    "nome", "capitale", "versamento", "orizzonte", "intermedi", "metodo", "rf", "mrp", "uguale", "nsim", "seed", "rib", "costo", "modello",
     "b_nome", "b_ticker", "b_ter", "b_proxy", *(f"mod_{k}" for k in C.DEFAULT["moduli"]),
 ]  # fmt: skip
-if ripristinate := stato_app.conserva(ss, IMPOSTAZIONI):
+_RA = C.DEFAULT["rendimento_atteso"]
+PREDEFINITI = {
+    "nome": C.DEFAULT["nome"], "capitale": float(C.DEFAULT["capitale_iniziale"]), "versamento": float(C.DEFAULT["versamento_mensile"]),
+    "orizzonte": int(C.DEFAULT["orizzonte_anni"]), "metodo": _RA["metodo"], "rf": _RA["tasso_privo_rischio"] * 100,
+    "mrp": _RA["premio_mercato"] * 100, "uguale": _RA["valore_uguale"] * 100, "nsim": max(500, int(C.DEFAULT["n_simulazioni"])),
+    "seed": int(C.DEFAULT["seed"]), "modello": C.DEFAULT["modello_simulazione"], "rib": C.DEFAULT["ribilanciamento"], "costo": float(C.DEFAULT["costo_ribilanciamento"]) * 100,
+}  # fmt: skip
+if ripristinate := stato_app.conserva(ss, IMPOSTAZIONI, PREDEFINITI):
     log.warning("Impostazioni ripristinate dalla copia di sicurezza: %s", ", ".join(ripristinate))
+
+
+SCENARI_RENDIMENTO = {"Prudente": (2.0, 3.0), "Base": (2.5, 4.0), "Ottimista": (2.5, 5.0)}  # (tasso privo di rischio %, premio %)
+
+
+def salva_impostazione(k: str) -> None:
+    """on_change di ogni campo delle impostazioni: solo un'azione dell'utente aggiorna la copia (vedi stato_app.py)."""
+    stato_app.segnala(ss, k)
+
+
+def imposta_scenario(rf: float, mrp: float) -> None:
+    """Scelta rapida: compila i due campi (restano modificabili). Usata come callback: gira prima del disegno dei campi."""
+    ss.rf, ss.mrp = rf, mrp
+    stato_app.registra(ss, "rf")
+    stato_app.registra(ss, "mrp")
 
 
 def pesi_uguali() -> None:
@@ -590,7 +627,7 @@ def pannello_rendimento(chiave_attuale: str | None) -> None:
 # ------------------------------------------------------------------ barra laterale
 with st.sidebar:
     st.title("📊 Impostazioni")
-    st.text_input("Nome del confronto", key="nome", help=AIUTO["nome"])
+    st.text_input("Nome del confronto", key="nome", on_change=salva_impostazione, args=("nome",), help=AIUTO["nome"])
 
     st.header("1 · Portafogli", divider="gray")
     st.caption(
@@ -711,20 +748,25 @@ with st.sidebar:
 
     st.header("2 · Capitale e orizzonte", divider="gray")
     c1, c2 = st.columns(2)
-    c1.number_input("Capitale iniziale (€)", min_value=0.0, step=500.0, key="capitale", help=AIUTO["capitale"])
-    c2.number_input("Versamento mensile (€)", min_value=0.0, step=50.0, key="versamento", help=AIUTO["versamento"])
-    c1.number_input("Orizzonte (anni)", min_value=1, max_value=50, step=1, key="orizzonte", help=AIUTO["orizzonte"])
-    c2.text_input("Orizzonti intermedi", key="intermedi", help=AIUTO["intermedi"])
+    c1.number_input("Capitale iniziale (€)", min_value=0.0, step=500.0, key="capitale", on_change=salva_impostazione, args=("capitale",), help=AIUTO["capitale"])
+    c2.number_input("Versamento mensile (€)", min_value=0.0, step=50.0, key="versamento", on_change=salva_impostazione, args=("versamento",), help=AIUTO["versamento"])
+    c1.number_input("Orizzonte (anni)", min_value=1, max_value=50, step=1, key="orizzonte", on_change=salva_impostazione, args=("orizzonte",), help=AIUTO["orizzonte"])
+    c2.text_input("Orizzonti intermedi", key="intermedi", on_change=salva_impostazione, args=("intermedi",), help=AIUTO["intermedi"])
 
     st.header("3 · Rendimento atteso", divider="gray")
-    st.radio("Metodo", list(SPIEGA_METODO), key="metodo", horizontal=True, help=AIUTO["metodo"])
+    st.radio("Metodo", list(SPIEGA_METODO), key="metodo", on_change=salva_impostazione, args=("metodo",), horizontal=True, help=AIUTO["metodo"])
     st.caption(SPIEGA_METODO[ss.metodo])
     if ss.metodo == "beta":
         c1, c2 = st.columns(2)
-        c1.number_input("Tasso privo di rischio (%)", step=0.25, key="rf", help=AIUTO["rf"])
-        c2.number_input("Premio di mercato (%)", step=0.25, key="mrp", help=AIUTO["mrp"])
+        c1.number_input("Tasso privo di rischio (%)", step=0.25, key="rf", on_change=salva_impostazione, args=("rf",), help=AIUTO["rf"])
+        c2.number_input("Premio di mercato (%)", step=0.25, key="mrp", on_change=salva_impostazione, args=("mrp",), help=AIUTO["mrp"])
+        b1, b2, b3 = st.columns(3)
+        for col, (nome_p, (v_rf, v_mrp)) in zip((b1, b2, b3), SCENARI_RENDIMENTO.items(), strict=True):
+            col.button(nome_p, key=f"scenario_{nome_p}", width="stretch", on_click=imposta_scenario, args=(v_rf, v_mrp),
+                       help=f"Tasso privo di rischio {v_rf:g}% · premio di mercato {v_mrp:g}%. Poi puoi modificare i valori.")  # fmt: skip
+        st.caption("Valori indicativi basati su tassi BCE e stime di premio per il rischio di fine 2026, non previsioni.")
     elif ss.metodo == "uguale":
-        st.number_input("Rendimento medio annuo per tutti (%)", step=0.5, key="uguale", help=AIUTO["uguale"])
+        st.number_input("Rendimento medio annuo per tutti (%)", step=0.5, key="uguale", on_change=salva_impostazione, args=("uguale",), help=AIUTO["uguale"])
     elif ss.metodo == "personalizzato":
         nomi = list(dict.fromkeys(str(x).strip() for x in tab["Portafoglio"] if str(x).strip() not in ("", "None"))) + ["benchmark"]
         dfp = pd.DataFrame({"Portafoglio": nomi, "Rendimento (%)": [ss.personalizzato.get(n, ss.uguale) for n in nomi]})
@@ -732,17 +774,30 @@ with st.sidebar:
         ss.personalizzato = dict(zip(modp["Portafoglio"], modp["Rendimento (%)"].astype(float)))
 
     st.header("4 · Moduli e simulazione", divider="gray")
+    st.radio(
+        "Modello di simulazione",
+        list(SPIEGA_MODELLO),
+        key="modello",
+        on_change=salva_impostazione,
+        args=("modello",),
+        horizontal=True,
+        format_func=lambda x: SPIEGA_MODELLO[x][0],
+        help="Storico: si rimescolano pezzi di storia reale dei titoli (come nelle versioni precedenti). Fattori: ogni titolo è "
+        "esposizioni a mercato, regioni, settori, stile, tassi e valute (storia lunga dal 2000) più una parte specifica: "
+        "utile per titoli e fondi con poca storia.",
+    )
+    st.caption(SPIEGA_MODELLO[ss.modello][1])
     for k, (et, aiuto) in MODULI.items():
-        st.checkbox(et, key=f"mod_{k}", help=aiuto)
-    st.number_input("Numero di simulazioni", min_value=500, max_value=100000, step=1000, key="nsim", help=AIUTO["nsim"])
+        st.checkbox(et, key=f"mod_{k}", on_change=salva_impostazione, args=(f"mod_{k}",), help=aiuto)
+    st.number_input("Numero di simulazioni", min_value=500, max_value=100000, step=1000, key="nsim", on_change=salva_impostazione, args=("nsim",), help=AIUTO["nsim"])
     with st.expander("Benchmark e impostazioni avanzate"):
-        st.text_input("Nome del benchmark", key="b_nome")
-        st.text_input("Ticker (o ISIN) del benchmark", key="b_ticker", help=AIUTO["b_ticker"])
-        st.number_input("TER del benchmark (%)", min_value=0.0, max_value=3.0, step=0.01, key="b_ter", help="Costo annuo dell'ETF.")
-        st.text_input("Indice prima della nascita dell'ETF", key="b_proxy", help=AIUTO["b_proxy"])
-        st.selectbox("Ribilanciamento", list(C.RIBILANCIAMENTO_MESI), key="rib", help=AIUTO["rib"])
-        st.number_input("Costo di ribilanciamento (%)", min_value=0.0, max_value=5.0, step=0.05, key="costo", help=AIUTO["costo"])
-        st.number_input("Seed", min_value=0, step=1, key="seed", help=AIUTO["seed"])
+        st.text_input("Nome del benchmark", key="b_nome", on_change=salva_impostazione, args=("b_nome",))
+        st.text_input("Ticker (o ISIN) del benchmark", key="b_ticker", on_change=salva_impostazione, args=("b_ticker",), help=AIUTO["b_ticker"])
+        st.number_input("TER del benchmark (%)", min_value=0.0, max_value=3.0, step=0.01, key="b_ter", on_change=salva_impostazione, args=("b_ter",), help="Costo annuo dell'ETF.")
+        st.text_input("Indice prima della nascita dell'ETF", key="b_proxy", on_change=salva_impostazione, args=("b_proxy",), help=AIUTO["b_proxy"])
+        st.selectbox("Ribilanciamento", list(C.RIBILANCIAMENTO_MESI), key="rib", on_change=salva_impostazione, args=("rib",), help=AIUTO["rib"])
+        st.number_input("Costo di ribilanciamento (%)", min_value=0.0, max_value=5.0, step=0.05, key="costo", on_change=salva_impostazione, args=("costo",), help=AIUTO["costo"])
+        st.number_input("Seed", min_value=0, step=1, key="seed", on_change=salva_impostazione, args=("seed",), help=AIUTO["seed"])
     aggiorna = st.checkbox("Aggiorna i dati (riscarica i prezzi)", value=False, help=AIUTO["aggiorna"], key="aggiorna_dati")
     chiave_attuale = chiave_dati(tab)
     cc = ss.get("controllo")
