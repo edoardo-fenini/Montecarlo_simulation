@@ -4,6 +4,7 @@ Avvio:  streamlit run app.py   (oppure doppio clic su Avvia.command)"""
 from __future__ import annotations
 
 import copy
+import os
 import re
 import time
 
@@ -365,6 +366,7 @@ def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
             hide_index=True,
             width="stretch",
             column_config={"Dettagli": st.column_config.TextColumn(width="large")},
+            key="tabella_controllo",
         )
         st.caption("🟢 tutto a posto · 🟡 avviso, si può procedere · 🔴 errore, la simulazione non parte finché non lo correggi.")
         multi = [r for r in e["righe"] if r.get("risoluzione") and len(r["risoluzione"]["quotazioni"]) > 1]
@@ -415,8 +417,8 @@ with st.sidebar:
     )
     ss.tabella_corrente = tab
     c1, c2 = st.columns(2)
-    c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch", help="Imposta pesi uguali dentro ogni portafoglio.")
-    c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch", help="Torna ai tre portafogli di esempio.")
+    c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch", key="btn_pesi_uguali", help="Imposta pesi uguali dentro ogni portafoglio.")
+    c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch", key="btn_ricarica_esempio", help="Torna ai tre portafogli di esempio.")
 
     with st.expander("📄 Carica prezzi da file"):
         st.caption(
@@ -435,7 +437,7 @@ with st.sidebar:
         tipo_csv = st.radio(
             "Tipo", ["EQUITY", "ETF"], horizontal=True, key="tipo_csv", format_func=lambda x: "Azione" if x == "EQUITY" else "ETF"
         )
-        if st.button("Importa i prezzi", width="stretch", disabled=f_csv is None or not t_csv.strip()):
+        if st.button("Importa i prezzi", width="stretch", key="btn_importa_prezzi", disabled=f_csv is None or not t_csv.strip()):
             try:
                 s_imp = D.Archivio(log=lambda *a: None).importa_csv(t_csv, f_csv.getvalue(), v_csv, tipo_csv)
                 st.success(
@@ -479,16 +481,17 @@ with st.sidebar:
         st.selectbox("Ribilanciamento", list(C.RIBILANCIAMENTO_MESI), key="rib", help=AIUTO["rib"])
         st.number_input("Costo di ribilanciamento (%)", min_value=0.0, max_value=5.0, step=0.05, key="costo", help=AIUTO["costo"])
         st.number_input("Seed", min_value=0, step=1, key="seed", help=AIUTO["seed"])
-    aggiorna = st.checkbox("Aggiorna i dati (riscarica i prezzi)", value=False, help=AIUTO["aggiorna"])
+    aggiorna = st.checkbox("Aggiorna i dati (riscarica i prezzi)", value=False, help=AIUTO["aggiorna"], key="aggiorna_dati")
     chiave_attuale = chiave_dati(tab)
     cc = ss.get("controllo")
     bloccato = bool(cc and chiave_attuale is not None and cc["chiave"] == chiave_attuale and cc["esito"]["blocca"])
     controlla = st.button(
         "🔎 Controlla i dati",
         width="stretch",
+        key="btn_controlla",
         help="Verifica tutti i titoli (anche gli ISIN) prima di simulare: esistenza, storia, prezzi recenti, buchi nei dati.",
     )
-    avvia = st.button("▶ Avvia simulazione", type="primary", width="stretch", disabled=bloccato)
+    avvia = st.button("▶ Avvia simulazione", type="primary", width="stretch", disabled=bloccato, key="btn_avvia")
     if bloccato:
         da_correggere = ", ".join(r["input"] for r in cc["esito"]["righe"] if r["esito"] == controllo.ROSSO)
         st.error(
@@ -509,6 +512,7 @@ with st.sidebar:
             file_name=f"{(ss.nome or 'confronto').replace(' ', '_')}.yaml",
             mime="text/yaml",
             width="stretch",
+            key="dl_configurazione",
         )
     st.file_uploader("Carica una configurazione salvata", type=["yaml", "yml"], key="file_cfg", on_change=carica_file)
     if ss.get("msg_caricamento"):
@@ -677,7 +681,7 @@ def mostra_salvate() -> None:
             for r in elenco
         ]
     )
-    st.dataframe(tab_el, hide_index=True, width="stretch")
+    st.dataframe(tab_el, hide_index=True, width="stretch", key="salvate_elenco")
     etichette = [f"{r['creato'].replace('T', ' ')[:16]} – {r['nome']}" for r in elenco]
     st.subheader("Apri un'analisi")
     scelta = st.selectbox("Analisi", range(len(elenco)), format_func=lambda i: etichette[i], key="salvata_scelta")
@@ -694,7 +698,7 @@ def mostra_salvate() -> None:
     ):
         percorso = f"{r['cartella']}/{file}"
         try:
-            col.download_button(et, open(percorso, "rb").read(), file_name=file, mime=mime, width="stretch", key=f"dl_{scelta}_{file}")
+            col.download_button(et, open(percorso, "rb").read(), file_name=file, mime=mime, width="stretch", key=f"dl_salvata_{os.path.basename(r['cartella'])}_{file}")
         except OSError:
             col.caption(f"{file} non disponibile")
     if st.toggle("Mostra il report qui", key="salvata_mostra"):
@@ -735,6 +739,7 @@ def mostra_salvate() -> None:
                     ),
                     hide_index=True,
                     width="stretch",
+                    key=f"salvate_confronto_{os.path.basename(ri['cartella'])}",
                 )
         a1, a2 = (elenco[i] for i in due)
         comuni = [p["nome"] for p in a1["portafogli"] if p["nome"] in {q["nome"] for q in a2["portafogli"]}]
@@ -756,6 +761,7 @@ def mostra_salvate() -> None:
                 ),
                 hide_index=True,
                 width="stretch",
+                key="salvate_differenze",
             )
 
 
@@ -787,7 +793,11 @@ with scheda_sim:
             + f" — {report.eur(ss.capitale)} iniziali, {ss.orizzonte} anni, {report.num_it(int(ss.nsim))} simulazioni."
         )
         st.button(
-            "▶ Avvia la simulazione con queste impostazioni", type="primary", on_click=lambda: ss.update(avvia_ora=True), disabled=bloccato
+            "▶ Avvia la simulazione con queste impostazioni",
+            type="primary",
+            on_click=lambda: ss.update(avvia_ora=True),
+            disabled=bloccato,
+            key="btn_avvia_pagina_iniziale",
         )
         st.caption("Questo strumento non è consulenza finanziaria.")
 
@@ -826,14 +836,17 @@ with scheda_sim:
         st.caption("📅 " + report.intestazione(ris))
         c1, c2, c3, _ = st.columns([1, 1, 1, 2])
         nome_file = f"report_{(ris['cfg']['nome'] or 'confronto').replace(' ', '_')}"
-        c1.download_button("⬇️ Report HTML", ss.html, file_name=f"{nome_file}.html", mime="text/html", width="stretch")
-        c2.download_button("⬇️ Report PDF", ss.pdf, file_name=f"{nome_file}.pdf", mime="application/pdf", width="stretch")
+        c1.download_button("⬇️ Report HTML", ss.html, file_name=f"{nome_file}.html", mime="text/html", width="stretch", key="dl_report_html")
+        c2.download_button(
+            "⬇️ Report PDF", ss.pdf, file_name=f"{nome_file}.pdf", mime="application/pdf", width="stretch", key="dl_report_pdf"
+        )
         c3.download_button(
             "⬇️ Excel",
             ss.xlsx,
             file_name=f"{nome_file}.xlsx",
             width="stretch",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_report_excel",
         )
         if ss.get("cartella"):
             st.caption(f"Analisi salvata in `{ss.cartella}`: la ritrovi nella scheda «Analisi salvate».")
@@ -860,7 +873,7 @@ with scheda_sim:
                         "Passa il mouse sul grafico per leggere mediana, 5° e 95° percentile di ogni anno; clicca su un nome nella "
                         "legenda per nasconderlo. La zona rossa è sotto il capitale investito."
                     )
-                    fasce = st.toggle("Mostra le fasce 5°–95°", value=True)
+                    fasce = st.toggle("Mostra le fasce 5°–95°", value=True, key="fan_fasce")
                     for a in anal:
                         st.subheader(report.NOME_ANALISI[a])
                         st.plotly_chart(G.fan_chart(ris, a, fasce), width="stretch", theme="streamlit", key=f"fan_{a}")

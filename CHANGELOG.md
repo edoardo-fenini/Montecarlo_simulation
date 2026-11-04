@@ -5,11 +5,23 @@
 Versione di consolidamento. Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di
 non regressione (1.236 numeri chiave) è rimasto identico.
 
+### Correzione di bug (prioritaria): l'app si fermava a fine analisi con `StreamlitDuplicateElementId`
+- **Causa**: quando l'analisi B copre lo stesso periodo dell'analisi A (nessun titolo ha una storia più lunga del periodo comune), i due
+  fan chart e i due istogrammi dei cali sono identici; Streamlit dava loro lo stesso ID automatico e interrompeva l'app subito dopo la
+  simulazione. Riprodotto sulla 1.2 con l'esempio precaricato e con l'esempio ISIN, tutti i moduli attivi.
+- **Correzione**: ogni elemento Streamlit che riceve un ID (grafici Plotly, tabelle, pulsanti di download, pulsanti, menu, interruttori,
+  caselle) ha ora una `key` univoca e stabile: fan chart e cali per analisi (`fan_A`, `mdd_B` …), i tre download del report, il download
+  della configurazione, la tabella del controllo dati, le tabelle e i download delle «Analisi salvate» (key dal nome della cartella, non
+  dalla posizione nell'elenco), i pulsanti della barra laterale e della pagina iniziale, la casella «Aggiorna i dati».
+- **Test**: simulazione completa nell'app con tutti i moduli per entrambi gli esempi (`tests/test_app_simulazione_completa.py`) e un
+  controllo automatico che nessun elemento con ID resti senza `key` e che nessuna key si ripeta (`tests/test_chiavi_streamlit.py`).
+  La prova nel browser (Playwright) completa un'analisi intera, apre tutte le schede, verifica che non compaiano errori Streamlit e scarica il report.
+- Gli expander, le immagini e le metriche non ricevono un ID da Streamlit (se non hanno una key) e non possono causare questo errore.
+
 ### Risultati vecchi nascosti
 - Se dopo una simulazione cambiano titoli, pesi o impostazioni, se i prezzi in cache vengono aggiornati o se il controllo dei dati
   diventa rosso, i risultati sono nascosti e al loro posto compare l'avviso «Questi risultati non corrispondono più ai dati attuali:
   rilancia la simulazione», con il motivo. Un interruttore permette di rivederli comunque (l'avviso resta in cima).
-- Corretto un possibile errore «plotly_chart duplicato» quando due analisi hanno grafici identici (ogni grafico ha ora una chiave).
 
 ### Controllo incrociato dei nomi (ISIN)
 - Per ogni ISIN convertito, il nome di OpenFIGI è confrontato con quello di Yahoo (confronto tollerante: ignora maiuscole, accenti,

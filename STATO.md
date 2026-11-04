@@ -92,6 +92,12 @@ Scelte fatte (annotate, senza chiedere):
 ## Versione 1.3 (ramo `v1.3`): consolidamento (4 novembre 2026)
 Scelte annotate: il ramo è `v1.3` come chiesto (il ramo di sessione `claude/sharp-lovelace-fc6742` non è usato). Il «report progresso,
 debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
+- [x] 0. **Correzione prioritaria (richiesta a metà lavoro): StreamlitDuplicateElementId a fine analisi.** Riprodotto sulla 1.2 (commit 4da7e8b)
+      con AppTest e dati finti brevi (1.300 giorni), esempio precaricato ed esempio ISIN, tutti i moduli: l'analisi B coincide con la A e
+      `fan_chart(A) == fan_chart(B)` → stesso ID automatico. Sulla 1.3: nessuna eccezione con entrambi gli esempi. Key univoche e stabili a tutti
+      gli elementi con ID (inventario in CHANGELOG); test AST che lo impone. La prova Playwright che completa un'analisi e apre tutte le schede è
+      nel commit della tappa 4 (serve l'infrastruttura e2e); verificato che FALLISCE sulla 1.2 e passa sulla 1.3.
+      Non verificato: il messaggio esatto sul Mac dell'utente (non disponibile); la causa trovata è l'unica che produce questo errore nell'app.
 - [x] 1. Risultati vecchi: `controllo.motivo_risultati_vecchi` + avviso e nascondimento in `app.py` (impronta di tutte le impostazioni
       + data della cache dei prezzi, registrate a fine simulazione; controllo rosso sui titoli attuali). 4 nuovi test. 116 test verdi.
 - [x] 2. Controllo incrociato dei nomi: `nomi.py` (confronto tollerante, accenti e punti tolti, somiglianza dei caratteri solo per nomi lunghi),
