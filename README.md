@@ -8,6 +8,10 @@ Uno strumento per confrontare il **rischio** di più portafogli di azioni ed ETF
 |---|---|---|
 | ![Pagina iniziale](docs/immagini/01_pagina_iniziale.png) | ![Schede con il livello di rischio](docs/immagini/02_in_una_pagina.png) | ![Fan chart](docs/immagini/03_fan_chart.png) |
 
+**Novità della versione 1.3:** risultati vecchi nascosti con un avviso quando cambi titoli, impostazioni o dati; corretto l'errore
+`StreamlitDuplicateElementId` che poteva fermare l'app a fine analisi; controllo automatico dei nomi OpenFIGI/Yahoo per ogni ISIN;
+importazione del portafoglio dal CSV del broker; ricerca dei titoli per nome; release automatica dal tag `vX.Y.Z`; prova nel browser nei test.
+
 **Novità della versione 1.1:** dati più affidabili (più fonti, modalità offline, prezzi da file CSV, controllo dei ticker), report con copertina, indice e pagina «In una pagina» con il livello di rischio da 1 a 5, grafici interattivi, analisi salvate e confronto tra due analisi, prova rapida dei pesi, esportazione in Excel, calcolo in parallelo (circa 2 volte più veloce). Tutti i dettagli in `CHANGELOG.md`.
 
 ---
@@ -16,7 +20,8 @@ Uno strumento per confrontare il **rischio** di più portafogli di azioni ed ETF
 
 **Metodo consigliato: lo zip della release.**
 1. Apri la pagina del progetto su GitHub e clicca **Releases** (colonna di destra).
-2. Nell'ultima versione (es. `v1.0.0`) clicca il file **`confronta-portafogli-v1.0.0.zip`**.
+2. Nell'ultima versione (quella con l'etichetta **Latest**, nome nel formato `vX.Y.Z`, es. `v1.3.0`) clicca il file **`confronta-portafogli-v1.3.0.zip`**.
+   Le release con nomi come `V_1.2.0` sono le vecchie: vedi «Nomi dei tag» in fondo.
 
 **In alternativa**: nella pagina principale del progetto clicca il pulsante verde **Code → Download ZIP**.
 
@@ -152,6 +157,43 @@ Nell'app, dopo **🔎 Controlla i dati**, sotto la tabella compare per ogni ISIN
 
 Esempio pronto con azioni ed ETF europei: `configurazioni/esempio_isin.yaml`.
 
+### Cercare un titolo per nome
+Barra a sinistra → **🔍 Cerca un titolo per nome**: scrivi il nome di un'azienda o di un ETF (es. «Enel», «MSCI World») e premi **Cerca**.
+Compaiono fino a 10 risultati con **nome · ticker · ISIN (se hai cercato un ISIN) · borsa · valuta · tipo**; scegli in **Aggiungi al portafoglio**
+dove metterlo (anche un portafoglio nuovo) e premi **➕** accanto al risultato: il titolo entra nella tabella. Se il portafoglio ha già i pesi,
+scrivi il peso del nuovo titolo (o premi «Pesi uguali»). La ricerca usa Yahoo Finance (serve internet); la ricerca di Yahoo non restituisce
+gli ISIN, quindi la colonna ISIN è piena solo se cerchi proprio un ISIN.
+
+### Importare il portafoglio dal broker (CSV)
+Esporta dal sito del broker l'elenco dei titoli in CSV (spesso «Portafoglio» o «Dossier titoli» → «Esporta» / «Scarica in Excel/CSV»).
+
+**Nell'app**: barra a sinistra → **📥 Importa il portafoglio dal broker (CSV)** → scegli il file, scrivi il nome del portafoglio →
+**Mostra anteprima**. L'anteprima mostra titolo, nome, quantità, prezzo usato, controvalore in EUR, **peso %** e da dove viene il valore.
+Se va bene premi **Conferma e aggiungi**: il portafoglio entra nella tabella (se ne esisteva già uno con lo stesso nome viene sostituito).
+Poi premi «Controlla i dati» come sempre.
+
+**Da riga di comando** (anteprima e domanda di conferma prima di scrivere il file):
+```bash
+python importa_portafoglio.py esempi/portafoglio_broker_esempio.csv --nome "Il mio conto" --base configurazioni/esempio_tre_portafogli.yaml --uscita configurazioni/mio_conto.yaml
+```
+Senza `--base` il file contiene solo il nuovo portafoglio (con il benchmark predefinito); `--si` salta la conferma.
+
+**Formato del file** (esempio completo in `esempi/portafoglio_broker_esempio.csv`):
+```
+ISIN;Descrizione;Quantità;Prezzo;Controvalore (EUR)
+IE00B4L5Y983;ISHARES CORE MSCI WORLD UCITS ETF;120;105,32;12.638,40
+IE00BK5BQT80;VANGUARD FTSE ALL-WORLD UCITS ETF;40;;
+```
+- Servono **ISIN (o ticker) e quantità**, oppure **ISIN e controvalore**. Le altre colonne (prezzo, descrizione, prezzo di carico …) sono facoltative.
+- Nomi di colonna riconosciuti (maiuscole, accenti e testo tra parentesi non contano): ISIN → `ISIN`, `Codice ISIN`; ticker → `Ticker`,
+  `Simbolo`, `Symbol`, `Codice`; quantità → `Quantità`, `Qtà`, `Quantity`, `Numero`, `Pezzi`, `Nominale`, `Shares`; controvalore →
+  `Controvalore`, `Controvalore (EUR)`, `Controvalore di mercato`, `Valore di mercato`, `Market value`, `Valore`, `Importo`; nome → `Descrizione`,
+  `Nome`, `Titolo`, `Strumento`. Le colonne con «carico», «acquisto», «costo», «medio», «utile» **non** sono usate come controvalore.
+- Separatore `;`, `,` o tabulazione; numeri come `1.234,56` o `1,234.56`; con una sola virgola (`12,5`) la virgola è il decimale.
+- Le righe prima dell'intestazione (nome del cliente, data …) e le righe «Totale»/«Liquidità» sono ignorate; lo stesso titolo su più righe è sommato.
+- Il controvalore va **in euro**. Se manca, il programma calcola **quantità × ultimo prezzo in EUR** (scaricato da Yahoo; serve internet).
+- I pesi sono arrotondati a due decimali e sommano esattamente 100.
+
 ### Controllo dei dati prima della simulazione
 | ![Controllo dati con ISIN](docs/screenshot/01_controllo_dati_isin.png) | ![Menu della quotazione](docs/screenshot/02_menu_quotazione.png) | ![ISIN errato: simulazione bloccata](docs/screenshot/04_isin_errato_bloccato.png) |
 |---|---|---|
@@ -165,7 +207,7 @@ Il pulsante **🔎 Controlla i dati** (barra laterale) verifica tutti i titoli, 
 | 🟡 **Giallo** | meno di 3 anni di storia; più del 5% di giorni mancanti; ultimo prezzo più vecchio di 7 giorni; movimenti giornalieri oltre ±30%; nome trovato molto diverso da quello atteso | Avviso: si può procedere |
 | 🟢 **Verde** | tutto a posto | – |
 
-I «giorni mancanti» si contano rispetto ai giorni in cui almeno metà dei titoli ha scambiato: le festività di una sola borsa non contano. Il **nome atteso** si indica in configurazione (`nomi_attesi`, vedi `configurazioni/esempio_isin.yaml`). Le soglie si cambiano in configurazione (`controllo_dati`, qui i valori predefiniti):
+I «giorni mancanti» si contano rispetto ai giorni in cui almeno metà dei titoli ha scambiato: le festività di una sola borsa non contano. Per ogni ISIN il programma confronta da solo il nome di OpenFIGI con quello di Yahoo (ignorando maiuscole, punteggiatura e forme societarie come Inc, SpA, PLC, AG): se sono molto diversi la riga è gialla e viene provata la quotazione successiva; le quotazioni su borse che il programma non sa tradurre sono elencate come «info». Il **nome atteso** resta un controllo facoltativo in più (`nomi_attesi`, vedi `configurazioni/esempio_isin.yaml`). Le soglie si cambiano in configurazione (`controllo_dati`, qui i valori predefiniti):
 
 ```yaml
 controllo_dati:
@@ -269,11 +311,11 @@ portafogli:
 
 Il benchmark di default è l'**iShares Core MSCI World** (`IWDA.AS`, TER 0,20%). Prima della sua nascita (2009) si usa l'indice MSCI World. Per cambiarlo aggiungi una sezione `benchmark:` come nel file di esempio.
 
-## 8. Aggiornare a una nuova versione (ad esempio dalla 1.1 alla 1.2)
+## 8. Aggiornare a una nuova versione (ad esempio dalla 1.2 alla 1.3)
 
 Le tue cose stanno in tre cartelle: `configurazioni/` (i file YAML), `cache_prezzi/` (i prezzi già scaricati) e `report/` (i report salvati). Il resto si può sostituire.
 
-1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella, ad esempio `Documenti/confronta-portafogli-v1.2.0`.
+1. Scarica lo zip della nuova versione (punto 1) ed estrailo in una **nuova** cartella, ad esempio `Documenti/confronta-portafogli-v1.3.0`.
 2. Copia dalla cartella vecchia a quella nuova:
    - i tuoi file da `configurazioni/` (non sovrascrivere gli esempi nuovi, se hanno lo stesso nome rinomina i tuoi);
    - l'intera cartella `cache_prezzi/` (così non riscarichi tutto);
@@ -311,12 +353,62 @@ Il codice di riferimento sta nel ramo **`main`**. Per renderlo il ramo predefini
 2. Nel menu a sinistra clicca **General**; nella sezione **Default branch** premi il pulsante con le due frecce (⇄ *Switch to another branch*).
 3. Scegli **`main`**, premi **Update** e conferma con **I understand, update the default branch**.
 
-### Creare una release
-1. Apri il repository e clicca **Releases → Draft a new release** (o **Create a new release**).
-2. In **Choose a tag** scrivi il numero di versione (es. `v1.1.0`) e scegli **Create new tag … on publish**. In **Target** scegli **`main`**.
-3. Titolo: ad esempio `v1.1.0`. Nella descrizione incolla il contenuto di `RELEASE_NOTES.md`.
-4. Premi **Publish release**.
-5. Dopo uno o due minuti la GitHub Action **"Zip per la release"** allega automaticamente `confronta-portafogli-v1.1.0.zip` alla release (puoi seguirla nella scheda **Actions**). Lo zip non contiene `.venv`, cache e report generati.
+### Nomi dei tag: da ora solo `vX.Y.Z`
+Dalla versione 1.3 i tag (e quindi le release) hanno **un solo formato: `vX.Y.Z`**, con la «v» minuscola e tre numeri separati da punti
+(`v1.3.0`, `v1.3.1`, `v2.0.0`). Formati come `V_1.3.0`, `v1.3` o `1.3.0-beta` sono rifiutati dal workflow di release.
+
+I tag e le release **vecchi non sono stati cancellati**, ma hanno un nome diverso e non sono creati dalla release automatica:
+
+| Tag | Cosa è | Cosa fare |
+|---|---|---|
+| `V_1.0.1`, `V_1.1.0`, `V_1.2.0` | release delle versioni 1.0.1, 1.1.0, 1.2.0, create a mano con il vecchio nome (maiuscola e trattino basso) | Non servono più: sono versioni superate. Restano disponibili per consultazione. |
+| `prova` | prima prova di release (titolo «V 1.0.0») | Ignorala. |
+| `v1.3.0` e successivi | release automatiche, con note dal `CHANGELOG.md` e lo zip `confronta-portafogli-vX.Y.Z.zip` | **Scarica sempre l'ultima di questo tipo** (quella con l'etichetta *Latest*). |
+
+Non puoi rinominare un tag esistente senza ricrearlo: per questo i vecchi restano come sono. Se vuoi, dal sito puoi aprire la
+vecchia release e premere **Edit** per aggiungere in cima «Versione superata: scarica l'ultima `vX.Y.Z`».
+
+### Pubblicare una nuova versione (dal sito di GitHub, passo passo)
+Prima, nel codice: aggiungi a `CHANGELOG.md` una sezione `## X.Y.Z (data)` con le novità (diventa il testo della release) e unisci il lavoro in `main`.
+
+**Metodo A – senza terminale (consigliato).** Il sito di GitHub non permette di creare *soltanto* un tag: lo crea il workflow per te.
+1. Apri il repository e clicca la scheda **Actions**.
+2. Nell'elenco a sinistra scegli **Release**.
+3. Clicca **Run workflow** (a destra); in **Use workflow from** lascia **`main`**.
+4. Nel campo **Versione da pubblicare** scrivi per esempio `1.3.1` (va bene anche `v1.3.1`) e clicca **Run workflow** (pulsante verde).
+5. Attendi qualche minuto (puoi cliccare l'esecuzione per seguirla): il workflow lancia i test (compresa la prova nel browser), crea il tag
+   `v1.3.1`, costruisce lo zip, crea la release con le note prese dalla sezione `## 1.3.1` del `CHANGELOG.md` e allega lo zip.
+6. Torna nella pagina principale e clicca **Releases**: trovi la nuova release con lo zip.
+
+**Metodo B – tag dal terminale** (se preferisci creare il tag tu):
+```bash
+git checkout main && git pull
+git tag v1.3.1
+git push origin v1.3.1
+```
+Il push del tag avvia da solo lo stesso workflow.
+
+**Metodo C – dal sito, con il pulsante delle release.** **Releases → Draft a new release → Choose a tag**: scrivi `v1.3.1`, scegli
+**Create new tag: v1.3.1 on publish**, **Target `main`**, lascia vuota la descrizione e premi **Publish release**. La creazione del tag avvia il
+workflow, che sostituisce le note con quelle del `CHANGELOG.md` e allega lo zip.
+
+Se il workflow fallisce (croce rossa in **Actions**) non viene pubblicato nulla: leggi il messaggio del passo rosso. Cause tipiche: nome del
+tag non nel formato `vX.Y.Z`, sezione mancante nel `CHANGELOG.md`, un test che non passa. Corretto il problema, rilancia con il Metodo A.
+Il workflow usa solo i permessi del `GITHUB_TOKEN` del repository (**Settings → Actions → General → Workflow permissions** deve essere
+*Read and write permissions*, oppure basta il `permissions: contents: write` già scritto nel workflow se la tua organizzazione lo consente).
+
+### Prova nel browser (Playwright)
+`tests/e2e/` contiene la prova dell'app in un browser vero (Chromium headless), con una **finta rete** (`tests/e2e/app_finta.py`: prezzi
+sintetici e risposte finte di OpenFIGI/Yahoo), quindi senza internet. Controlla: ISIN errato che blocca la simulazione; controllo dei dati,
+cambio di quotazione, simulazione, report scaricato con il ticker giusto; avviso sui risultati vecchi; analisi completa (esempio precaricato
+ed esempio ISIN, tutti i moduli) con tutte le schede aperte e nessun errore Streamlit. Il contenuto della tabella «Controllo dati» (che è un
+canvas, non testo) si verifica dalla riga di testo associata «Ticker usati: …». Gira nel workflow **Test**. In locale:
+```bash
+pip install -r requirements-e2e.txt
+python -m playwright install chromium
+python -m pytest -q tests/e2e
+```
+Senza Playwright installato questi test vengono saltati (gli altri girano normalmente).
 
 ### Prova automatica su Mac
 A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, GitHub esegue su un Mac Apple Silicon: installazione con `Installa.command`, test, un report di prova e l'avvio dell'app. L'esito (spunta verde o croce rossa) si vede nella scheda **Actions** e accanto all'ultimo commit; il report di prova si scarica dagli *Artifacts* dell'esecuzione.
@@ -331,7 +423,11 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `fonti.py` | fonti dei prezzi (Yahoo, Stooq, BCE), tentativi ripetuti, lettura dei CSV manuali |
 | `dati.py` | cache dei prezzi, conversione in euro, settori |
 | `isin.py` | riconoscimento degli ISIN, cifra di controllo, conversione in ticker (OpenFIGI + ricerca Yahoo), scelta della quotazione, cache |
-| `controllo.py` | «Controllo dati» con semaforo (verde/giallo/rosso) prima della simulazione |
+| `controllo.py` | «Controllo dati» con semaforo (verde/giallo/rosso) prima della simulazione; avviso sui risultati vecchi |
+| `stato_app.py` | copia di sicurezza delle impostazioni dell'app |
+| `ricerca.py` | ricerca dei titoli per nome (Yahoo Finance) |
+| `nomi.py` | confronto tollerante tra nomi (OpenFIGI contro Yahoo, nome atteso) |
+| `importa_broker.py`, `importa_portafoglio.py` | importazione del portafoglio da un CSV del broker (app e riga di comando) |
 | `analisi.py` | rendimenti attesi, periodi A/B/C, esecuzione (anche in parallelo) dei moduli |
 | `simula.py` | motore Monte Carlo (bootstrap a blocchi, Student-t, GARCH, crolli sul singolo titolo) |
 | `metriche.py` | metriche e stress test |
@@ -341,8 +437,8 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `registro.py` | file di log `log.txt` |
 | `configurazioni/` | file di esempio (tre portafogli, core + satellite 80/20, ETF europei, ISIN, prova automatica) |
 | `esempi/` | report di esempio già pronti, verifica della convergenza, file di prezzi di esempio |
-| `strumenti/` | `verifica_convergenza.py` (le simulazioni bastano?) e `verifica_fonti.py` (quali fonti rispondono) |
-| `tests/` | test automatici (`python -m pytest -q tests`), compreso il test di non regressione |
+| `strumenti/` | `verifica_convergenza.py` (le simulazioni bastano?), `verifica_fonti.py` (quali fonti rispondono), `note_release.py` (release automatica) |
+| `tests/` | test automatici (`python -m pytest -q tests`), compreso il test di non regressione; `tests/e2e/` prova nel browser |
 | `docs/immagini/` | immagini del README |
 | `CHANGELOG.md`, `STATO.md` | modifiche tra le versioni e note di sviluppo |
 

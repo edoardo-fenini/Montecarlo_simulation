@@ -4,6 +4,7 @@ Avvio:  streamlit run app.py   (oppure doppio clic su Avvia.command)"""
 from __future__ import annotations
 
 import copy
+import os
 import re
 import time
 
@@ -16,8 +17,11 @@ import configurazione as C
 import controllo
 import dati as D
 import grafici_app as G
+import importa_broker as B
 import registro
 import report
+import ricerca as R
+import stato_app
 from dati import ErroreDati
 
 log = registro.configura()
@@ -191,6 +195,14 @@ if "raw" not in st.session_state:
     applica_cfg(yaml.safe_load(open(ESEMPIO, encoding="utf-8")))
 ss = st.session_state
 
+# copia di sicurezza delle impostazioni: vedi stato_app.py (Streamlit può cancellare lo stato dei widget dopo un errore)
+IMPOSTAZIONI = [
+    "nome", "capitale", "versamento", "orizzonte", "intermedi", "metodo", "rf", "mrp", "uguale", "nsim", "seed", "rib", "costo",
+    "b_nome", "b_ticker", "b_ter", "b_proxy", *(f"mod_{k}" for k in C.DEFAULT["moduli"]),
+]  # fmt: skip
+if ripristinate := stato_app.conserva(ss, IMPOSTAZIONI):
+    log.warning("Impostazioni ripristinate dalla copia di sicurezza: %s", ", ".join(ripristinate))
+
 
 def pesi_uguali() -> None:
     t = ss.tabella_corrente.copy()
@@ -213,9 +225,54 @@ def carica_file() -> None:
         ss.msg_caricamento = ("errore", f"Non riesco a caricare «{f.name}»: {e}")
 
 
+def conferma_broker() -> None:
+    """Aggiunge (o sostituisce, se c'è già un portafoglio con lo stesso nome) il portafoglio dell'anteprima alla tabella."""
+    a = ss.pop("anteprima_broker", None)
+    if not a:
+        return
+    t = ss.tabella_corrente.copy()
+    t = t[t["Portafoglio"].astype(str).str.strip() != a["nome"]]
+    nuove = pd.DataFrame([{"Portafoglio": a["nome"], "Ticker": k, "Peso (%)": v} for k, v in a["ris"]["pesi"].items()])
+    ss.tabella = pd.concat([t, nuove], ignore_index=True)[["Portafoglio", "Ticker", "Peso (%)"]]
+    ss.versione += 1
+    ss.msg_broker = f"Portafoglio «{a['nome']}» aggiunto alla tabella ({len(nuove)} titoli). Ora premi «Controlla i dati»."
+
+
+def aggiungi_da_ricerca(r: dict, portafoglio: str) -> None:
+    """Aggiunge il titolo trovato con la ricerca alla tabella, nel portafoglio indicato (nuovo se non esiste)."""
+    portafoglio = (portafoglio or "").strip() or "Nuovo portafoglio"
+    t = ss.tabella_corrente.copy()
+    stesso = t[t["Portafoglio"].astype(str).str.strip() == portafoglio]
+    if (stesso["Ticker"].astype(str).str.upper() == r["ticker"]).any():
+        ss.msg_ricerca = ("info", f"{r['ticker']} è già nel portafoglio «{portafoglio}».")
+        return
+    nuova = pd.DataFrame([{"Portafoglio": portafoglio, "Ticker": r["ticker"], "Peso (%)": None}])
+    ss.tabella = pd.concat([t, nuova], ignore_index=True)[["Portafoglio", "Ticker", "Peso (%)"]]
+    ss.versione += 1
+    con_pesi = stesso["Peso (%)"].notna().any()
+    ss.msg_ricerca = (
+        "ok",
+        f"Aggiunto {r['nome']} ({r['ticker']}) a «{portafoglio}»."
+        + (" Il portafoglio ha già dei pesi: scrivi il peso del nuovo titolo nella tabella (o premi «Pesi uguali»)." if con_pesi else ""),
+    )
+
+
+def anteprima_broker(f, nome: str) -> None:
+    """Legge il CSV del broker e prepara l'anteprima (scarica l'ultimo prezzo solo per i titoli senza controvalore)."""
+    try:
+        opz = C._unisci(C.DEFAULT, ss.raw)["isin"]
+        with st.spinner("Leggo il file (e cerco gli ultimi prezzi dei titoli senza controvalore)…"):
+            ris = B.calcola(f.getvalue(), B.prezzo_da_archivio(D.Archivio(log=lambda *a: None), opz))
+        ss.anteprima_broker = {"ris": ris, "nome": nome.strip() or "Portafoglio importato", "file": f.name}
+    except (B.ErroreImport, ErroreDati) as e:
+        ss.pop("anteprima_broker", None)
+        st.error(f"Non riesco a importare «{f.name}»: {e}")
+
+
 def carica_esempio() -> None:
     applica_cfg(yaml.safe_load(open(ESEMPIO, encoding="utf-8")))
     ss.pop("ris", None)
+    ss.pop("ris_stato", None)
 
 
 # ------------------------------------------------------------------ rendering dei blocchi del report
@@ -316,6 +373,14 @@ def chiave_dati(tabella: pd.DataFrame) -> str | None:
     return yaml.safe_dump(parti, sort_keys=True, allow_unicode=True)
 
 
+def chiave_completa(tabella: pd.DataFrame) -> str | None:
+    """Impronta di TUTTE le impostazioni (per sapere se i risultati in memoria corrispondono ancora ai controlli). None se non valide."""
+    try:
+        return yaml.safe_dump(cfg_da_stato(tabella), sort_keys=True, allow_unicode=True)
+    except (C.ErroreConfig, yaml.YAMLError):
+        return None
+
+
 def calcola_controllo(grezza: dict, aggiorna: bool):
     """Controlla tutti i titoli (scarica i prezzi mancanti). Ritorna (esito, archivio dei prezzi già aperto)."""
     cfg = C.prepara(copy.deepcopy(grezza))
@@ -356,7 +421,11 @@ def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
             hide_index=True,
             width="stretch",
             column_config={"Dettagli": st.column_config.TextColumn(width="large")},
+            key="tabella_controllo",
         )
+        usati = [f"{r['input']} → {r['ticker']}" for r in e["righe"] if r["ticker"]]
+        if usati:  # la tabella sopra è un canvas: lo stesso contenuto, in testo, per chi usa lo screen reader e per le prove automatiche
+            st.caption("Ticker usati: " + " · ".join(usati), help="Gli stessi dati della tabella, in forma di testo.")
         st.caption("🟢 tutto a posto · 🟡 avviso, si può procedere · 🔴 errore, la simulazione non parte finché non lo correggi.")
         multi = [r for r in e["righe"] if r.get("risoluzione") and len(r["risoluzione"]["quotazioni"]) > 1]
         for r in multi:
@@ -406,8 +475,66 @@ with st.sidebar:
     )
     ss.tabella_corrente = tab
     c1, c2 = st.columns(2)
-    c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch", help="Imposta pesi uguali dentro ogni portafoglio.")
-    c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch", help="Torna ai tre portafogli di esempio.")
+    c1.button("Pesi uguali", on_click=pesi_uguali, width="stretch", key="btn_pesi_uguali", help="Imposta pesi uguali dentro ogni portafoglio.")
+    c2.button("Ricarica esempio", on_click=carica_esempio, width="stretch", key="btn_ricarica_esempio", help="Torna ai tre portafogli di esempio.")
+
+    with st.expander("🔍 Cerca un titolo per nome", expanded=bool(ss.get("risultati_ricerca"))):
+        c1, c2 = st.columns([3, 1])
+        testo_ricerca = c1.text_input(
+            "Nome dell'azienda o dell'ETF", key="ricerca_testo", placeholder="es. Enel, MSCI World, Apple", label_visibility="collapsed"
+        )
+        if c2.button("Cerca", width="stretch", key="btn_cerca", disabled=len(testo_ricerca.strip()) < 2):
+            try:
+                with st.spinner("Cerco su Yahoo Finance…"):
+                    ss.risultati_ricerca = {"testo": testo_ricerca.strip(), "righe": R.cerca(testo_ricerca)}
+            except R.ErroreRicerca as e:
+                ss.risultati_ricerca = None
+                st.error(str(e))
+        if ss.get("msg_ricerca"):
+            tipo_m, testo_m = ss.pop("msg_ricerca")
+            (st.success if tipo_m == "ok" else st.info)(testo_m)
+        rr = ss.get("risultati_ricerca")
+        if rr:
+            if not rr["righe"]:
+                st.info(f"Nessun risultato per «{rr['testo']}». Prova con un altro nome o con l'ISIN.")
+            else:
+                nomi_esistenti = list(dict.fromkeys(str(x).strip() for x in tab["Portafoglio"] if str(x).strip() not in ("", "None")))
+                dest = st.selectbox(
+                    "Aggiungi al portafoglio",
+                    nomi_esistenti + ["➕ Nuovo portafoglio"],
+                    key="ricerca_destinazione",
+                    help="Il titolo viene aggiunto come nuova riga della tabella qui sopra.",
+                )
+                if dest == "➕ Nuovo portafoglio":
+                    dest = st.text_input("Nome del nuovo portafoglio", value="Nuovo portafoglio", key="ricerca_nuovo_nome")
+                st.caption(f"Risultati per «{rr['testo']}» (al massimo {R.MASSIMO}): nome · ticker · ISIN · borsa · valuta · tipo")
+                for i, r in enumerate(rr["righe"]):
+                    c1, c2 = st.columns([5, 1])
+                    c1.markdown(f"<small>{R.etichetta(r)}</small>", unsafe_allow_html=True)
+                    c2.button("➕", key=f"btn_aggiungi_{i}_{r['ticker']}", help=f"Aggiungi {r['ticker']}", on_click=aggiungi_da_ricerca,
+                              args=(r, dest))  # fmt: skip
+
+    with st.expander("📥 Importa il portafoglio dal broker (CSV)", expanded="anteprima_broker" in ss):
+        st.caption(
+            "CSV esportato dal broker con almeno **ISIN (o ticker) e quantità**, oppure **ISIN e controvalore**. Separatore «;» o «,», "
+            "decimali con la virgola o con il punto. I pesi si ricavano dai controvalori (quantità × ultimo prezzo in EUR se manca il "
+            "controvalore). Esempio: esempi/portafoglio_broker_esempio.csv."
+        )
+        f_broker = st.file_uploader("File CSV del broker", type=["csv", "txt"], key="file_broker")
+        nome_broker = st.text_input("Nome del portafoglio", value="Portafoglio importato", key="nome_broker")
+        if st.button("👀 Mostra anteprima", width="stretch", disabled=f_broker is None, key="btn_anteprima_broker"):
+            anteprima_broker(f_broker, nome_broker)
+        if ss.get("msg_broker"):
+            st.success(ss.pop("msg_broker"))
+        a_b = ss.get("anteprima_broker")
+        if a_b:
+            st.markdown(f"**Anteprima di «{a_b['nome']}»** da `{a_b['file']}` · totale {report.eur(a_b['ris']['totale'])}")
+            st.dataframe(B.tabella_anteprima(a_b["ris"]), hide_index=True, width="stretch", key="tabella_anteprima_broker")
+            for x in a_b["ris"]["avvisi"]:
+                st.warning(x)
+            c1, c2 = st.columns(2)
+            c1.button("✅ Conferma e aggiungi", type="primary", width="stretch", on_click=conferma_broker, key="btn_conferma_broker")
+            c2.button("Annulla", width="stretch", on_click=lambda: ss.pop("anteprima_broker", None), key="btn_annulla_broker")
 
     with st.expander("📄 Carica prezzi da file"):
         st.caption(
@@ -426,7 +553,7 @@ with st.sidebar:
         tipo_csv = st.radio(
             "Tipo", ["EQUITY", "ETF"], horizontal=True, key="tipo_csv", format_func=lambda x: "Azione" if x == "EQUITY" else "ETF"
         )
-        if st.button("Importa i prezzi", width="stretch", disabled=f_csv is None or not t_csv.strip()):
+        if st.button("Importa i prezzi", width="stretch", key="btn_importa_prezzi", disabled=f_csv is None or not t_csv.strip()):
             try:
                 s_imp = D.Archivio(log=lambda *a: None).importa_csv(t_csv, f_csv.getvalue(), v_csv, tipo_csv)
                 st.success(
@@ -470,16 +597,17 @@ with st.sidebar:
         st.selectbox("Ribilanciamento", list(C.RIBILANCIAMENTO_MESI), key="rib", help=AIUTO["rib"])
         st.number_input("Costo di ribilanciamento (%)", min_value=0.0, max_value=5.0, step=0.05, key="costo", help=AIUTO["costo"])
         st.number_input("Seed", min_value=0, step=1, key="seed", help=AIUTO["seed"])
-    aggiorna = st.checkbox("Aggiorna i dati (riscarica i prezzi)", value=False, help=AIUTO["aggiorna"])
+    aggiorna = st.checkbox("Aggiorna i dati (riscarica i prezzi)", value=False, help=AIUTO["aggiorna"], key="aggiorna_dati")
     chiave_attuale = chiave_dati(tab)
     cc = ss.get("controllo")
     bloccato = bool(cc and chiave_attuale is not None and cc["chiave"] == chiave_attuale and cc["esito"]["blocca"])
     controlla = st.button(
         "🔎 Controlla i dati",
         width="stretch",
+        key="btn_controlla",
         help="Verifica tutti i titoli (anche gli ISIN) prima di simulare: esistenza, storia, prezzi recenti, buchi nei dati.",
     )
-    avvia = st.button("▶ Avvia simulazione", type="primary", width="stretch", disabled=bloccato)
+    avvia = st.button("▶ Avvia simulazione", type="primary", width="stretch", disabled=bloccato, key="btn_avvia")
     if bloccato:
         da_correggere = ", ".join(r["input"] for r in cc["esito"]["righe"] if r["esito"] == controllo.ROSSO)
         st.error(
@@ -500,6 +628,7 @@ with st.sidebar:
             file_name=f"{(ss.nome or 'confronto').replace(' ', '_')}.yaml",
             mime="text/yaml",
             width="stretch",
+            key="dl_configurazione",
         )
     st.file_uploader("Carica una configurazione salvata", type=["yaml", "yml"], key="file_cfg", on_change=carica_file)
     if ss.get("msg_caricamento"):
@@ -529,6 +658,8 @@ def mmss(secondi: float) -> str:
 
 def esegui_simulazione(contenitore) -> None:
     ss.pop("ris", None)
+    ss.pop("ris_stato", None)
+    ss.pop("mostra_vecchi", None)
     t0 = time.time()
     barra = contenitore.progress(0.0, text="Preparo la simulazione…")
 
@@ -570,6 +701,7 @@ def esegui_simulazione(contenitore) -> None:
         barra.progress(1.0, text="Preparo il report…")
         S = report.sezioni(ris)
         ss.ris, ss.sezioni = ris, S
+        ss.ris_stato = {"chiave": chiave_completa(tab), "dati": D.Archivio(log=lambda *a: None).ultimo_aggiornamento()}
         ss.html = report.html_report(ris, S)
         ss.pdf = report.pdf_report(ris, S)
         ss.xlsx = report.excel_report(ris)
@@ -665,7 +797,7 @@ def mostra_salvate() -> None:
             for r in elenco
         ]
     )
-    st.dataframe(tab_el, hide_index=True, width="stretch")
+    st.dataframe(tab_el, hide_index=True, width="stretch", key="salvate_elenco")
     etichette = [f"{r['creato'].replace('T', ' ')[:16]} – {r['nome']}" for r in elenco]
     st.subheader("Apri un'analisi")
     scelta = st.selectbox("Analisi", range(len(elenco)), format_func=lambda i: etichette[i], key="salvata_scelta")
@@ -682,7 +814,7 @@ def mostra_salvate() -> None:
     ):
         percorso = f"{r['cartella']}/{file}"
         try:
-            col.download_button(et, open(percorso, "rb").read(), file_name=file, mime=mime, width="stretch", key=f"dl_{scelta}_{file}")
+            col.download_button(et, open(percorso, "rb").read(), file_name=file, mime=mime, width="stretch", key=f"dl_salvata_{os.path.basename(r['cartella'])}_{file}")
         except OSError:
             col.caption(f"{file} non disponibile")
     if st.toggle("Mostra il report qui", key="salvata_mostra"):
@@ -723,6 +855,7 @@ def mostra_salvate() -> None:
                     ),
                     hide_index=True,
                     width="stretch",
+                    key=f"salvate_confronto_{os.path.basename(ri['cartella'])}",
                 )
         a1, a2 = (elenco[i] for i in due)
         comuni = [p["nome"] for p in a1["portafogli"] if p["nome"] in {q["nome"] for q in a2["portafogli"]}]
@@ -744,6 +877,7 @@ def mostra_salvate() -> None:
                 ),
                 hide_index=True,
                 width="stretch",
+                key="salvate_differenze",
             )
 
 
@@ -775,7 +909,11 @@ with scheda_sim:
             + f" — {report.eur(ss.capitale)} iniziali, {ss.orizzonte} anni, {report.num_it(int(ss.nsim))} simulazioni."
         )
         st.button(
-            "▶ Avvia la simulazione con queste impostazioni", type="primary", on_click=lambda: ss.update(avvia_ora=True), disabled=bloccato
+            "▶ Avvia la simulazione con queste impostazioni",
+            type="primary",
+            on_click=lambda: ss.update(avvia_ora=True),
+            disabled=bloccato,
+            key="btn_avvia_pagina_iniziale",
         )
         st.caption("Questo strumento non è consulenza finanziaria.")
 
@@ -794,21 +932,37 @@ with scheda_sim:
     if avvia:
         esegui_simulazione(zona_messaggi)
 
+    motivo_vecchi = None
+    if "ris" in ss:
+        motivo_vecchi = controllo.motivo_risultati_vecchi(
+            ss.get("ris_stato"),
+            chiave_completa(tab),
+            D.Archivio(log=lambda *a: None).ultimo_aggiornamento(),
+            ss.get("controllo"),
+            chiave_attuale,
+        )
     pannello_controllo(chiave_attuale, "ris" in ss)
 
-    if "ris" in ss:
+    if motivo_vecchi:
+        st.error(f"### ⚠️ {controllo.AVVISO_RISULTATI_VECCHI}\n\nMotivo: {motivo_vecchi}.", icon="⚠️")
+        st.toggle("Mostra comunque i vecchi risultati", key="mostra_vecchi", help="Solo per consultarli: non rispecchiano le impostazioni attuali.")
+
+    if "ris" in ss and (not motivo_vecchi or ss.get("mostra_vecchi")):
         ris, S = ss.ris, ss.sezioni
         st.caption("📅 " + report.intestazione(ris))
         c1, c2, c3, _ = st.columns([1, 1, 1, 2])
         nome_file = f"report_{(ris['cfg']['nome'] or 'confronto').replace(' ', '_')}"
-        c1.download_button("⬇️ Report HTML", ss.html, file_name=f"{nome_file}.html", mime="text/html", width="stretch")
-        c2.download_button("⬇️ Report PDF", ss.pdf, file_name=f"{nome_file}.pdf", mime="application/pdf", width="stretch")
+        c1.download_button("⬇️ Report HTML", ss.html, file_name=f"{nome_file}.html", mime="text/html", width="stretch", key="dl_report_html")
+        c2.download_button(
+            "⬇️ Report PDF", ss.pdf, file_name=f"{nome_file}.pdf", mime="application/pdf", width="stretch", key="dl_report_pdf"
+        )
         c3.download_button(
             "⬇️ Excel",
             ss.xlsx,
             file_name=f"{nome_file}.xlsx",
             width="stretch",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_report_excel",
         )
         if ss.get("cartella"):
             st.caption(f"Analisi salvata in `{ss.cartella}`: la ritrovi nella scheda «Analisi salvate».")
@@ -835,15 +989,15 @@ with scheda_sim:
                         "Passa il mouse sul grafico per leggere mediana, 5° e 95° percentile di ogni anno; clicca su un nome nella "
                         "legenda per nasconderlo. La zona rossa è sotto il capitale investito."
                     )
-                    fasce = st.toggle("Mostra le fasce 5°–95°", value=True)
+                    fasce = st.toggle("Mostra le fasce 5°–95°", value=True, key="fan_fasce")
                     for a in anal:
                         st.subheader(report.NOME_ANALISI[a])
-                        st.plotly_chart(G.fan_chart(ris, a, fasce), width="stretch", theme="streamlit")
+                        st.plotly_chart(G.fan_chart(ris, a, fasce), width="stretch", theme="streamlit", key=f"fan_{a}")
                         st.caption("💡 " + report.didascalia_fan(ris, a))
                 elif nome == "Drawdown":
                     for a in anal:
                         st.subheader(f"{report.NOME_ANALISI[a]}: calo massimo nei {ris['cfg']['orizzonte_anni']} anni")
-                        st.plotly_chart(G.istogramma_mdd(ris, a), width="stretch", theme="streamlit")
+                        st.plotly_chart(G.istogramma_mdd(ris, a), width="stretch", theme="streamlit", key=f"mdd_{a}")
                     st.caption("💡 " + report.didascalia_mdd(ris))
                     mostra_blocchi(senza_immagini(blocchi))
                 elif blocchi:

@@ -26,6 +26,7 @@ import pandas as pd
 import configurazione as C
 import fonti
 from dati import ErroreDati
+from nomi import parole, somiglianza_nomi
 
 log = logging.getLogger("confronta")
 
@@ -33,6 +34,7 @@ FILE_CACHE = "isin_ticker.json"
 URL_OPENFIGI = "https://api.openfigi.com/v3/mapping"
 PREFERENZE_DEFAULT = ["EUR", ".MI", ".DE", ".AS"]
 VOLUME_MINIMO_RELATIVO = 0.02  # sotto il 2% del volume della quotazione più scambiata = poco liquida (in fondo)
+SOMIGLIANZA_NOMI_MIN = 0.4  # sotto questa somiglianza il nome di OpenFIGI e quello di Yahoo sono «molto diversi»
 GIORNI_ATTIVA = 30  # una quotazione senza scambi da più di 30 giorni è considerata non attiva (messa in fondo)
 
 ISIN_RE = re.compile(r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$")
@@ -140,8 +142,9 @@ def _pulisci_ticker(t: str) -> str | None:
     return t if re.fullmatch(r"[A-Z0-9][A-Z0-9\-]*", t) else None
 
 
-def candidati_openfigi(isin: str, http=None, chiave: str | None = None) -> list[dict]:
-    """Quotazioni dell'ISIN secondo OpenFIGI, già convertite in ticker Yahoo (senza verificarle)."""
+def candidati_openfigi(isin: str, http=None, chiave: str | None = None, non_mappate: list | None = None) -> list[dict]:
+    """Quotazioni dell'ISIN secondo OpenFIGI, già convertite in ticker Yahoo (senza verificarle). Le quotazioni su borse di cui non
+    conosco il suffisso Yahoo non sono utilizzabili: se si passa una lista in `non_mappate` ci si aggiungono {'borsa', 'ticker', 'nome'}."""
     http = http or _http
     chiave = chiave or os.environ.get("OPENFIGI_API_KEY") or None
     intest = {"Content-Type": "application/json", **({"X-OPENFIGI-APIKEY": chiave} if chiave else {})}
@@ -157,7 +160,11 @@ def candidati_openfigi(isin: str, http=None, chiave: str | None = None) -> list[
     for x in dati:
         suff = SUFFISSI_YAHOO.get(x.get("exchCode"))
         tk = _pulisci_ticker(x.get("ticker"))
-        if suff is None or not tk:
+        if suff is None:
+            if non_mappate is not None and x.get("exchCode") and not any(n["borsa"] == x["exchCode"] for n in non_mappate):
+                non_mappate.append({"borsa": x["exchCode"], "ticker": x.get("ticker") or "", "nome": x.get("name") or ""})
+            continue
+        if not tk:
             continue
         yt = tk + suff
         if yt not in visti:
@@ -179,7 +186,7 @@ def candidati_yahoo_ricerca(isin: str, ricerca=None) -> list[dict]:
         quotes = ricerca(isin) or []
     except Exception as e:  # yfinance solleva tipi diversi (rete, limiti, formato)
         raise fonti.ErroreRete(str(e)) from e
-    return [{"ticker": q["symbol"].upper(), "nome_figi": q.get("longname") or q.get("shortname") or ""} for q in quotes if q.get("symbol")]
+    return [{"ticker": q["symbol"].upper(), "nome_ricerca": q.get("longname") or q.get("shortname") or ""} for q in quotes if q.get("symbol")]
 
 
 def ispeziona_ticker(ticker: str, http=None, ispettore=None) -> dict | None:
@@ -275,7 +282,9 @@ def _verifica(cand: list[dict], oggi: datetime.date, http, ispettore, massimo: i
         out.append(
             {
                 "ticker": c["ticker"],
-                "nome": m.get("nome") or c.get("nome_figi") or "",
+                "nome": m.get("nome") or c.get("nome_figi") or c.get("nome_ricerca") or "",
+                "nome_yahoo": m.get("nome") or "",
+                "nome_figi": c.get("nome_figi") or "",
                 "borsa": m.get("borsa") or "",
                 "valuta": m.get("valuta") or "",
                 "tipo": m.get("tipo") or "",
@@ -295,13 +304,25 @@ def _corrisponde(q: dict, pref: str) -> bool:
     return (q.get("valuta") or "").upper() == pref.upper()
 
 
+def nome_discordante(q: dict, somiglianza_min: float | None = SOMIGLIANZA_NOMI_MIN) -> bool:
+    """True se il nome di OpenFIGI e quello di Yahoo (entrambi noti) sono molto diversi. Senza uno dei due nomi: False (nulla da confrontare)."""
+    if somiglianza_min is None or not parole(q.get("nome_figi")) or not parole(q.get("nome_yahoo")):
+        return False  # manca un nome (o resta solo «ETF», «Inc», ...): niente da confrontare
+    return somiglianza_nomi(q["nome_figi"], q["nome_yahoo"]) < somiglianza_min
+
+
 def ordina_quotazioni(
-    quotazioni: list[dict], preferenze=None, oggi: datetime.date | None = None, volume_minimo_relativo: float = VOLUME_MINIMO_RELATIVO
+    quotazioni: list[dict],
+    preferenze=None,
+    oggi: datetime.date | None = None,
+    volume_minimo_relativo: float = VOLUME_MINIMO_RELATIVO,
+    somiglianza_min: float | None = SOMIGLIANZA_NOMI_MIN,
 ) -> list[dict]:
     """Ordina dalla più alla meno preferita. Regola: prima le quotazioni attive (scambi negli ultimi 30 giorni) e abbastanza
     liquide (volume medio almeno il 2% di quello della quotazione più scambiata: evita borse minori con pochi scambi); poi, nell'ordine,
     quelle che soddisfano la 1ª preferenza (default EUR), tra queste la 2ª (.MI), la 3ª (.DE), la 4ª (.AS), poi tutte le altre;
-    a parità, più anni di storia (interi) e poi più volumi medi."""
+    a parità, più anni di storia (interi) e poi più volumi medi. Le quotazioni il cui nome Yahoo è molto diverso da quello di OpenFIGI
+    (`nome_discordante`) vanno dopo tutte le altre: si prova la successiva (`somiglianza_min=None` spegne questo controllo)."""
     preferenze = list(preferenze or PREFERENZE_DEFAULT)
     oggi = oggi or datetime.date.today()
 
@@ -318,6 +339,7 @@ def ordina_quotazioni(
 
     def chiave(q):
         return (
+            nome_discordante(q, somiglianza_min),
             not attiva(q),
             not liquida(q),
             *(not _corrisponde(q, p) for p in preferenze),
@@ -358,14 +380,18 @@ def _scrivi_cache(cartella: str, cache: dict) -> None:
 
 # ------------------------------------------------------------------ conversione
 def cerca_quotazioni(
-    isin, http=None, chiave=None, massimo=12, oggi=None, ricerca=None, ispettore=None, preferenze=None
+    isin, http=None, chiave=None, massimo=12, oggi=None, ricerca=None, ispettore=None, preferenze=None, extra: dict | None = None
 ) -> tuple[list[dict], str]:
     """Tutte le quotazioni Yahoo trovate per l'ISIN e il metodo usato ('OpenFIGI' o 'Ricerca Yahoo Finance').
-    Solleva ErroreIsin se non ne trova nessuna."""
+    Solleva ErroreIsin se non ne trova nessuna. Se si passa un dizionario in `extra`, vi si scrive `borse_non_mappate`: le quotazioni
+    elencate da OpenFIGI su borse di cui non conosco il suffisso Yahoo (non utilizzabili, ma da segnalare)."""
     oggi = oggi or datetime.date.today()
     errori = []
+    non_mappate: list[dict] = []
+    if extra is not None:
+        extra["borse_non_mappate"] = non_mappate
     for metodo, fonte in (
-        ("OpenFIGI", lambda: candidati_openfigi(isin, http, chiave)),
+        ("OpenFIGI", lambda: candidati_openfigi(isin, http, chiave, non_mappate)),
         ("Ricerca Yahoo Finance", lambda: candidati_yahoo_ricerca(isin, ricerca)),
     ):
         try:
@@ -410,9 +436,11 @@ def risolvi(
     oggi=None,
     ricerca=None,
     ispettore=None,
+    somiglianza_min: float | None = SOMIGLIANZA_NOMI_MIN,
 ) -> dict:
-    """ISIN -> {'isin', 'ticker' (scelto), 'quotazioni' (ordinate), 'metodo', 'scelta_utente'}.
-    `scelta`: ticker imposto dall'utente (menu dell'app o `isin_scelte` in configurazione). Usa la cache su disco."""
+    """ISIN -> {'isin', 'ticker' (scelto), 'quotazioni' (ordinate), 'metodo', 'scelta_utente', 'avvisi_nome', 'borse_non_mappate'}.
+    `scelta`: ticker imposto dall'utente (menu dell'app o `isin_scelte` in configurazione). Usa la cache su disco.
+    `avvisi_nome`: frasi (da mostrare in GIALLO) sulle quotazioni il cui nome Yahoo è molto diverso da quello di OpenFIGI."""
     tipo, isin = riconosci(isin)
     if tipo == "isin_errato":
         raise ErroreIsin(f"«{isin}» sembra un ISIN ma la cifra di controllo non torna: c'è un errore di battitura. Ricontrolla il codice.")
@@ -421,15 +449,35 @@ def risolvi(
     cache = _leggi_cache(cartella)
     voce = cache.get(isin)
     if not voce or aggiorna:
-        quote, metodo = cerca_quotazioni(isin, http, chiave, massimo, oggi, ricerca, ispettore, preferenze)
-        voce = {"metodo": metodo, "aggiornato": (oggi or datetime.date.today()).isoformat(), "quotazioni": quote}
+        extra: dict = {}
+        quote, metodo = cerca_quotazioni(isin, http, chiave, massimo, oggi, ricerca, ispettore, preferenze, extra)
+        voce = {
+            "metodo": metodo,
+            "aggiornato": (oggi or datetime.date.today()).isoformat(),
+            "quotazioni": quote,
+            "borse_non_mappate": extra.get("borse_non_mappate", []),
+        }
         cache[isin] = voce
         _scrivi_cache(cartella, cache)
         da_cache = False
     else:
         da_cache = True
-    ordinate = ordina_quotazioni(voce["quotazioni"], preferenze, oggi)
+    ordinate = ordina_quotazioni(voce["quotazioni"], preferenze, oggi, somiglianza_min=somiglianza_min)
     ticker = (scelta or "").strip().upper() or ordinate[0]["ticker"]
+    # senza il confronto dei nomi, quale quotazione avrei scelto? Se è diversa, l'ho scartata perché il nome non torna
+    prima = ordina_quotazioni(voce["quotazioni"], preferenze, oggi, somiglianza_min=None)[0]
+    avvisi_nome = []
+    if not scelta and prima["ticker"] != ticker and nome_discordante(prima, somiglianza_min):
+        avvisi_nome.append(
+            f"quotazione {prima['ticker']} scartata: il nome di OpenFIGI («{prima['nome_figi']}») è molto diverso da quello di Yahoo "
+            f"(«{prima['nome_yahoo']}»); uso {ticker}"
+        )
+    scelta_q = next((q for q in ordinate if q["ticker"] == ticker), None)
+    if scelta_q and nome_discordante(scelta_q, somiglianza_min):
+        avvisi_nome.append(
+            f"il nome di OpenFIGI («{scelta_q['nome_figi']}») è molto diverso da quello di Yahoo («{scelta_q['nome_yahoo']}») "
+            f"per {ticker}: verifica che sia il titolo giusto"
+        )
     return {
         "isin": isin,
         "ticker": ticker,
@@ -437,6 +485,8 @@ def risolvi(
         "metodo": ("cache (" + voce["metodo"] + ")") if da_cache else voce["metodo"],
         "scelta_utente": bool(scelta),
         "predefinito": ordinate[0]["ticker"],
+        "avvisi_nome": avvisi_nome,
+        "borse_non_mappate": voce.get("borse_non_mappate", []),
     }
 
 
@@ -476,6 +526,7 @@ def risolvi_configurazione(cfg: dict, cartella: str, aggiorna=False, http=None, 
             oggi,
             ricerca,
             ispettore,
+            cfg["controllo_dati"]["somiglianza_nome_min"],
         )
     return applica_mappa(cfg, {i: r["ticker"] for i, r in ris.items()}), ris
 

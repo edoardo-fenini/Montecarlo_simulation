@@ -89,6 +89,44 @@ Scelte fatte (annotate, senza chiedere):
 - [ ] Ramo predefinito: impostare `main` dal sito (Settings → General → Default branch) se non è già così.
 - Non provato: la chiave OpenFIGI (indicato nei limiti noti delle note di rilascio).
 
+## Versione 1.3 (ramo `v1.3`): consolidamento (4 novembre 2026)
+Scelte annotate: il ramo è `v1.3` come chiesto (il ramo di sessione `claude/sharp-lovelace-fc6742` non è usato). Il «report progresso,
+debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
+- [x] 0. **Correzione prioritaria (richiesta a metà lavoro): StreamlitDuplicateElementId a fine analisi.** Riprodotto sulla 1.2 (commit 4da7e8b)
+      con AppTest e dati finti brevi (1.300 giorni), esempio precaricato ed esempio ISIN, tutti i moduli: l'analisi B coincide con la A e
+      `fan_chart(A) == fan_chart(B)` → stesso ID automatico. Sulla 1.3: nessuna eccezione con entrambi gli esempi. Key univoche e stabili a tutti
+      gli elementi con ID (inventario in CHANGELOG); test AST che lo impone. La prova Playwright che completa un'analisi e apre tutte le schede è
+      nel commit della tappa 4 (serve l'infrastruttura e2e); verificato che FALLISCE sulla 1.2 e passa sulla 1.3.
+      Non verificato: il messaggio esatto sul Mac dell'utente (non disponibile); la causa trovata è l'unica che produce questo errore nell'app.
+- [x] 1. Risultati vecchi: `controllo.motivo_risultati_vecchi` + avviso e nascondimento in `app.py` (impronta di tutte le impostazioni
+      + data della cache dei prezzi, registrate a fine simulazione; controllo rosso sui titoli attuali). 4 nuovi test. 116 test verdi.
+- [x] 2. Controllo incrociato dei nomi: `nomi.py` (confronto tollerante, accenti e punti tolti, somiglianza dei caratteri solo per nomi lunghi),
+      `isin.nome_discordante`, quotazioni discordanti in fondo all'ordine (si prova la successiva), `avvisi_nome` → GIALLO; borse OpenFIGI non
+      mappate → `borse_non_mappate` (cache) → «info» nel Dettagli. Scelta: l'ordine mette i nomi discordanti PRIMA di ogni altra regola; se manca
+      uno dei due nomi (o resta solo «ETF», «Inc»…) non si confronta. Nei test vecchi il nome OpenFIGI finto «X» è diventato realistico.
+- [x] 3. Release automatica: `.github/workflows/release.yml` (tag `vX.Y.Z` o avvio manuale con la versione; test → zip → release con note da
+      CHANGELOG → zip), `strumenti/note_release.py` + `tests/test_release.py`. Tag vecchi (`V_1.0.1`, `V_1.1.0`, `V_1.2.0`, `prova`) intatti. Scelta:
+      il sito di GitHub non crea un tag da solo, quindi il metodo A è «Actions → Release → Run workflow» (crea tag e release); il push del tag dal
+      terminale e il pulsante delle release funzionano uguale. `zip-release.yml` tenuto per le release create a mano.
+- [x] 4. Prova nel browser: `tests/e2e/` (conftest avvia Streamlit su porta libera in una cartella temporanea con `app_finta.py`; Chromium di
+      Playwright, ripiego su /opt/pw-browsers in questa sessione), 5 prove (2 percorsi + analisi completa ×2 esempi + apertura). Falso FAIL
+      del canvas: verificato il testo associato «Ticker usati: …» aggiunto all'app. Menu delle quotazioni: si scrive nella ricerca e si preme
+      Invio (il clic sulle opzioni BaseWeb non è affidabile). Workflow `test.yml`: installa Playwright + Chromium. Tempo locale: ~5 min.
+- [x] 5. Importazione da CSV del broker: `importa_broker.py` (lettura, colonne IT/EN, numeri, pesi), `importa_portafoglio.py` (CLI con
+      anteprima e conferma), riquadro nell'app con anteprima → conferma. Scelte: una sola virgola = decimale; il controvalore del file è
+      considerato in EUR; colonne «di carico/costo/medio…» escluse; il portafoglio importato sostituisce uno con lo stesso nome; il prezzo
+      del file non è usato (valuta ignota): per le righe senza controvalore si usa l'ultimo prezzo Yahoo in EUR. 26 test + prova nel browser.
+- [x] 6. Ricerca per nome: `ricerca.py` (yfinance.Search, filtro tipi, max 10, valuta letta dai dati del ticker in parallelo perché la
+      ricerca non la dà), riquadro nell'app con ➕ per riga e portafoglio di destinazione. Provata dal vivo (4/11/2026): «MSCI World» →
+      IWDA.AS, EUNL.DE, URTH…; «IE00B4L5Y983» → IWDA.L con ISIN. Scelta: ISIN mostrato solo se cercato (Yahoo non lo restituisce); un titolo
+      già presente nel portafoglio non viene duplicato; il peso del nuovo titolo resta vuoto. 7 test + prova nel browser.
+- [x] Correzione emersa in CI sulla pull request 3: in un'esecuzione di «Test» la prova della ricerca ha trovato le impostazioni azzerate
+      (capitale 0, orizzonte 1). Causa: Streamlit, quando un'esecuzione termina con un'eccezione, cancella lo stato dei widget non disegnati
+      (`script_runner.py`, `remove_stale_widgets`). Non riprodotto in locale (5/5 verdi). Correzione difensiva: `stato_app.conserva` (copia di
+      sicurezza delle impostazioni ripristinata a ogni esecuzione) + test; la prova nel browser ora riporta nel riepilogo gli errori del log di Streamlit.
+- [x] 7. Chiusura: RELEASE_NOTES v1.3.0, README (novità, aggiornamento), user-agent 1.3, report `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
+      198 test verdi in locale (5 min di app + 3 min di browser), non regressione identica. Pull request, merge e tag: vedi sotto.
+
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
       modulo «Le simulazioni bastano?» (attivo, 3 seed); test sul numero di percorsi.

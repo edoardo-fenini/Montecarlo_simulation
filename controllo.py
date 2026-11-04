@@ -10,22 +10,16 @@ Le soglie sono in configurazione (`controllo_dati`)."""
 from __future__ import annotations
 
 import datetime
-import difflib
-import re
 
 import pandas as pd
 
 import dati as D
 import isin as I
 from dati import ErroreDati
+from nomi import somiglianza_nomi
 
 VERDE, GIALLO, ROSSO = "VERDE", "GIALLO", "ROSSO"
 SEMAFORO = {VERDE: "🟢", GIALLO: "🟡", ROSSO: "🔴"}
-PAROLE_VUOTE = {
-    "inc", "corp", "corporation", "co", "company", "spa", "sa", "ag", "se", "nv", "plc", "ltd", "limited", "group", "holdings",
-    "holding", "the", "ucits", "etf", "acc", "dist", "usd", "eur", "ord", "ordinary", "shares", "share", "class", "a", "c", "de",
-    "di", "and", "&", "adr",
-}  # fmt: skip
 COLONNE_TABELLA = [
     "Esito", "Input", "ISIN", "Ticker usato", "Nome", "Borsa", "Valuta", "Fonte", "Prima data", "Ultima data", "Anni di storia",
     "% giorni mancanti", "Ultimo prezzo", "Dettagli",
@@ -40,23 +34,32 @@ def _data(d):
     return "" if d is None else pd.Timestamp(d).strftime("%d/%m/%Y")
 
 
+# ------------------------------------------------------------------ risultati vecchi
+AVVISO_RISULTATI_VECCHI = "Questi risultati non corrispondono più ai dati attuali: rilancia la simulazione."
+
+
+def motivo_risultati_vecchi(
+    stato: dict | None,
+    chiave_attuale: str | None,
+    dati_attuali: float,
+    controllo_app: dict | None = None,
+    chiave_dati_attuale: str | None = None,
+) -> str | None:
+    """None se i risultati in memoria sono ancora validi, altrimenti il motivo (in italiano) per cui vanno nascosti.
+    `stato` = {'chiave': impronta di tutte le impostazioni, 'dati': data di modifica della cache dei prezzi} registrato a fine simulazione.
+    `controllo_app` = ultimo controllo dei dati ({'chiave', 'esito'}); conta solo se riguarda i titoli attuali (`chiave_dati_attuale`)."""
+    if not stato:
+        return None
+    if controllo_app and controllo_app.get("chiave") == chiave_dati_attuale and controllo_app["esito"]["blocca"]:
+        return "il controllo dei dati è rosso: ci sono titoli con un errore"
+    if chiave_attuale is None or chiave_attuale != stato["chiave"]:
+        return "dopo la simulazione hai cambiato titoli, pesi o impostazioni"
+    if dati_attuali > stato["dati"]:
+        return "i prezzi in cache sono stati aggiornati dopo la simulazione"
+    return None
+
+
 # ------------------------------------------------------------------ nome atteso
-def _parole(testo: str) -> set[str]:
-    return {p for p in re.findall(r"[a-z0-9]+", str(testo).lower()) if p not in PAROLE_VUOTE}
-
-
-def somiglianza_nomi(atteso: str, trovato: str) -> float:
-    """0-1: quanto il nome trovato assomiglia a quello atteso (parole in comune, tollerante su sigle e forme legali)."""
-    a, b = _parole(atteso), _parole(trovato)
-    if not a or not b:
-        return 0.0
-    comuni = len(a & b) / min(len(a), len(b))
-    ra = difflib.SequenceMatcher(None, " ".join(sorted(a)), " ".join(sorted(b))).ratio()
-    # un nome atteso abbreviato (es. «Apple») deve comparire come prefisso di una parola del nome trovato
-    prefisso = 1.0 if all(any(w.startswith(p) for w in b) for p in a) else 0.0
-    return max(comuni, ra, prefisso)
-
-
 # ------------------------------------------------------------------ giorni mancanti
 def giorni_mancanti(serie: dict[str, pd.Series]) -> dict[str, float]:
     """Quota di giorni di borsa senza prezzo, per titolo, tra la prima e l'ultima data del titolo. Il calendario di riferimento è
@@ -98,7 +101,7 @@ def _riga_vuota(inp: str, ruolo: str) -> dict:
     return {
         "input": inp, "ruolo": ruolo, "isin": "", "ticker": "", "nome": "", "borsa": "", "valuta": "", "fonte": "", "primo": None,
         "ultimo": None, "anni": None, "mancanti": None, "ultimo_prezzo": None, "esito": VERDE, "rossi": [], "gialli": [],
-        "trovato": False, "risoluzione": None,
+        "trovato": False, "risoluzione": None, "info": [],
     }  # fmt: skip
 
 
@@ -123,10 +126,14 @@ def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, ht
             try:
                 ris = I.risolvi(
                     codice, arch.dir, opz["preferenze"], cfg["isin_scelte"].get(codice), arch.aggiorna, http, opz.get("openfigi_chiave"),
-                    opz["max_quotazioni"], oggi, ricerca, ispettore,
+                    opz["max_quotazioni"], oggi, ricerca, ispettore, soglie["somiglianza_nome_min"],
                 )  # fmt: skip
                 r["risoluzione"], r["ticker"] = ris, ris["ticker"]
                 mappa[codice] = ris["ticker"]
+                r["nome_figi_avvisi"] = ris.get("avvisi_nome", [])
+                if ris.get("borse_non_mappate"):
+                    elenco_b = ", ".join(f"{b['borsa']} ({b['ticker']})" if b.get("ticker") else b["borsa"] for b in ris["borse_non_mappate"])
+                    r["info"].append(f"OpenFIGI elenca quotazioni su borse non mappate, ignorate: {elenco_b}")
             except ErroreDati as e:
                 r["ticker"] = ""
                 r["rossi"].append(str(e))
@@ -192,6 +199,7 @@ def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, ht
                 f"{len(estremi)} movimenti giornalieri oltre ±{_it(soglie['movimento_estremo'] * 100, 0)}% "
                 f"(il maggiore {estremi[peggiore]:+.0%} il {_data(peggiore)})"
             )
+        r["gialli"] += r.pop("nome_figi_avvisi", [])
         atteso = next((cfg["nomi_attesi"][k] for k in (I.normalizza(r["input"]), r["ticker"], r["isin"]) if k in cfg["nomi_attesi"]), None)
         if atteso and not r["nome"]:
             r["gialli"].append(f"non trovo il nome del titolo per confrontarlo con quello atteso («{atteso}»)")
@@ -231,7 +239,8 @@ def costruisci_esito(righe: list[dict], cfg: dict) -> dict:
 # ------------------------------------------------------------------ presentazione
 def dettagli(r: dict) -> str:
     parti = [f"ERRORE: {x}" for x in r["rossi"]] + [f"avviso: {x}" for x in r["gialli"]]
-    return "; ".join(parti) if parti else "tutto a posto"
+    info = [f"info: {x}" for x in r.get("info", [])]
+    return "; ".join(parti + info) if parti or info else "tutto a posto"
 
 
 def tabella(righe: list[dict], emoji: bool = True) -> pd.DataFrame:
@@ -265,7 +274,7 @@ def testo_tabella(esito: dict) -> str:
     t = tabella(esito["righe"], emoji=False)[["Esito", "Input", "Ticker usato", "Nome", "Borsa", "Valuta", "Anni di storia", "Ultima data"]]
     t["Nome"] = t["Nome"].str.slice(0, 28)
     corpo = t.to_string(index=False)
-    note = [f"  {r['input']}: {dettagli(r)}" for r in esito["righe"] if r["esito"] != VERDE]
+    note = [f"  {r['input']}: {dettagli(r)}" for r in esito["righe"] if r["esito"] != VERDE or r.get("info")]
     return f"Controllo dati: {esito['riepilogo']}\n{corpo}" + ("\n" + "\n".join(note) if note else "")
 
 
@@ -280,4 +289,4 @@ def per_report(esito: dict) -> dict:
     }
 
 
-__all__ = ["controlla", "tabella", "testo_tabella", "per_report", "somiglianza_nomi", "giorni_mancanti"]
+__all__ = ["motivo_risultati_vecchi", "AVVISO_RISULTATI_VECCHI", "controlla", "tabella", "testo_tabella", "per_report", "somiglianza_nomi", "giorni_mancanti"]

@@ -1,5 +1,71 @@
 # Registro delle modifiche
 
+## 1.3.0 (4 novembre 2026)
+
+Versione di consolidamento. Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di
+non regressione (1.236 numeri chiave) è rimasto identico.
+
+### Correzione di bug (prioritaria): l'app si fermava a fine analisi con `StreamlitDuplicateElementId`
+- **Causa**: quando l'analisi B copre lo stesso periodo dell'analisi A (nessun titolo ha una storia più lunga del periodo comune), i due
+  fan chart e i due istogrammi dei cali sono identici; Streamlit dava loro lo stesso ID automatico e interrompeva l'app subito dopo la
+  simulazione. Riprodotto sulla 1.2 con l'esempio precaricato e con l'esempio ISIN, tutti i moduli attivi.
+- **Correzione**: ogni elemento Streamlit che riceve un ID (grafici Plotly, tabelle, pulsanti di download, pulsanti, menu, interruttori,
+  caselle) ha ora una `key` univoca e stabile: fan chart e cali per analisi (`fan_A`, `mdd_B` …), i tre download del report, il download
+  della configurazione, la tabella del controllo dati, le tabelle e i download delle «Analisi salvate» (key dal nome della cartella, non
+  dalla posizione nell'elenco), i pulsanti della barra laterale e della pagina iniziale, la casella «Aggiorna i dati».
+- **Test**: simulazione completa nell'app con tutti i moduli per entrambi gli esempi (`tests/test_app_simulazione_completa.py`) e un
+  controllo automatico che nessun elemento con ID resti senza `key` e che nessuna key si ripeta (`tests/test_chiavi_streamlit.py`).
+  La prova nel browser (Playwright) completa un'analisi intera, apre tutte le schede, verifica che non compaiano errori Streamlit e scarica il report.
+- Correzione collegata: se un'esecuzione dell'app si interrompe con un errore, Streamlit cancella lo stato dei widget non ancora disegnati e
+  le impostazioni della barra laterale tornavano ai minimi (capitale 0 €, orizzonte 1 anno, tassi 0%). Ora una copia di sicurezza delle
+  impostazioni (`stato_app.py`) le ripristina all'esecuzione successiva (e lo annota in `log.txt`).
+- Gli expander, le immagini e le metriche non ricevono un ID da Streamlit (se non hanno una key) e non possono causare questo errore.
+
+### Risultati vecchi nascosti
+- Se dopo una simulazione cambiano titoli, pesi o impostazioni, se i prezzi in cache vengono aggiornati o se il controllo dei dati
+  diventa rosso, i risultati sono nascosti e al loro posto compare l'avviso «Questi risultati non corrispondono più ai dati attuali:
+  rilancia la simulazione», con il motivo. Un interruttore permette di rivederli comunque (l'avviso resta in cima).
+
+### Controllo incrociato dei nomi (ISIN)
+- Per ogni ISIN convertito, il nome di OpenFIGI è confrontato con quello di Yahoo (confronto tollerante: ignora maiuscole, accenti,
+  punteggiatura e forme societarie come Inc, SpA/S.p.A., PLC, AG, NV, UCITS, ETF). Se sono molto diversi (somiglianza sotto
+  `controllo_dati.somiglianza_nome_min`, default 0,4) la riga è **gialla** e si prova la quotazione successiva; l'avviso dice quale è stata
+  scartata e perché. Se tutte le quotazioni hanno il nome diverso, o la quotazione è forzata da te, si usa quella con l'avviso.
+- `nomi_attesi` resta come controllo aggiuntivo facoltativo.
+- Le quotazioni elencate da OpenFIGI su borse non mappate (di cui non conosco il suffisso Yahoo) non sono più ignorate in silenzio: compaiono
+  come **info** nella colonna «Dettagli» del controllo dati (senza cambiare il colore) e sono salvate nella cache degli ISIN.
+- Il confronto dei nomi è nel nuovo modulo `nomi.py` (`controllo.somiglianza_nomi` funziona come prima).
+
+### Importazione del portafoglio dal CSV del broker
+- Nell'app (riquadro «📥 Importa il portafoglio dal broker (CSV)») e da riga di comando (`importa_portafoglio.py`): si carica il CSV con
+  ISIN (o ticker) e quantità, oppure ISIN e controvalore; si vede un'**anteprima** (controvalori e pesi) e solo dopo la conferma il portafoglio
+  viene creato (nella tabella dell'app, o in un file YAML).
+- Pesi dai controvalori in EUR; se manca il controvalore, quantità × ultimo prezzo in EUR. Separatori `;` `,` e tab, decimali con la
+  virgola o con il punto, righe d'intestazione del broker e righe di totale saltate, titoli ripetuti sommati, colonne di costo ignorate.
+- Esempio `esempi/portafoglio_broker_esempio.csv`; formato documentato nel README.
+
+### Ricerca per nome
+- Nell'app, riquadro «🔍 Cerca un titolo per nome»: fino a 10 risultati (nome, ticker, ISIN se si cerca un ISIN, borsa, valuta, tipo) da
+  aggiungere al portafoglio scelto (anche nuovo) con un clic su ➕. Solo azioni, ETF, fondi e indici; nessun doppione. Modulo `ricerca.py`.
+
+### Prova nel browser nel repository
+- `tests/e2e/`: prova Playwright dell'app con una finta rete (nessun accesso a internet), eseguita nel workflow **Test** (Linux).
+- Corretto il falso FAIL della 1.2 sulla tabella in canvas: sotto la tabella «Controllo dati» c'è ora la riga di testo «Ticker usati:
+  ISIN → ticker …» (utile anche per gli screen reader) e la prova verifica quella, oltre al report scaricato.
+- Controlli: ISIN errato → «Avvia simulazione» disattivato; cambio di quotazione dal menu (SWDA.MI → EUNL.DE) che si ritrova nel report;
+  risultati vecchi nascosti dopo un cambio; analisi completa con tutte le schede senza errori Streamlit. `requirements-e2e.txt`.
+
+### Release automatica
+- Nuovo workflow `release.yml`: con il push di un tag `vX.Y.Z` (o avviandolo a mano da Actions → Release → Run workflow con la versione)
+  lancia i test, costruisce lo zip, controlla il contenuto, crea la release con le note prese dalla sezione giusta di `CHANGELOG.md` e allega
+  lo zip. Usa solo il `GITHUB_TOKEN` del repository. `test.yml` è richiamabile dagli altri workflow.
+- `strumenti/note_release.py` valida il nome del tag (solo `vX.Y.Z`) ed estrae le note. `zip-release.yml` resta per le release create a mano.
+- README: spiegazione dei tag vecchi (`V_1.0.1`, `V_1.1.0`, `V_1.2.0`, `prova`, non cancellati) e della procedura passo passo dal sito.
+
+### Altro
+- Report «progresso, debolezze e sviluppi» ora nel repository: `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
+- 87 nuovi test (199 in tutto), tutti senza internet; i workflow «Test» e «Prova su Mac» girano a ogni push.
+
 ## 1.2.0 (4 novembre 2026)
 
 Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di non regressione

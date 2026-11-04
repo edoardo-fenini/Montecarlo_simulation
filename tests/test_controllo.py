@@ -218,7 +218,7 @@ def test_il_peggiore_vince_e_i_motivi_si_sommano(tmp_path):
 
 # ------------------------------------------------------------------ ISIN nel controllo
 FIGI_ETF = json.dumps(
-    [{"data": [{"ticker": "SWDA", "exchCode": "IM", "name": "X"}, {"ticker": "EUNL", "exchCode": "GY", "name": "X"}]}]
+    [{"data": [{"ticker": "SWDA", "exchCode": "IM", "name": "ETF"}, {"ticker": "EUNL", "exchCode": "GY", "name": "ETF"}]}]
 ).encode()
 
 

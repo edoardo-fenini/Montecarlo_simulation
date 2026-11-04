@@ -1,0 +1,14 @@
+# Configurazione piccola per la prova nel browser (dati finti): 1 ISIN di ETF con 3 quotazioni, 1 ISIN di azione, 1 ticker.
+nome: Prova ISIN errato
+capitale_iniziale: 5000
+versamento_mensile: 0
+orizzonte_anni: 2
+orizzonti_intermedi: [1]
+n_simulazioni: 500
+moduli: {stress_test: false, rischio_singolo_titolo: false, verifica_convergenza: false, confronto_modelli: false, analisi_C: false}
+benchmark: {nome: Benchmark prova, ticker: BMK.AS, ter: 0.002}
+portafogli:
+  - nome: Mondo
+    titoli: {IE00B4L5Y984: 60, US0378331005: 40}
+  - nome: Italia
+    titoli: [ENEL.MI, ISP.MI]
