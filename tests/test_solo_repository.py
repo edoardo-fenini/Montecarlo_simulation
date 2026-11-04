@@ -1,7 +1,6 @@
 """Il meccanismo che salta i test dei file presenti solo nel repository (zip della release)."""
 
 import pytest
-
 from solo_repository import richiede
 
 
