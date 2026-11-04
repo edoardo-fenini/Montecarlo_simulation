@@ -24,6 +24,28 @@ def controlla(pagina):
     pagina.get_by_role("button", name="Controlla i dati").click()
 
 
+def scegli_quotazione(pagina, codice, ticker, tentativi=4):
+    """Sceglie la quotazione dal menu (ha la ricerca: si scrive il ticker, si attende l'opzione e si conferma con Invio).
+    Su macchine lente l'Invio può arrivare prima che il menu sia filtrato: si riprova e si verifica dal testo «Ticker usati»."""
+    for i in range(tentativi):
+        menu = pagina.get_by_role("combobox", name=re.compile(f"Quotazione scelta per {codice}"))
+        menu.click()
+        menu.press_sequentially(ticker.split(".")[0], delay=80)
+        opzione = pagina.locator("[role=option]").filter(has_text=ticker)
+        try:
+            opzione.first.wait_for(state="visible", timeout=5000)
+        except Exception:
+            pagina.wait_for_timeout(1000)
+        menu.press("Enter")
+        try:
+            expect(pagina.get_by_text("Ticker usati:")).to_contain_text(f"{codice} → {ticker}", timeout=20000)
+            return
+        except AssertionError:
+            if i == tentativi - 1:
+                raise
+            pagina.keyboard.press("Escape")
+
+
 def test_app_si_apre_e_ha_i_pulsanti(pagina):
     expect(pagina.get_by_role("button", name="Controlla i dati")).to_be_visible()
     expect(pagina.get_by_role("button", name="Avvia simulazione").first).to_be_enabled()
@@ -48,11 +70,7 @@ def test_percorso_completo_isin_quotazione_simulazione_report_e_risultati_vecchi
     expect(pagina.get_by_role("button", name="Avvia simulazione").first).to_be_enabled()
 
     # cambio della quotazione dal menu: il controllo si rifà e il testo associato cambia
-    menu = pagina.get_by_role("combobox", name=re.compile(f"Quotazione scelta per {ISIN}"))
-    menu.click()
-    menu.press_sequentially("EUNL")  # il menu ha la ricerca: si scrive e si conferma con Invio
-    menu.press("Enter")
-    expect(pagina.get_by_text("Ticker usati:")).to_contain_text(f"{ISIN} → EUNL.DE")
+    scegli_quotazione(pagina, ISIN, "EUNL.DE")
     expect(pagina.get_by_text("Ticker usati:")).not_to_contain_text("SWDA.MI")
 
     # simulazione e report
