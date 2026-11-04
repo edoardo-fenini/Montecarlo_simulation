@@ -21,7 +21,7 @@ from nomi import somiglianza_nomi
 VERDE, GIALLO, ROSSO = "VERDE", "GIALLO", "ROSSO"
 SEMAFORO = {VERDE: "🟢", GIALLO: "🟡", ROSSO: "🔴"}
 COLONNE_TABELLA = [
-    "Esito", "Input", "ISIN", "Ticker usato", "Nome", "Borsa", "Valuta", "Fonte", "Prima data", "Ultima data", "Anni di storia",
+    "Esito", "Input", "ISIN", "Ticker usato", "Nome", "Tipo", "Borsa", "Valuta", "Fonte", "Prima data", "Ultima data", "Anni di storia",
     "% giorni mancanti", "Ultimo prezzo", "Dettagli",
 ]  # fmt: skip
 
@@ -99,7 +99,7 @@ def _nome_quotazione(r: dict) -> str:
 
 def _riga_vuota(inp: str, ruolo: str) -> dict:
     return {
-        "input": inp, "ruolo": ruolo, "isin": "", "ticker": "", "nome": "", "borsa": "", "valuta": "", "fonte": "", "primo": None,
+        "input": inp, "ruolo": ruolo, "isin": "", "ticker": "", "nome": "", "tipo": "", "fondo_non_trovato": False, "borsa": "", "valuta": "", "fonte": "", "primo": None,
         "ultimo": None, "anni": None, "mancanti": None, "ultimo_prezzo": None, "esito": VERDE, "rossi": [], "gialli": [],
         "trovato": False, "risoluzione": None, "info": [],
     }  # fmt: skip
@@ -131,12 +131,16 @@ def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, ht
                 r["risoluzione"], r["ticker"] = ris, ris["ticker"]
                 mappa[codice] = ris["ticker"]
                 r["nome_figi_avvisi"] = ris.get("avvisi_nome", [])
+                r["tipo"] = ris.get("tipo_strumento", "")
                 if ris.get("borse_non_mappate"):
                     elenco_b = ", ".join(f"{b['borsa']} ({b['ticker']})" if b.get("ticker") else b["borsa"] for b in ris["borse_non_mappate"])
                     r["info"].append(f"OpenFIGI elenca quotazioni su borse non mappate, ignorate: {elenco_b}")
             except ErroreDati as e:
                 r["ticker"] = ""
                 r["rossi"].append(str(e))
+                r["tipo"] = getattr(e, "tipo", "")
+                r["nome"] = getattr(e, "nome", "")
+                r["fondo_non_trovato"] = r["tipo"] == I.TIPO_FONDO
         righe.append(r)
 
     serie = {}
@@ -168,6 +172,7 @@ def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, ht
             anni=(s.index[-1] - s.index[0]).days / 365.25, ultimo_prezzo=float(s.iloc[-1]),
         )  # fmt: skip
         r["_meta"] = meta
+        r["tipo"] = r["tipo"] or I.tipo_da_yahoo(meta.get("tipo"))
     manc = giorni_mancanti(serie)
 
     for r in righe:
@@ -271,6 +276,7 @@ def tabella(righe: list[dict], emoji: bool = True) -> pd.DataFrame:
                 "ISIN": r["isin"],
                 "Ticker usato": r["ticker"],
                 "Nome": r["nome"],
+                "Tipo": r["tipo"],
                 "Borsa": r["borsa"],
                 "Valuta": r["valuta"],
                 "Fonte": r["fonte"],
@@ -287,7 +293,7 @@ def tabella(righe: list[dict], emoji: bool = True) -> pd.DataFrame:
 
 def testo_tabella(esito: dict) -> str:
     """Tabella per il terminale: riepilogo + una riga per titolo (colonne essenziali) + dettagli di avvisi ed errori."""
-    t = tabella(esito["righe"], emoji=False)[["Esito", "Input", "Ticker usato", "Nome", "Borsa", "Valuta", "Anni di storia", "Ultima data"]]
+    t = tabella(esito["righe"], emoji=False)[["Esito", "Input", "Ticker usato", "Nome", "Tipo", "Borsa", "Valuta", "Anni di storia", "Ultima data"]]
     t["Nome"] = t["Nome"].str.slice(0, 28)
     corpo = t.to_string(index=False)
     note = [f"  {r['input']}: {dettagli(r)}" for r in esito["righe"] if r["esito"] != VERDE or r.get("info")]

@@ -78,9 +78,11 @@ SUFFISSI_YAHOO = {
 class ErroreIsin(ErroreDati):
     """ISIN non valido o non convertibile. `rete=True` se il problema è la connessione (non l'ISIN)."""
 
-    def __init__(self, messaggio, rete=False):
+    def __init__(self, messaggio, rete=False, tipo="", nome=""):
         super().__init__(messaggio)
         self.rete = rete
+        self.tipo = tipo  # tipo di strumento secondo OpenFIGI (anche se non si trova nessuna quotazione)
+        self.nome = nome  # nome secondo OpenFIGI
 
 
 # ------------------------------------------------------------------ riconoscimento
@@ -142,9 +144,39 @@ def _pulisci_ticker(t: str) -> str | None:
     return t if re.fullmatch(r"[A-Z0-9][A-Z0-9\-]*", t) else None
 
 
-def candidati_openfigi(isin: str, http=None, chiave: str | None = None, non_mappate: list | None = None) -> list[dict]:
+TIPO_AZIONE, TIPO_ETF, TIPO_FONDO = "azione", "ETF/ETC", "fondo comune"
+_TIPI_FONDO = {"open-end fund", "mutual fund", "unit inv trust", "unit trust", "open end fund"}
+_TIPI_AZIONE = {"common stock", "adr", "gdr", "preference", "preferred stock", "reit", "depositary receipt", "right", "ordinary shares"}
+
+
+def classifica_tipo(dati_figi: list[dict]) -> str:
+    """Tipo di strumento da una risposta di OpenFIGI (campi securityType, securityType2): 'azione', 'ETF/ETC' o 'fondo comune'
+    ('' se non si capisce). Se tra le quotazioni c'è un ETP (prodotto quotato in borsa: ETF o ETC) vince: un ETF ha anche
+    securityType2 = «Mutual Fund», ma è quotato. Un fondo comune ha solo «Open-End Fund»."""
+    tipi = {str(x.get("securityType") or "").strip().lower() for x in dati_figi}
+    tipi2 = {str(x.get("securityType2") or "").strip().lower() for x in dati_figi}
+    if "etp" in tipi or "closed-end fund" in tipi or "exchange traded fund" in tipi:
+        return TIPO_ETF
+    if tipi & _TIPI_FONDO:
+        return TIPO_FONDO
+    if tipi & _TIPI_AZIONE or "common stock" in tipi2:
+        return TIPO_AZIONE
+    if "mutual fund" in tipi2:
+        return TIPO_FONDO
+    return ""
+
+
+def tipo_da_yahoo(tipo_yahoo: str) -> str:
+    """Tipo di Yahoo (instrumentType) -> stessa classificazione. '' se sconosciuto."""
+    return {"EQUITY": TIPO_AZIONE, "ETF": TIPO_ETF, "MUTUALFUND": TIPO_FONDO}.get(str(tipo_yahoo or "").upper(), "")
+
+
+def candidati_openfigi(
+    isin: str, http=None, chiave: str | None = None, non_mappate: list | None = None, info: dict | None = None
+) -> list[dict]:
     """Quotazioni dell'ISIN secondo OpenFIGI, già convertite in ticker Yahoo (senza verificarle). Le quotazioni su borse di cui non
-    conosco il suffisso Yahoo non sono utilizzabili: se si passa una lista in `non_mappate` ci si aggiungono {'borsa', 'ticker', 'nome'}."""
+    conosco il suffisso Yahoo non sono utilizzabili: se si passa una lista in `non_mappate` ci si aggiungono {'borsa', 'ticker', 'nome'}.
+    Se si passa un dizionario in `info`, vi si scrivono `tipo_strumento` (azione, ETF/ETC, fondo comune) e `nome_isin` (nome di OpenFIGI)."""
     http = http or _http
     chiave = chiave or os.environ.get("OPENFIGI_API_KEY") or None
     intest = {"Content-Type": "application/json", **({"X-OPENFIGI-APIKEY": chiave} if chiave else {})}
@@ -156,6 +188,9 @@ def candidati_openfigi(isin: str, http=None, chiave: str | None = None, non_mapp
         dati = json.loads(raw)[0].get("data") or []
     except (ValueError, IndexError, AttributeError, TypeError):
         return []
+    if info is not None and dati:
+        info["tipo_strumento"] = classifica_tipo(dati)
+        info["nome_isin"] = next((x.get("name") for x in dati if x.get("name")), "") or ""
     out, visti = [], set()
     for x in dati:
         suff = SUFFISSI_YAHOO.get(x.get("exchCode"))
@@ -339,6 +374,7 @@ def ordina_quotazioni(
 
     def chiave(q):
         return (
+            q.get("penalita", 0),  # solo fondi comuni (fondi.py): valuta, classe o copertura diverse da quelle attese
             nome_discordante(q, somiglianza_min),
             not attiva(q),
             not liquida(q),
@@ -378,6 +414,12 @@ def _scrivi_cache(cartella: str, cache: dict) -> None:
         log.warning("Non riesco a salvare la cache degli ISIN: %s", e)
 
 
+MESSAGGIO_FONDO_NON_TROVATO = (
+    "È un fondo comune non quotato e non è disponibile nelle fonti online. "
+    "Puoi caricare lo storico delle quote oppure scegliere un proxy."
+)
+
+
 # ------------------------------------------------------------------ conversione
 def cerca_quotazioni(
     isin, http=None, chiave=None, massimo=12, oggi=None, ricerca=None, ispettore=None, preferenze=None, extra: dict | None = None
@@ -388,10 +430,10 @@ def cerca_quotazioni(
     oggi = oggi or datetime.date.today()
     errori = []
     non_mappate: list[dict] = []
-    if extra is not None:
-        extra["borse_non_mappate"] = non_mappate
+    extra = extra if extra is not None else {}
+    extra["borse_non_mappate"] = non_mappate
     for metodo, fonte in (
-        ("OpenFIGI", lambda: candidati_openfigi(isin, http, chiave, non_mappate)),
+        ("OpenFIGI", lambda: candidati_openfigi(isin, http, chiave, non_mappate, extra)),
         ("Ricerca Yahoo Finance", lambda: candidati_yahoo_ricerca(isin, ricerca)),
     ):
         try:
@@ -412,15 +454,20 @@ def cerca_quotazioni(
             return quote, metodo
         if rete:
             errori.append(f"{metodo}: Yahoo non risponde")
-    if errori:
+    tipo, nome = extra.get("tipo_strumento", ""), extra.get("nome_isin", "")
+    if errori and (tipo != TIPO_FONDO or any("Yahoo non risponde" in e for e in errori)):
         raise ErroreIsin(
             f"Non riesco a convertire l'ISIN {isin} in un ticker: le fonti online non rispondono ({'; '.join(errori)}). "
             "Controlla la connessione a internet e riprova, oppure scrivi direttamente il ticker Yahoo.",
             rete=True,
         )
+    if tipo == TIPO_FONDO:
+        raise ErroreIsin(MESSAGGIO_FONDO_NON_TROVATO, tipo=tipo, nome=nome)
     raise ErroreIsin(
         f"L'ISIN {isin} ha la forma giusta ma non trovo nessuna quotazione su Yahoo Finance (né con OpenFIGI né con la ricerca di "
-        "Yahoo). Controlla il codice sul sito del broker oppure scrivi direttamente il ticker Yahoo."
+        "Yahoo). Controlla il codice sul sito del broker oppure scrivi direttamente il ticker Yahoo.",
+        tipo=tipo,
+        nome=nome,
     )
 
 
@@ -450,18 +497,29 @@ def risolvi(
     voce = cache.get(isin)
     if not voce or aggiorna:
         extra: dict = {}
-        quote, metodo = cerca_quotazioni(isin, http, chiave, massimo, oggi, ricerca, ispettore, preferenze, extra)
+        try:
+            quote, metodo = cerca_quotazioni(isin, http, chiave, massimo, oggi, ricerca, ispettore, preferenze, extra)
+        except ErroreIsin as e:
+            if e.tipo != TIPO_FONDO:
+                raise
+            quote, metodo = [], "OpenFIGI"
+        if extra.get("tipo_strumento") == TIPO_FONDO:
+            quote, metodo = _fondo_comune(isin, extra, quote, metodo, oggi, ricerca, ispettore, http)
         voce = {
             "metodo": metodo,
             "aggiornato": (oggi or datetime.date.today()).isoformat(),
             "quotazioni": quote,
             "borse_non_mappate": extra.get("borse_non_mappate", []),
+            "tipo_strumento": extra.get("tipo_strumento", ""),
+            "nome_isin": extra.get("nome_isin", ""),
         }
         cache[isin] = voce
         _scrivi_cache(cartella, cache)
         da_cache = False
     else:
         da_cache = True
+    if not voce["quotazioni"]:  # fondo comune già cercato senza successo
+        raise ErroreIsin(MESSAGGIO_FONDO_NON_TROVATO, tipo=voce.get("tipo_strumento", ""), nome=voce.get("nome_isin", ""))
     ordinate = ordina_quotazioni(voce["quotazioni"], preferenze, oggi, somiglianza_min=somiglianza_min)
     ticker = (scelta or "").strip().upper() or ordinate[0]["ticker"]
     # senza il confronto dei nomi, quale quotazione avrei scelto? Se è diversa, l'ho scartata perché il nome non torna
@@ -473,6 +531,8 @@ def risolvi(
             f"(«{prima['nome_yahoo']}»); uso {ticker}"
         )
     scelta_q = next((q for q in ordinate if q["ticker"] == ticker), None)
+    if scelta_q:
+        avvisi_nome += scelta_q.get("avvisi_fondo", [])
     if scelta_q and nome_discordante(scelta_q, somiglianza_min):
         avvisi_nome.append(
             f"il nome di OpenFIGI («{scelta_q['nome_figi']}») è molto diverso da quello di Yahoo («{scelta_q['nome_yahoo']}») "
@@ -487,7 +547,22 @@ def risolvi(
         "predefinito": ordinate[0]["ticker"],
         "avvisi_nome": avvisi_nome,
         "borse_non_mappate": voce.get("borse_non_mappate", []),
+        "tipo_strumento": voce.get("tipo_strumento") or tipo_da_yahoo(ordinate[0].get("tipo")),
+        "nome_isin": voce.get("nome_isin", ""),
     }
+
+
+def _fondo_comune(isin, extra, quote, metodo, oggi, ricerca, ispettore, http):
+    """Per un fondo comune: tiene le quotazioni con almeno un anno di storia e cerca i codici Morningstar («0P...») di Yahoo.
+    Ritorna (quotazioni, metodo); lista vuota se non trova niente di utilizzabile (la voce viene messa in cache lo stesso)."""
+    import fondi
+
+    utili = [q for q in quote if q.get("storia_anni", 0) >= fondi.STORIA_MIN_ANNI]
+    nomi_yahoo = [q["nome_yahoo"] for q in quote if q.get("nome_yahoo")]
+    trovati = fondi.cerca_fondo(isin, extra.get("nome_isin", ""), nomi_yahoo, oggi, ricerca, ispettore, http)
+    if trovati:
+        return utili + trovati, "Ricerca Yahoo Finance (codici fondo)"
+    return utili, metodo
 
 
 # ------------------------------------------------------------------ configurazione

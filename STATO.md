@@ -209,3 +209,20 @@ Baseline all'inizio: tutti i test verdi (senza browser), non regressione identic
       dei costi, tolleranza = 5 errori standard + 0,3%); se fallisce: errore ROSSO, l'app non mostra i risultati e `confronta.py` non scrive il report.
       **NON applicata, su richiesta dell'utente («la parte dei default lasciala stare»)**: il cambio dei default a 2,5% / 4%
       (restano 2% / 4% in `configurazione.py`, app, YAML di esempio e README). Il test di non regressione resta quindi identico.
+- [x] Tappa 1 – tipo di strumento: `isin.classifica_tipo` (OpenFIGI `securityType`/`securityType2`: ETP → ETF/ETC; Open-End Fund → fondo comune;
+      Common Stock/ADR → azione), salvato nella cache degli ISIN; nuova colonna «Tipo» nel controllo dati (app, report, CSV, Excel).
+      **Verificato dal vivo (4/11/2026)**: i quattro ISIN sono tutti «Open-End Fund» (borsa OpenFIGI «LX») = fondi comuni lussemburghesi non quotati.
+      Prima la ricerca li convertiva in codici tedeschi (es. `MSJ6.F`) che su Yahoo hanno solo 1d/5d di dati: da qui «storia 0 anni».
+- [x] Tappa 2 – ricerca automatica (`fondi.py`): ricerche Yahoo per ISIN e per nome (con sigle dei gestori note: MS INVF, JPM, BGF…), codici
+      `0P…` o tipo MUTUALFUND; verifiche: stesso gestore, nome simile a OpenFIGI/Yahoo (≥0,5), valuta, accumulazione/distribuzione, lettera della
+      classe, parole in più (es. «Plus»), copertura del cambio, storia ≥1 anno, ultimo prezzo ≤30 giorni; poi le regole di `ordina_quotazioni`.
+      Sempre un avviso GIALLO: Yahoo non indica l'ISIN, quindi la classe non è certa. Cache come gli altri ISIN (anche l'esito negativo).
+      **Prova reale (4/11/2026)**, storia ≈ 4,7 anni per tutti (Yahoo ha i dati Morningstar solo dal 07/03/2022):
+      | ISIN | esito | codice | nome | valuta | storia |
+      |---|---|---|---|---|---|
+      | LU0073232471 | trovato (classe NON certa: A in EUR scelta, l'ISIN è probabilmente la classe in USD) | `0P0001LLAM.F` | MS INVF US Growth A EUR | EUR | 4,7 |
+      | LU0552385295 | trovato | `0P0000RZ2H` | MS INVF Global Opportunity A | USD | 4,7 |
+      | LU0070214290 | trovato | `0P00000DTX` | JPM US Select Equity A acc USD | USD | 4,7 |
+      | LU0210536198 | trovato | `0P00000C2V` | JPM US Growth A dist USD | USD | 4,7 |
+      Limite: la ricerca di Yahoo per nome è capricciosa; per fondi di altri gestori può non trovare nulla → tappa 3 (CSV o proxy).
+      Una storia di 4,7 anni è corta per simulare 15 anni: l'avviso «storia corta» (sotto 5 anni di storia comune) resta quello esistente.
