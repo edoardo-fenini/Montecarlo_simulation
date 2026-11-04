@@ -274,3 +274,9 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
       dei fattori su tutta la storia fino a ieri + varianza specifica, VaR normale); Kupiec, Christoffersen, semaforo; scheda «Validazione del modello» (tabelle + grafico);
       modulo `backtest_var` disattivato di default. Test: `tests/test_backtest_var.py`. Primo esito reale (Cyber/Big tech/MSCI World, 5,4 anni): vedi il riepilogo finale.
   Ora: prova nel browser con modello fattori, confronto dei due modelli sull'esempio, README/CHANGELOG/RELEASE_NOTES, PR, tag.
+- [x] Confronto dei modelli sull'esempio (dati reali, 20.000 simulazioni): `esempi/confronto_modelli_v1_5/risultati.md`. Emerso e corretto: il benchmark ETF veniva
+      trattato come titolo qualsiasi (vol 20,5% con rumore di orario come «rischio specifico»); ora è esposizione 1 al fattore mercato senza residuo (vol 19,0%).
+      Backtest VaR reale: storico generalmente verde; fattori troppo prudente su banche/benchmark, troppo poco su Cyber al 99%.
+      OSSERVAZIONE (non toccata): controllo di plausibilità FALLITO sul modello storico, analisi B, portafoglio Banche (atteso 7,40%, simulato 6,58%, tolleranza ±0,59%) con i dati
+      reali di oggi. Da esaminare in una versione futura (codice 1.4 invariato).
+  Ora: CHANGELOG, RELEASE_NOTES, suite completa, PR verso main, merge, tag v1.5.0 (Actions → Release → Run workflow se il push del tag è bloccato).

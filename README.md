@@ -8,6 +8,9 @@ Uno strumento per confrontare il **rischio** di più portafogli di azioni ed ETF
 |---|---|---|
 | ![Pagina iniziale](docs/immagini/01_pagina_iniziale.png) | ![Schede con il livello di rischio](docs/immagini/02_in_una_pagina.png) | ![Fan chart](docs/immagini/03_fan_chart.png) |
 
+**Novità della versione 1.5:** modello di rischio a fattori (opzione «Modello di simulazione»), scheda «Da dove viene il rischio»,
+validazione del VaR (backtest) e scelte rapide Prudente/Base/Ottimista per tasso privo di rischio e premio di mercato. Vedi «Modello a fattori».
+
 **Novità della versione 1.4:** fondi comuni non quotati (riconoscimento del tipo di strumento, ricerca automatica dei codici di Yahoo,
 importazione dello storico delle quote da CSV o proxy dichiarato), costi annui di fondi ed ETF sottratti dal rendimento atteso, riquadro
 «Rendimento atteso» prima della simulazione con avvisi e controllo di plausibilità dei risultati. Vedi la sezione «Fondi comuni».
@@ -322,6 +325,33 @@ Giallo US0378331005         AAPL                   Apple Inc.  NasdaqGS    USD  
 | **Volatility drag** | Con le oscillazioni il risultato tipico resta sotto la media: perdere il 50% richiede un +100% per tornare in pari. Più un portafoglio oscilla, più la mediana resta indietro. |
 | **Analisi A / B / C** | A: periodo in cui esistono tutti i titoli. B: periodo lungo, con i pesi ridistribuiti tra i titoli già quotati. C (facoltativa): dal 1999, con dati sintetici di settore per i titoli che non esistevano. |
 
+### Modello a fattori (novità 1.5)
+
+Di solito il programma simula ogni titolo **rimescolando la sua storia** (modello «storico»). Un titolo o un fondo con 4 anni di
+storia, però, non ha mai visto il 2000-2002 né il 2008. Il **modello a fattori** (come usano le grandi case d'investimento) parte da un'idea semplice:
+il rischio di un titolo è in gran parte *una combinazione di poche cose comuni a tanti titoli* (il mercato, l'area geografica, il settore,
+lo stile, i tassi, il dollaro) più una piccola parte tutta sua.
+
+- **Scegli il modello** nell'app (sezione 4, «Modello di simulazione») o nel file YAML: `modello_simulazione: fattori` (il default resta `storico`).
+- **Come funziona**: per ogni titolo si misura (regressione ridge sui rendimenti settimanali in euro) quanto è esposto a ciascun fattore.
+  Per simulare si rimescolano pezzi della storia **lunga dei fattori** (dal 2000: include 2000-2002, 2008, 2020) e, per ogni titolo
+  separatamente, pezzi dei suoi «resti» (la parte non spiegata dai fattori). Poi si applicano come sempre rendimento atteso e costi.
+- **I fattori** stanno nel file `modelli/fattori.yaml` e puoi cambiarli. Quelli predefiniti (tutti in euro): mercato mondiale (indice MSCI World);
+  regioni (USA, Europa, Giappone, Emergenti, come scarto dal mondo); settori USA (tecnologia, finanziari, salute, energia, industriali, consumi
+  ciclici e difensivi, come scarto da S&P 500); stile (growth contro value, piccole imprese, momentum, qualità); obbligazioni USA a lungo termine e
+  cambio dollaro/euro. Date di inizio: la maggior parte dal 4/1/2000; Europa 31/7/2000; growth-value e piccole imprese 29/5/2000;
+  obbligazioni 31/7/2002; emergenti 15/4/2003; momentum e qualità dal 2013 (prima valgono 0 nelle simulazioni e non entrano nelle regressioni).
+- **Con il modello a fattori si fa solo l'analisi A** (la storia lunga entra già dai fattori). Stress test, rischio sul singolo titolo e
+  confronto tra modelli restano quelli sullo storico dei titoli.
+- **Da dove viene il rischio** (scheda del report, anche con il modello storico, attivala con «Da dove viene il rischio»): barre impilate con la
+  quota di rischio dovuta a mercato, regioni, settori, stile, tassi/valute e rischio specifico; esposizioni di ogni portafoglio; R² dei titoli
+  (avviso sotto 0,3: il titolo è spiegato poco dai fattori); una frase in italiano semplice sulle scommesse comuni tra portafogli.
+- **Validazione del modello** (facoltativa, più lenta): backtest del VaR a 1 giorno (95% e 99%) su finestra mobile di 2 anni, test di Kupiec e di
+  Christoffersen con semaforo, confronto tra modello storico e a fattori, grafico dei rendimenti contro il VaR.
+- **Limiti**: i fattori sono ETF (gli ETF USA hanno costi e composizione propri); il benchmark ETF ha un orario di chiusura diverso dall'indice
+  MSCI, quindi la sua parte «specifica» è in parte rumore; i residui dei titoli sono indipendenti tra loro (in crisi i titoli dello stesso settore
+  possono muoversi insieme più di quanto il modello preveda); un fattore nato nel 2013 non ha storia nelle crisi precedenti.
+
 ## 7. Creare una configurazione a mano (file YAML)
 
 Puoi anche lavorare senza app: copia `configurazioni/esempio_tre_portafogli.yaml`, rinominala (es. `configurazioni/mio_portafoglio.yaml`), modificala con TextEdit e lanciala dal Terminale:
@@ -355,6 +385,7 @@ rendimento_atteso:
 
 n_simulazioni: 20000
 ribilanciamento: annuale          # annuale | semestrale | trimestrale | mensile | mai
+modello_simulazione: storico          # storico | fattori (v1.5: titoli = esposizioni ai fattori di modelli/fattori.yaml + parte specifica)
 
 moduli:
   stress_test: true
@@ -506,6 +537,7 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `analisi.py` | rendimenti attesi, periodi A/B/C, esecuzione (anche in parallelo) dei moduli |
 | `simula.py` | motore Monte Carlo (bootstrap a blocchi, Student-t, GARCH, crolli sul singolo titolo) |
 | `metriche.py` | metriche e stress test |
+| `fattori.py`, `report_fattori.py`, `backtest_var.py`, `modelli/fattori.yaml` | modello a fattori (stima ridge, simulazione, scomposizione del rischio), sue sezioni nel report, backtest del VaR, elenco dei fattori |
 | `report.py` | report HTML, PDF, Excel e CSV; analisi salvate |
 | `grafici_app.py` | grafici interattivi dell'app (Plotly) |
 | `stile.py` | colori e tratti fissi dei portafogli (uguali in app, report e PDF) |

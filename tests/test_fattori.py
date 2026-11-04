@@ -174,3 +174,14 @@ def test_config_predefinita_valida():
     gruppi = {f["gruppo"] for f in c["fattori"]}
     assert gruppi == set(FA.GRUPPI)
     assert len({f["nome"] for f in c["fattori"]}) == len(c["fattori"])
+
+
+def test_benchmark_e_il_fattore_mercato(sintetici):
+    F, V, R = sintetici
+    R2 = R.copy()
+    R2["BENCH"] = F["Mercato"] + np.random.default_rng(5).normal(0, 0.004, len(F))  # ETF = indice + rumore di orario
+    st = FA.stima_titoli(R2, F, V, CONF)
+    assert st.beta.loc["BENCH"].tolist() == [1.0, 0.0, 0.0, 0.0] and st.vol_specifica["BENCH"] == 0.0
+    sc = FA.scomposizione_rischio(st, F, {"BENCH": 1.0}, CONF)
+    assert sc["quote"]["Mercato"] == pytest.approx(1.0) and sc["quote"]["Rischio specifico"] == pytest.approx(0.0)
+    assert FA.avvisi_r2(st, CONF) == []

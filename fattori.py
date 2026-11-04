@@ -212,6 +212,14 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
     for t in titoli:
         r = R[t].dropna()
         r = r[r.index.isin(F.index)]
+        if t == BENCH and len(r) >= 60:
+            # il benchmark è il mercato mondiale: il fattore «mercato» è lo stesso indice. Esposizione 1, nessun rischio specifico
+            # (la differenza tra ETF e indice è soprattutto rumore di orari di chiusura e verrebbe contata come rischio in più).
+            b = pd.Series(0.0, index=nf)
+            b[next(iter(mercati))] = 1.0
+            betas[t], alfa[t], r2[t], pen[t], nsett[t] = b, 0.0, np.nan, 0.0, len(_settimanali_df(r).dropna())
+            vol[t], volsp[t], residui[t] = float(r.std() * np.sqrt(252)), 0.0, np.zeros(2)
+            continue
         if len(r) < 60:
             note.append(f"{t}: meno di 60 giorni di storia in comune con i fattori, non stimato.")
             continue

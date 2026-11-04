@@ -1,13 +1,13 @@
-# v1.4.0 – Fondi comuni e costi
+# v1.5.0 – Modello di rischio a fattori
 
-Nessuna funzione tolta; il test di non regressione è identico. Le note complete vengono dalla sezione 1.4.0 di `CHANGELOG.md`.
+Nessuna funzione tolta; il test di non regressione è identico. Le note complete vengono dalla sezione 1.5.0 di `CHANGELOG.md`.
 
 ## Novità
-- **Fondi comuni non quotati**: l'ISIN viene classificato (azione, ETF/ETC, fondo comune); i fondi si cercano su Yahoo con i codici `0P…`;
-  se non si trovano puoi **caricare lo storico delle quote (CSV)** o scegliere un **proxy**. Tutto è segnalato nel controllo dati e nel report.
-- **Costi annui** di fondi ed ETF sottratti dal rendimento atteso (default prudente 1,5% fondi, 0,3% ETF, con avviso giallo).
-- **Rendimento atteso** visibile prima della simulazione, con avvisi e controllo di plausibilità dei risultati.
+- **Modello a fattori** (opzione «Modello di simulazione»): ogni titolo è scomposto in esposizioni a mercato, regioni, settori, stile, tassi e valute più una parte
+  specifica; utile per titoli e fondi con poca storia, che così «vivono» anche il 2000-2002 e il 2008. Il default resta il modello storico.
+- **Da dove viene il rischio**: quota del rischio per gruppo di fattori, esposizioni, R² dei titoli e una sintesi in italiano semplice.
+- **Validazione del VaR** (facoltativa): backtest con test di Kupiec e Christoffersen e semaforo.
+- Scelte rapide **Prudente / Base / Ottimista** per tasso privo di rischio e premio di mercato; impostazioni più robuste contro gli azzeramenti.
 
-## Come aggiornare dalla 1.3.1
-Scarica `confronta-portafogli-v1.4.0.zip`, estrailo in una nuova cartella, copia `configurazioni/` (i tuoi file), `cache_prezzi/` e `report/`
-dalla cartella vecchia e fai doppio clic su `Installa.command`.
+## Come aggiornare dalla 1.4
+Scarica `confronta-portafogli-v1.5.0.zip`, estrailo in una nuova cartella, copia `configurazioni/`, `cache_prezzi/` e `report/` dalla vecchia, poi doppio clic su `Installa.command`.
