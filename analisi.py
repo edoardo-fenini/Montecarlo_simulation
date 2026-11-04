@@ -18,10 +18,11 @@ import numpy as np
 import pandas as pd
 
 import dati as D
+import fattori as FA
 import isin
 import metriche
 import rendimento
-from configurazione import BENCH
+from configurazione import BENCH, ErroreConfig
 from simula import Bootstrap, ConCrolli, Garch, StudentT, ricentra, simula
 
 registro_log = logging.getLogger("confronta")
@@ -237,6 +238,8 @@ class Lavoro:
 
 def _generatore(lav: Lavoro, cfg: dict):
     b = cfg["blocco_medio_giorni"]
+    if lav.tipo == "fattori":
+        return FA.crea_generatore(lav.extra["fatt"])
     if lav.tipo == "t":
         return StudentT(lav.M, 5)
     if lav.tipo == "garch":
@@ -333,6 +336,16 @@ def esegui_lavori(lavori: list, cfg: dict, n: int, av: Avanzamento, log=print) -
     return risultati
 
 
+def stima_fattori(cfg: dict, R: pd.DataFrame, arch: D.Archivio, log=print) -> dict:
+    """Scarica i fattori, stima le esposizioni di tutti i titoli e scompone il rischio di ogni portafoglio (anche senza simulare)."""
+    conf = FA.carica_config(cfg.get("fattori_file"))
+    F, V, info = FA.serie_fattori(conf, arch, log)
+    titoli = sorted({t for comp in cfg["composizione"].values() for t in comp} | {BENCH})
+    stima = FA.stima_titoli(R, F, V, conf, titoli)
+    scomp = {p: FA.scomposizione_rischio(stima, F, dict(comp), conf) for p, comp in cfg["composizione"].items() if all(t in stima.beta.index for t in comp)}
+    return {"conf": conf, "F": F, "V": V, "info": info, "stima": stima, "scomposizione": scomp, "avvisi_r2": FA.avvisi_r2(stima, conf)}
+
+
 def esegui(
     cfg: dict,
     aggiorna_dati: bool = False,
@@ -378,6 +391,19 @@ def esegui(
     log("2/4  Periodi di analisi")
     per, note = periodi(cfg, R, proxy_info, arch, log)
     anal = [x for x in per if solo is None or x in solo]
+    modello = cfg["modello_simulazione"]
+    fatt = None
+    if modello == "fattori" or mod.get("scomposizione_rischio") or mod.get("backtest_var"):
+        log("     modello a fattori: scarico i fattori e stimo le esposizioni dei titoli")
+        try:
+            fatt = stima_fattori(cfg, R, arch, log)
+        except (D.ErroreDati, ErroreConfig) as e:
+            if modello == "fattori":
+                raise
+            dati["avvisi"].append(f"Scomposizione del rischio non disponibile: {e}")
+    if modello == "fattori" and "A" in anal:
+        anal = ["A"]  # la storia lunga entra tramite i fattori: le analisi B e C non servono
+        note = list(note) + ["Modello a fattori: la storia lunga (dal 2000) entra attraverso i fattori, quindi si fa solo l'analisi principale."]
     n_seed = int(cfg["verifica_convergenza"]["numero_seed"]) if mod.get("verifica_convergenza") else 1
     tempi["dati"] = time.time() - t0
 
@@ -405,6 +431,8 @@ def esegui(
         "sensibilita": {},
         "convergenza": None,
         "controllo": controllo,
+        "modello_simulazione": modello,
+        "fattori": fatt,
     }
 
     # ---- piano dei lavori: le simulazioni indipendenti tra loro (ognuna con il suo seed)
@@ -415,12 +443,16 @@ def esegui(
         ris["storico"][a] = storico(cfg, M, porte, colonne, idx)
         Mr = prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta), tipi)
         mats[a] = (Mr, porte)
-        lavori.append(Lavoro(f"base_{a}", "bootstrap", f"Analisi {a}: simulazione principale", 1.0, Mr, porte))
+        tipo_base, extra_base = "bootstrap", {}
+        if modello == "fattori":
+            tipo_base = "fattori"
+            extra_base = {"fatt": FA.prepara_generatore(fatt["stima"], fatt["F"], colonne, Mr, cfg["blocco_medio_giorni"])}
+        lavori.append(Lavoro(f"base_{a}", tipo_base, f"Analisi {a}: simulazione principale", 1.0, Mr, porte, extra=extra_base))
         if a == "A":
             ris["matrici"] = {"A": (Mr, porte)}  # per la prova rapida dei pesi nell'app
             for j in range(1, n_seed):  # stessa simulazione con seed diversi: verifica che le simulazioni bastino
                 lavori.append(
-                    Lavoro(f"conv{j}", "bootstrap", f"Verifica: stessa simulazione con il seed n. {j + 1}", 1.0, Mr, porte, 1000 * j)
+                    Lavoro(f"conv{j}", tipo_base, f"Verifica: stessa simulazione con il seed n. {j + 1}", 1.0, Mr, porte, 1000 * j, extra_base)
                 )
         if a == "C":
             continue
