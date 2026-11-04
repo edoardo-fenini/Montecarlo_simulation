@@ -89,6 +89,12 @@ Scelte fatte (annotate, senza chiedere):
 - [ ] Ramo predefinito: impostare `main` dal sito (Settings → General → Default branch) se non è già così.
 - Non provato: la chiave OpenFIGI (indicato nei limiti noti delle note di rilascio).
 
+## Versione 1.3 (ramo `v1.3`): consolidamento (4 novembre 2026)
+Scelte annotate: il ramo è `v1.3` come chiesto (il ramo di sessione `claude/sharp-lovelace-fc6742` non è usato). Il «report progresso,
+debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
+- [x] 1. Risultati vecchi: `controllo.motivo_risultati_vecchi` + avviso e nascondimento in `app.py` (impronta di tutte le impostazioni
+      + data della cache dei prezzi, registrate a fine simulazione; controllo rosso sui titoli attuali). 4 nuovi test. 116 test verdi.
+
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
       modulo «Le simulazioni bastano?» (attivo, 3 seed); test sul numero di percorsi.

@@ -216,6 +216,7 @@ def carica_file() -> None:
 def carica_esempio() -> None:
     applica_cfg(yaml.safe_load(open(ESEMPIO, encoding="utf-8")))
     ss.pop("ris", None)
+    ss.pop("ris_stato", None)
 
 
 # ------------------------------------------------------------------ rendering dei blocchi del report
@@ -314,6 +315,14 @@ def chiave_dati(tabella: pd.DataFrame) -> str | None:
     parti = {k: g.get(k) for k in ("portafogli", "isin", "isin_scelte", "nomi_attesi", "controllo_dati", "prezzi_da_file")}
     parti["benchmark"] = (g.get("benchmark") or {}).get("ticker")
     return yaml.safe_dump(parti, sort_keys=True, allow_unicode=True)
+
+
+def chiave_completa(tabella: pd.DataFrame) -> str | None:
+    """Impronta di TUTTE le impostazioni (per sapere se i risultati in memoria corrispondono ancora ai controlli). None se non valide."""
+    try:
+        return yaml.safe_dump(cfg_da_stato(tabella), sort_keys=True, allow_unicode=True)
+    except (C.ErroreConfig, yaml.YAMLError):
+        return None
 
 
 def calcola_controllo(grezza: dict, aggiorna: bool):
@@ -529,6 +538,8 @@ def mmss(secondi: float) -> str:
 
 def esegui_simulazione(contenitore) -> None:
     ss.pop("ris", None)
+    ss.pop("ris_stato", None)
+    ss.pop("mostra_vecchi", None)
     t0 = time.time()
     barra = contenitore.progress(0.0, text="Preparo la simulazione…")
 
@@ -570,6 +581,7 @@ def esegui_simulazione(contenitore) -> None:
         barra.progress(1.0, text="Preparo il report…")
         S = report.sezioni(ris)
         ss.ris, ss.sezioni = ris, S
+        ss.ris_stato = {"chiave": chiave_completa(tab), "dati": D.Archivio(log=lambda *a: None).ultimo_aggiornamento()}
         ss.html = report.html_report(ris, S)
         ss.pdf = report.pdf_report(ris, S)
         ss.xlsx = report.excel_report(ris)
@@ -794,9 +806,22 @@ with scheda_sim:
     if avvia:
         esegui_simulazione(zona_messaggi)
 
+    motivo_vecchi = None
+    if "ris" in ss:
+        motivo_vecchi = controllo.motivo_risultati_vecchi(
+            ss.get("ris_stato"),
+            chiave_completa(tab),
+            D.Archivio(log=lambda *a: None).ultimo_aggiornamento(),
+            ss.get("controllo"),
+            chiave_attuale,
+        )
     pannello_controllo(chiave_attuale, "ris" in ss)
 
-    if "ris" in ss:
+    if motivo_vecchi:
+        st.error(f"### ⚠️ {controllo.AVVISO_RISULTATI_VECCHI}\n\nMotivo: {motivo_vecchi}.", icon="⚠️")
+        st.toggle("Mostra comunque i vecchi risultati", key="mostra_vecchi", help="Solo per consultarli: non rispecchiano le impostazioni attuali.")
+
+    if "ris" in ss and (not motivo_vecchi or ss.get("mostra_vecchi")):
         ris, S = ss.ris, ss.sezioni
         st.caption("📅 " + report.intestazione(ris))
         c1, c2, c3, _ = st.columns([1, 1, 1, 2])
@@ -838,12 +863,12 @@ with scheda_sim:
                     fasce = st.toggle("Mostra le fasce 5°–95°", value=True)
                     for a in anal:
                         st.subheader(report.NOME_ANALISI[a])
-                        st.plotly_chart(G.fan_chart(ris, a, fasce), width="stretch", theme="streamlit")
+                        st.plotly_chart(G.fan_chart(ris, a, fasce), width="stretch", theme="streamlit", key=f"fan_{a}")
                         st.caption("💡 " + report.didascalia_fan(ris, a))
                 elif nome == "Drawdown":
                     for a in anal:
                         st.subheader(f"{report.NOME_ANALISI[a]}: calo massimo nei {ris['cfg']['orizzonte_anni']} anni")
-                        st.plotly_chart(G.istogramma_mdd(ris, a), width="stretch", theme="streamlit")
+                        st.plotly_chart(G.istogramma_mdd(ris, a), width="stretch", theme="streamlit", key=f"mdd_{a}")
                     st.caption("💡 " + report.didascalia_mdd(ris))
                     mostra_blocchi(senza_immagini(blocchi))
                 elif blocchi:

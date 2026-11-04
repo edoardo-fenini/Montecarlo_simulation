@@ -1,5 +1,16 @@
 # Registro delle modifiche
 
+## 1.3.0 (4 novembre 2026)
+
+Versione di consolidamento. Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di
+non regressione (1.236 numeri chiave) è rimasto identico.
+
+### Risultati vecchi nascosti
+- Se dopo una simulazione cambiano titoli, pesi o impostazioni, se i prezzi in cache vengono aggiornati o se il controllo dei dati
+  diventa rosso, i risultati sono nascosti e al loro posto compare l'avviso «Questi risultati non corrispondono più ai dati attuali:
+  rilancia la simulazione», con il motivo. Un interruttore permette di rivederli comunque (l'avviso resta in cima).
+- Corretto un possibile errore «plotly_chart duplicato» quando due analisi hanno grafici identici (ogni grafico ha ora una chiave).
+
 ## 1.2.0 (4 novembre 2026)
 
 Nessuna funzione precedente è stata tolta. **I numeri del calcolo non sono cambiati**: il test di non regressione

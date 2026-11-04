@@ -40,6 +40,31 @@ def _data(d):
     return "" if d is None else pd.Timestamp(d).strftime("%d/%m/%Y")
 
 
+# ------------------------------------------------------------------ risultati vecchi
+AVVISO_RISULTATI_VECCHI = "Questi risultati non corrispondono più ai dati attuali: rilancia la simulazione."
+
+
+def motivo_risultati_vecchi(
+    stato: dict | None,
+    chiave_attuale: str | None,
+    dati_attuali: float,
+    controllo_app: dict | None = None,
+    chiave_dati_attuale: str | None = None,
+) -> str | None:
+    """None se i risultati in memoria sono ancora validi, altrimenti il motivo (in italiano) per cui vanno nascosti.
+    `stato` = {'chiave': impronta di tutte le impostazioni, 'dati': data di modifica della cache dei prezzi} registrato a fine simulazione.
+    `controllo_app` = ultimo controllo dei dati ({'chiave', 'esito'}); conta solo se riguarda i titoli attuali (`chiave_dati_attuale`)."""
+    if not stato:
+        return None
+    if controllo_app and controllo_app.get("chiave") == chiave_dati_attuale and controllo_app["esito"]["blocca"]:
+        return "il controllo dei dati è rosso: ci sono titoli con un errore"
+    if chiave_attuale is None or chiave_attuale != stato["chiave"]:
+        return "dopo la simulazione hai cambiato titoli, pesi o impostazioni"
+    if dati_attuali > stato["dati"]:
+        return "i prezzi in cache sono stati aggiornati dopo la simulazione"
+    return None
+
+
 # ------------------------------------------------------------------ nome atteso
 def _parole(testo: str) -> set[str]:
     return {p for p in re.findall(r"[a-z0-9]+", str(testo).lower()) if p not in PAROLE_VUOTE}
@@ -280,4 +305,4 @@ def per_report(esito: dict) -> dict:
     }
 
 
-__all__ = ["controlla", "tabella", "testo_tabella", "per_report", "somiglianza_nomi", "giorni_mancanti"]
+__all__ = ["motivo_risultati_vecchi", "AVVISO_RISULTATI_VECCHI", "controlla", "tabella", "testo_tabella", "per_report", "somiglianza_nomi", "giorni_mancanti"]
