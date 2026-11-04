@@ -20,6 +20,7 @@ import pandas as pd
 import dati as D
 import isin
 import metriche
+import rendimento
 from configurazione import BENCH
 from simula import Bootstrap, ConCrolli, Garch, StudentT, ricentra, simula
 
@@ -371,12 +372,13 @@ def esegui(
     }
 
     # ---- piano dei lavori: le simulazioni indipendenti tra loro (ognuna con il suo seed)
-    lavori, stress_da_fare, nomi_sens = [], {}, {}
+    lavori, stress_da_fare, nomi_sens, mats = [], {}, {}, {}
     for a in anal:
         M, porte, colonne, idx = matrice(cfg, per[a])
         ris["periodi"][a] = (idx[0], idx[-1], len(idx))
         ris["storico"][a] = storico(cfg, M, porte, colonne, idx)
         Mr = prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta), tipi)
+        mats[a] = (Mr, porte)
         lavori.append(Lavoro(f"base_{a}", "bootstrap", f"Analisi {a}: simulazione principale", 1.0, Mr, porte))
         if a == "A":
             ris["matrici"] = {"A": (Mr, porte)}  # per la prova rapida dei pesi nell'app
@@ -445,6 +447,15 @@ def esegui(
                 ris.setdefault("avvisi_modelli", []).append(f"Analisi {a}: {x}")
                 log(f"  ATTENZIONE {x}")
             ris["sensibilita"][a] = [(nomi_sens[k], risultati[k]) for k in sorted(nomi_sens) if k.endswith(f"_{a}")]
+    # controllo di plausibilità: il rendimento medio dei percorsi simulati deve coincidere con quello atteso (al netto dei costi)
+    attesi = None
+    if cfg["rendimento_atteso"]["metodo"] != "storico":
+        t = ris["rend_attesi"]
+        attesi = {p: float(t.loc["Rendimento atteso annuo", p] - t.loc["di cui costi ETF (TER)", p]) for p in t.columns}
+    ris["plausibilita"] = {a: rendimento.controlla_plausibilita(ris["sim"][a], *mats[a], attesi=attesi) for a in anal}
+    ris["errore_plausibilita"] = rendimento.messaggio_plausibilita(ris["plausibilita"])
+    if ris["errore_plausibilita"]:
+        log(f"  ERRORE {ris['errore_plausibilita']}")
     if "A" in anal and n_seed > 1:
         ris["convergenza"] = confronto_seed(cfg, [ris["sim"]["A"]] + [risultati[f"conv{j}"] for j in range(1, n_seed)], n)
     if progresso:

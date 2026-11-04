@@ -198,3 +198,14 @@ L'analisi iniziale (rendimento uguale 6%) è in `esempi/2026-11-03_analisi_inizi
 - App: tema chiaro fisso (`.streamlit/config.toml`); le schede mostrano gli stessi blocchi del report HTML; default 20.000 simulazioni.
 - Avvia.command avvia Streamlit in modalità headless e apre il browser con `open`: così Streamlit non chiede l'email al primo avvio.
 - requirements.txt: versioni fissate delle librerie dirette, verificate su PyPI con pacchetti per Mac arm64 e x86_64 (Python 3.12/3.13).
+
+## Versione 1.4 (ramo `v1.4`): fondi comuni e costi (4 novembre 2026)
+Baseline all'inizio: tutti i test verdi (senza browser), non regressione identica.
+- [x] Tappa 0 – correzioni in sospeso. **Già presenti** (1.3.1): ConvergenceWarning GARCH/SLSQP risolto e mai usato in silenzio;
+      prova rapida di `Installa.command` con marker `rapido` (~30 s) e test del solo repository saltati con messaggio.
+      **Applicate ora**: riquadro «Rendimento atteso che verrà usato» (app e riga di comando: beta e rendimento per portafoglio);
+      campo vuoto o non numerico = ROSSO, mai 0 (`rendimento.numero_pct`); GIALLO con premio di mercato 0 o rendimento sotto l'1%;
+      controllo di plausibilità (`rendimento.controlla_plausibilita`: rendimento medio dei percorsi simulati contro l'atteso al netto
+      dei costi, tolleranza = 5 errori standard + 0,3%); se fallisce: errore ROSSO, l'app non mostra i risultati e `confronta.py` non scrive il report.
+      **NON applicata, su richiesta dell'utente («la parte dei default lasciala stare»)**: il cambio dei default a 2,5% / 4%
+      (restano 2% / 4% in `configurazione.py`, app, YAML di esempio e README). Il test di non regressione resta quindi identico.

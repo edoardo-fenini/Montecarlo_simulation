@@ -275,6 +275,8 @@ def simula(
     mean = s1 / cnt
     cov = cross / cnt - np.outer(mean, mean)
     sd = np.sqrt(np.diag(cov))
+    # rendimento medio giornaliero dei percorsi e suo errore standard: serve al controllo di plausibilità (rendimento.py)
+    out["_rend"] = {k: {"media_giorn": float(mean[i]), "se_giorn": float(sd[i] / np.sqrt(cnt))} for i, k in enumerate(nomi)}
     for i, k in enumerate(nomi):
         out[k]["vol"] = float(sd[i] * np.sqrt(giorni))
     with np.errstate(invalid="ignore", divide="ignore"):

@@ -236,6 +236,22 @@ def costruisci_esito(righe: list[dict], cfg: dict) -> dict:
     }
 
 
+# ------------------------------------------------------------------ rendimento atteso (prima della simulazione)
+def rendimenti_attesi(esito: dict, arch: D.Archivio):
+    """Tabella (beta e rendimento atteso annuo per portafoglio) che verrà usata dalla simulazione, calcolata con i prezzi già in cache.
+    None se non si può calcolare (controllo rosso o dati insufficienti): in quel caso la simulazione dirà il motivo."""
+    import analisi
+
+    if esito["blocca"]:
+        return None
+    try:
+        dati = D.costruisci(esito["cfg"], arch)
+        tipi = dati["info"]["tipo"].to_dict()
+        return analisi.spiega_rendimenti(esito["cfg"], analisi.stima_beta(dati["R"]), tipi)
+    except (ErroreDati, KeyError, ValueError):
+        return None
+
+
 # ------------------------------------------------------------------ presentazione
 def dettagli(r: dict) -> str:
     parti = [f"ERRORE: {x}" for x in r["rossi"]] + [f"avviso: {x}" for x in r["gialli"]]

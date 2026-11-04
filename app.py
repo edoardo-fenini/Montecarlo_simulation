@@ -19,6 +19,7 @@ import dati as D
 import grafici_app as G
 import importa_broker as B
 import registro
+import rendimento
 import report
 import ricerca as R
 import stato_app
@@ -169,12 +170,17 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
             "costo_ribilanciamento": ss.costo / 100,
         }
     )
+    # un campo vuoto o non numerico non diventa mai 0: errore chiaro (solo per i campi del metodo scelto)
+    ra_vecchio = C.DEFAULT["rendimento_atteso"]
     raw["rendimento_atteso"] = {
         "metodo": ss.metodo,
-        "tasso_privo_rischio": ss.rf / 100,
-        "premio_mercato": ss.mrp / 100,
-        "valore_uguale": ss.uguale / 100,
-        "personalizzato": {k: v / 100 for k, v in ss.personalizzato.items()},
+        "tasso_privo_rischio": rendimento.numero_pct(ss.rf, "Tasso privo di rischio") if ss.metodo == "beta" else ra_vecchio["tasso_privo_rischio"],
+        "premio_mercato": rendimento.numero_pct(ss.mrp, "Premio di mercato") if ss.metodo == "beta" else ra_vecchio["premio_mercato"],
+        "valore_uguale": rendimento.numero_pct(ss.uguale, "Rendimento medio annuo") if ss.metodo == "uguale" else ra_vecchio["valore_uguale"],
+        "personalizzato": {
+            k: (rendimento.numero_pct(v, f"Rendimento di «{k}»") if ss.metodo == "personalizzato" else 0.0)
+            for k, v in ss.personalizzato.items()
+        },
     }
     raw["moduli"] = {k: bool(ss[f"mod_{k}"]) for k in C.DEFAULT["moduli"]}
     if ss.get("scelte_isin"):
@@ -385,7 +391,9 @@ def calcola_controllo(grezza: dict, aggiorna: bool):
     """Controlla tutti i titoli (scarica i prezzi mancanti). Ritorna (esito, archivio dei prezzi già aperto)."""
     cfg = C.prepara(copy.deepcopy(grezza))
     arch = D.Archivio(aggiorna=bool(aggiorna), log=lambda *a: None)
-    return controllo.controlla(cfg, arch, log=lambda *a: None), arch
+    esito = controllo.controlla(cfg, arch, log=lambda *a: None)
+    esito["rendimenti"] = controllo.rendimenti_attesi(esito, arch)
+    return esito, arch
 
 
 def scegli_quotazione(isin_cod: str, chiave_widget: str, predefinita: str) -> None:
@@ -447,6 +455,28 @@ def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
                 help=f"Trovate {len(elenco)} quotazioni con {ris_i['metodo']}. Scelta automatica: {ris_i['predefinito']} "
                 "(preferisce EUR, poi Borsa Italiana, Xetra, Amsterdam; poi più storia e volumi).",
             )
+
+
+def pannello_rendimento(chiave_attuale: str | None) -> None:
+    """Riquadro «Rendimento atteso»: cosa userà la simulazione (e il beta), con avvisi gialli e rossi."""
+    avvisi = rendimento.avvisi_campi(ss.metodo, ss.rf, ss.mrp, ss.uguale, ss.personalizzato)
+    cc = ss.get("controllo")
+    rend = cc["esito"].get("rendimenti") if cc and cc["chiave"] == chiave_attuale else None
+    avvisi += rendimento.avvisi_tabella(rend)
+    with st.expander("📈 Rendimento atteso che verrà usato", expanded=bool(avvisi) or rend is not None):
+        for livello, testo in avvisi:
+            (st.error if livello == rendimento.ROSSO else st.warning)(("🔴 " if livello == rendimento.ROSSO else "🟡 ") + testo)
+        if rend is not None:
+            t = rend.T.copy()
+            t.columns = ["Beta", "Rendimento atteso annuo", "di cui costi (TER)"]
+            if ss.metodo != "beta":
+                t = t.drop(columns="Beta")
+            st.dataframe(t.style.format({c: "{:.2%}" if c != "Beta" else "{:.2f}" for c in t.columns}), width="stretch", key="tabella_rendimenti")
+            st.caption("Rendimento medio annuo (prima dei costi) che la simulazione assegna a ogni portafoglio; i costi (TER) vengono sottratti.")
+        elif ss.metodo == "beta":
+            st.caption("Premi «Controlla i dati» per vedere il beta e il rendimento atteso di ogni portafoglio.")
+        elif ss.metodo == "storico":
+            st.caption("Con il metodo storico si usano i rendimenti del passato: nessun valore da mostrare prima della simulazione.")
 
 
 # ------------------------------------------------------------------ barra laterale
@@ -698,6 +728,11 @@ def esegui_simulazione(contenitore) -> None:
             )
             cache.clear()  # una sola simulazione in memoria, per non occupare troppa RAM
             cache[chiave] = ris
+        if ris.get("errore_plausibilita"):  # i risultati non coincidono con il rendimento atteso: non si presentano come validi
+            cache.clear()
+            barra.empty()
+            contenitore.error("🔴 **Risultati non validi.** " + ris["errore_plausibilita"])
+            return
         barra.progress(1.0, text="Preparo il report…")
         S = report.sezioni(ris)
         ss.ris, ss.sezioni = ris, S
@@ -942,6 +977,7 @@ with scheda_sim:
             chiave_attuale,
         )
     pannello_controllo(chiave_attuale, "ris" in ss)
+    pannello_rendimento(chiave_attuale)
 
     if motivo_vecchi:
         st.error(f"### ⚠️ {controllo.AVVISO_RISULTATI_VECCHI}\n\nMotivo: {motivo_vecchi}.", icon="⚠️")
