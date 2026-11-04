@@ -280,3 +280,4 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
       OSSERVAZIONE (non toccata): controllo di plausibilità FALLITO sul modello storico, analisi B, portafoglio Banche (atteso 7,40%, simulato 6,58%, tolleranza ±0,59%) con i dati
       reali di oggi. Da esaminare in una versione futura (codice 1.4 invariato).
   Ora: CHANGELOG, RELEASE_NOTES, suite completa, PR verso main, merge, tag v1.5.0 (Actions → Release → Run workflow se il push del tag è bloccato).
+- [x] PR #6 aperta verso main (v1.5). Da verificare: controlli GitHub (Test, Prova su Mac); poi merge e tag v1.5.0 (Actions → Release → Run workflow, versione 1.5.0).
