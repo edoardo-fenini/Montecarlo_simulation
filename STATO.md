@@ -125,7 +125,13 @@ debolezze e sviluppi» non era nel repository: lo creo in `docs/PROGRESSO_DEBOLE
       (`script_runner.py`, `remove_stale_widgets`). Non riprodotto in locale (5/5 verdi). Correzione difensiva: `stato_app.conserva` (copia di
       sicurezza delle impostazioni ripristinata a ogni esecuzione) + test; la prova nel browser ora riporta nel riepilogo gli errori del log di Streamlit.
 - [x] 7. Chiusura: RELEASE_NOTES v1.3.0, README (novità, aggiornamento), user-agent 1.3, report `docs/PROGRESSO_DEBOLEZZE_SVILUPPI.md`.
-      198 test verdi in locale (5 min di app + 3 min di browser), non regressione identica. Pull request, merge e tag: vedi sotto.
+      199 test verdi in locale, non regressione identica.
+- [x] **Pull request [#3](https://github.com/edoardo-fenini/Montecarlo_simulation/pull/3)** verso `main`: Test (Linux, con la prova nel browser)
+      e Prova su Mac (macOS 14) verdi sul push e sulla pull request → unita (merge f9e09b4).
+- [x] **Release v1.3.0 creata dalla release automatica** (4/11/2026): il push del tag da questa sessione è bloccato dal proxy (non dal
+      repository), quindi ho usato il Metodo A del README (Actions → Release → Run workflow, versione 1.3.0, ramo main) tramite l'API:
+      test verdi → tag `v1.3.0` su f9e09b4 creato dal GITHUB_TOKEN → release con le note della sezione 1.3.0 del CHANGELOG →
+      `confronta-portafogli-v1.3.0.zip` (7,4 MB) allegato. Il percorso «push del tag» non è stato provato da qui (stesso workflow).
 
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
