@@ -20,7 +20,7 @@ import dati as D
 from configurazione import BENCH, ErroreConfig
 from simula import GG, Bootstrap
 
-FILE_PREDEFINITO = str(pathlib.Path(__file__).resolve().parent / "configurazioni" / "fattori.yaml")
+FILE_PREDEFINITO = str(pathlib.Path(__file__).resolve().parent / "modelli" / "fattori.yaml")
 GRUPPI = {
     "mercato": "Mercato",
     "regioni": "Regioni",
@@ -91,7 +91,7 @@ def serie_fattori(conf: dict, arch: D.Archivio, log=print) -> tuple[pd.DataFrame
 
     mercato = next(f for f in fatt if f["gruppo"] == "mercato")
     s_merc = prezzi(mercato["lungo"], bool(mercato.get("valuta_locale")), mercato.get("valuta"))
-    cal = s_merc.index[(s_merc.index >= conf["inizio_storia"]) & (s_merc.index.dayofweek < 5)]
+    cal = s_merc.index[(s_merc.index >= conf["inizio_storia"]) & (s_merc.index.day_of_week < 5)]
     if len(cal) < 500:
         raise D.ErroreDati("Il fattore «mercato» ha troppo poca storia dopo la data di inizio.")
     cols, valido, righe = {}, {}, []

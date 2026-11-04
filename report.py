@@ -20,6 +20,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter
 
+import report_fattori
 import stile
 from configurazione import BENCH
 from metriche import RIGHE_ORIZZONTE, SINGOLO
@@ -31,6 +32,7 @@ SCHEDE = [
     "Fan chart",
     "Drawdown",
     "Rischio e correlazioni",
+    "Da dove viene il rischio",
     "Stress test",
     "Robustezza",
     "Limiti dell'analisi",
@@ -318,6 +320,13 @@ def testo_metodo(ris):
             "<b>Metodo del rendimento atteso: storico.</b> ATTENZIONE: si usano i rendimenti realmente ottenuti in passato. "
             "Questo proietta il passato nel futuro: se i titoli sono stati scelti oggi perché sono andati bene (survivorship bias), "
             "i risultati saranno troppo ottimistici."
+        )
+    if ris.get("modello_simulazione") == "fattori":
+        t += (
+            " <b>Modello di simulazione: a fattori.</b> Ogni titolo è la somma di esposizioni a fattori comuni (mercato, regioni, settori, stile, "
+            "tassi e valute, stimati con una regressione ridge sui rendimenti settimanali) e di una parte specifica del titolo. I fattori "
+            "sono ricampionati a blocchi dalla loro storia lunga (dal 2000, con le crisi del 2000-2002 e del 2008) e la parte specifica "
+            "dalla storia del titolo, in modo indipendente tra titoli."
         )
     return t + drag
 
@@ -877,6 +886,9 @@ def sezioni(ris: dict) -> dict[str, list]:
     B.append(("nota", "1 = si muovono sempre insieme; 0 = indipendenti."))
     B.append(("img", heatmap(ris)))
     B.append(("didascalia", didascalia_corr(ris)))
+
+    # ---- Da dove viene il rischio (modello a fattori; si calcola dalle regressioni, anche senza simulare con i fattori)
+    S["Da dove viene il rischio"] = report_fattori.blocchi(ris)
 
     # ---- Stress test
     B = S["Stress test"]

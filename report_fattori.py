@@ -1,0 +1,194 @@
+"""Sezione «Da dove viene il rischio» del report (v1.5): scomposizione del rischio con il modello a fattori.
+
+Si calcola dalle regressioni (non dalla simulazione): disponibile con entrambi i modelli di simulazione."""
+
+from __future__ import annotations
+
+import numpy as np
+import pandas as pd
+
+import fattori as FA
+
+COLORI_GRUPPI = {
+    "Mercato": "#1F3A5F",
+    "Regioni": "#0072B2",
+    "Settori": "#D55E00",
+    "Stile": "#009E73",
+    "Tassi e valute": "#E69F00",
+    "Rischio specifico": "#999999",
+}
+FRASE = {  # come si chiama il fattore dentro una frase
+    "Mercato mondiale": "il mercato azionario in generale",
+    "USA": "l'area USA",
+    "Europa": "l'area Europa",
+    "Giappone": "l'area Giappone",
+    "Emergenti": "i mercati emergenti",
+    "Tecnologia": "il settore tecnologico",
+    "Finanziari": "il settore finanziario",
+    "Salute": "il settore salute",
+    "Energia": "il settore energia",
+    "Industriali": "il settore industriale",
+    "Consumi ciclici": "i consumi ciclici",
+    "Consumi difensivi": "i consumi difensivi",
+    "Growth contro value": "lo stile growth",
+    "Piccole imprese": "le piccole imprese",
+    "Momentum": "lo stile momentum",
+    "Qualità": "lo stile qualità",
+    "Obbligazioni lunghe": "i tassi di interesse (obbligazioni lunghe)",
+    "Dollaro contro euro": "il cambio dollaro/euro",
+}
+
+
+def _p(v, d=0):
+    return f"{v * 100:.{d}f}%".replace(".", ",")
+
+
+def _n(v, d=2):
+    return f"{v:+.{d}f}".replace(".", ",").replace("-", "−")
+
+
+def _tab(intest, righe):
+    return ("tab", {"intest": list(intest)[1:], "righe": righe, "gruppi": None, "sx": True})  # la prima colonna è l'etichetta di riga
+
+
+def frase_fattore(nome: str, segno: float = 1.0) -> str:
+    if nome == "Growth contro value" and segno < 0:
+        return "lo stile value"
+    return FRASE.get(nome, f"il fattore «{nome}»")
+
+
+def grafico_barre(ris: dict) -> bytes:
+    import matplotlib.pyplot as plt
+
+    import report as RP
+
+    sc = ris["fattori"]["scomposizione"]
+    nomi = [k for k in ris["nomi"] if k in sc]
+    fig, ax = plt.subplots(figsize=(max(6.5, 1.5 * len(nomi) + 3), 4.2))
+    pos0 = np.zeros(len(nomi))
+    neg0 = np.zeros(len(nomi))
+    for g, col in COLORI_GRUPPI.items():
+        v = np.array([sc[k]["quote"].get(g, 0.0) for k in nomi]) * 100
+        base = np.where(v >= 0, pos0, neg0)
+        ax.bar(range(len(nomi)), v, bottom=base, color=col, label=g, width=0.6)
+        for i, x in enumerate(v):
+            if abs(x) >= 6:
+                ax.text(i, base[i] + x / 2, f"{x:.0f}%", ha="center", va="center", fontsize=8, color="white")
+        pos0 += np.where(v >= 0, v, 0)
+        neg0 += np.where(v < 0, v, 0)
+    ax.set_xticks(range(len(nomi)), [RP.corto(k, 18) for k in nomi], fontsize=9)
+    ax.set_ylabel("% del rischio (varianza)")
+    ax.axhline(0, color="black", lw=0.6)
+    ax.grid(alpha=0.25, axis="y")
+    ax.legend(ncols=3, fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.1), frameon=False)
+    return RP.png(fig)
+
+
+def _fattori_principali(sc: dict, escludi_mercato: set, k: int = 2) -> list[tuple[str, float]]:
+    """I fattori (non di mercato) che contribuiscono di più al rischio, con la quota."""
+    c = [(n, v) for n, v in sc["contributi"].items() if n not in escludi_mercato]
+    return sorted(c, key=lambda x: -abs(x[1]))[:k]
+
+
+def somiglianza(sc_a: dict, sc_b: dict, F: pd.DataFrame, stima: FA.Stima) -> float:
+    """Correlazione tra i due portafogli dovuta ai soli fattori (parte comune)."""
+    S = np.atleast_2d(np.cov(F.values.T)) * 252
+    a, b = sc_a["esposizioni"].values, sc_b["esposizioni"].values
+    va, vb = a @ S @ a, b @ S @ b
+    return float(a @ S @ b / np.sqrt(va * vb))
+
+
+def sintesi_testo(ris: dict) -> list[str]:
+    f = ris["fattori"]
+    sc, conf = f["scomposizione"], f["conf"]
+    mercati = {x["nome"] for x in conf["fattori"] if x["gruppo"] == "mercato"}
+    righe = []
+    nomi = [k for k in ris["nomi"] if k in sc]
+    for k in nomi:
+        q = sc[k]["quote"]
+        top = _fattori_principali(sc[k], mercati, 2)
+        top = [(n, v) for n, v in top if v > 0.03]
+        parti = ", ".join(f"{_p(v)} {frase_fattore(n, sc[k]['esposizioni'][n])}" for n, v in top)
+        t = f"<b>{k}</b>: il {_p(q['Mercato'])} del rischio viene dal mercato nel suo complesso e il {_p(q['Rischio specifico'])} dai singoli titoli"
+        t += f"; tra le altre scommesse pesano {parti}." if parti else "."
+        righe.append(t)
+    propri = [k for k in nomi if k != ris["bench_nome"]]  # il benchmark non è una «scommessa» da confrontare
+    for i, a in enumerate(propri):
+        for b in propri[i + 1 :]:
+            s = somiglianza(sc[a], sc[b], f["F"], f["stima"])
+            if s >= 0.85:
+                ta = _fattori_principali(sc[a], mercati, 2)
+                comuni = " e ".join(frase_fattore(n, sc[a]["esposizioni"][n]) for n, v in ta if v > 0.03)
+                quota = sum(v for _, v in ta if v > 0) + sc[a]["quote"]["Mercato"]
+                righe.append(
+                    f"Il {_p(quota)} del rischio del portafoglio <b>{a}</b> viene dal mercato"
+                    + (f", da {comuni}" if comuni else "")
+                    + f": è in gran parte la stessa scommessa del portafoglio <b>{b}</b> (somiglianza {str(round(s, 2)).replace('.', ',')} su 1). "
+                    "Averli entrambi diversifica meno di quanto sembri."
+                )
+    return righe
+
+
+def descrizione_esposizioni(sc: dict, conf: dict) -> str:
+    e = sc["esposizioni"]
+    mercati = [x["nome"] for x in conf["fattori"] if x["gruppo"] == "mercato"]
+    parti = [f"beta al mercato {_n(float(e[mercati[0]]), 1).lstrip('+')}"]
+    altri = sorted((n for n in e.index if n not in mercati), key=lambda n: -abs(e[n]))
+    for n in altri[:3]:
+        if abs(e[n]) >= 0.15:
+            parti.append(f"{frase_fattore(n, e[n])} ({_n(float(e[n]), 2)})" if e[n] > 0 or n != "Growth contro value" else f"{frase_fattore(n, e[n])} ({_n(float(-e[n]), 2)})")
+    return "; ".join(parti)
+
+
+def blocchi(ris: dict) -> list:
+    f = ris.get("fattori")
+    if not f:
+        return []
+    sc, stima, conf, info = f["scomposizione"], f["stima"], f["conf"], f["info"]
+    nomi = [k for k in ris["nomi"] if k in sc]
+    B = [
+        (
+            "p",
+            "Ogni titolo è scomposto in <b>esposizioni a fattori comuni</b> (mercato, regioni, settori, stile, tassi e valute) più una "
+            "<b>parte specifica</b> del titolo. Qui si vede quanta parte del rischio di ogni portafoglio viene da ciascun gruppo. "
+            "È calcolato dalle regressioni sulla storia dei titoli, quindi è disponibile anche con il modello di simulazione «storico».",
+        ),
+        ("h3", "Da dove viene il rischio di ogni portafoglio"),
+        ("img", grafico_barre(ris)),
+        ("didascalia", "Ogni barra è il 100% del rischio (varianza) del portafoglio, diviso per gruppo di fattori. Più è grande «Rischio specifico», più il portafoglio è diversificato; più sono grandi gli altri gruppi, più dipende da scommesse comuni."),
+        ("box", sintesi_testo(ris)),
+        ("h3", "Quota del rischio per gruppo"),
+        _tab(["Gruppo"] + nomi, [[g] + [_p(sc[k]["quote"].get(g, 0.0), 1) for k in nomi] for g in COLORI_GRUPPI]),
+        ("h3", "Esposizioni principali"),
+        ("box", [f"<b>{k}</b>: {descrizione_esposizioni(sc[k], conf)}." for k in nomi]),
+    ]
+    fatt_nomi = list(stima.nomi_fattori)
+    B.append(("h3", "Esposizione di ogni portafoglio a tutti i fattori"))
+    B.append(_tab(["Fattore", "Gruppo"] + nomi, [[n, info.loc[n, "gruppo"]] + [_n(float(sc[k]["esposizioni"][n])) for k in nomi] for n in fatt_nomi]))
+    B.append(("nota", "Mercato: 1,00 = si muove come il mercato mondiale. Regioni, settori e stile sono scostamenti rispetto al mercato (o a S&P 500): +0,30 sul settore tecnologico = come il mercato più 0,30 volte la differenza tra tecnologia e mercato. «Growth contro value» positivo = growth, negativo = value."))
+    # R² dei titoli
+    B.append(("h3", "Quanto i fattori spiegano ogni titolo"))
+    soglia = float(conf["r2_minimo_avviso"])
+    tit = [t for t in stima.beta.index]
+    righe = []
+    for t in tit:
+        r2 = stima.r2.get(t, np.nan)
+        flag = " ⚠" if pd.notna(r2) and r2 < soglia and t != "BENCH" else ""
+        righe.append([ "Benchmark" if t == "BENCH" else t, "–" if pd.isna(r2) else _p(r2) + flag, _p(stima.vol[t]), _p(stima.vol_specifica[t]), str(int(stima.n_sett[t]))])
+    B.append(_tab(["Titolo", "R² (quota di rischio spiegata)", "Volatilità annua", "di cui specifica", "Settimane usate"], righe))
+    medio = float(stima.r2.drop("BENCH", errors="ignore").mean())
+    B.append(("nota", f"R² medio dei titoli: {_p(medio)}. Un R² basso non è un errore: vuol dire che il titolo si muove soprattutto per ragioni sue."))
+    for a in f["avvisi_r2"]:
+        B.append(("warn", a))
+    for n in stima.note:
+        B.append(("warn", n))
+    for t, esc in stima.fattori_esclusi.items():
+        B.append(("nota", f"{t}: storia troppo breve per usare {', '.join(esc)}; questi fattori non sono stati usati per questo titolo."))
+    # fattori
+    B.append(("h3", "I fattori usati"))
+    B.append(_tab(["Fattore", "Gruppo", "Costruzione", "Primo dato"], [[n, r["gruppo"], r["ticker"], r["inizio"].strftime("%d/%m/%Y")] for n, r in info.iterrows()]))
+    tardi = [n for n, r in info.iterrows() if pd.Timestamp(r["inizio"]) > pd.Timestamp(conf["inizio_storia"]) + pd.Timedelta(days=45)]
+    if tardi:
+        B.append(("nota", f"I fattori {', '.join(tardi)} nascono dopo l'inizio della storia ({pd.Timestamp(conf['inizio_storia']):%d/%m/%Y}): prima valgono 0 nelle simulazioni (nessuna esposizione nota) e non entrano nelle regressioni."))
+    B.append(("nota", "La regressione usa rendimenti settimanali in euro, con penalità ridge (esposizioni più prudenti quando la storia è breve o i fattori si somigliano; il fattore mercato non è penalizzato)."))
+    return B

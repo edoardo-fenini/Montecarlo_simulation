@@ -32,7 +32,7 @@ DEFAULT = {
     "ribilanciamento": "annuale",
     "blocco_medio_giorni": 20,
     "modello_simulazione": "storico",  # storico (default) | fattori: titoli = esposizioni ai fattori comuni + parte specifica
-    "fattori_file": None,  # file dei fattori (None = configurazioni/fattori.yaml)
+    "fattori_file": None,  # file dei fattori (None = modelli/fattori.yaml)
     "parallelo": "auto",  # auto | si | no: simulazioni indipendenti in parallelo su più processori (stessi risultati)
     "rendimento_atteso": {
         "metodo": "beta",

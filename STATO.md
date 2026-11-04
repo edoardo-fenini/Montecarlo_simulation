@@ -254,10 +254,19 @@ Baseline all'inizio: tutti i test verdi (senza browser), non regressione identic
       Risultato: 248 test verdi in locale (8 min 34 s, prova nel browser inclusa); `ruff check` pulito; non regressione identica.
 
 ## Versione 1.5 (ramo `v1.5`): modello di rischio a fattori (4 novembre 2026, lavoro notturno autonomo)
-Ora: tappa 0 chiusa. Prossimo passo: tappa 1 (modulo `fattori.py`, file `configurazioni/fattori.yaml`).
+Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con modello fattori, tappa 3 (backtest VaR, modulo `backtest_var.py`), poi confronto modelli, README/CHANGELOG, PR e tag.
 - [x] Tappa 0 – impostazioni azzerate. Verificato con AppTest: cambio metodo (beta→uguale→personalizzato→beta), pesi uguali, scelte rapide:
       con la copia di sicurezza della 1.3 (`stato_app.conserva`) i valori non si azzerano mai. Causa più probabile: Streamlit cancella lo stato dei
       campi non disegnati (rf/mrp esistono solo con metodo «beta») e un number_input senza valore riparte da 0/minimo (capitale 0, orizzonte 1,
       premio 0). Non riprodotto in locale (come già annotato nella 1.3). Rafforzato: `conserva` accetta valori predefiniti (mai 0 se la chiave
       manca anche nella copia); pulsanti Prudente (2/3), Base (2,5/4), Ottimista (2,5/5) con callback + didascalia; default 2%/4% invariati;
       campi sempre liberi (anche 0). Test: `tests/test_impostazioni_non_azzerate.py`.
+- [x] Tappa 1 – `fattori.py` + `modelli/fattori.yaml` (18 fattori in EUR: mercato MSCI World; regioni USA/Europa/Giappone/Emergenti come scarti dal mondo;
+      7 settori USA come scarti da SPY; growth-value, piccole, momentum, qualità; obbligazioni lunghe TLT e dollaro/euro). Inizio storia 2000-01-03; momentum e qualità
+      solo dal 2013, emergenti 2003, obbligazioni 2002: prima valgono 0 e non entrano nelle regressioni. Ridge su rendimenti settimanali, penalità per GCV con minimo
+      0,5×settimane (scelto con prova fuori campione su titoli reali), mercato NON penalizzato. Simulazione: fattori con block bootstrap + residui iid per titolo
+      (stesso residuo per lo stesso titolo in portafogli diversi), media ricentrata come per il metodo storico. Con `modello_simulazione: fattori` si fa solo l'analisi A.
+      Scelta: il file dei fattori sta in `modelli/` perché un test valida ogni YAML di `configurazioni/` come portafoglio.
+      Limite noto: il benchmark ETF ha correlazione giornaliera 0,6 con l'indice MSCI (fusi orari/qualità del dato Yahoo): i suoi scarti regionali sono rumore.
+- [x] Tappa 2 – `report_fattori.py`: scheda «Da dove viene il rischio» (barre impilate, esposizioni, R², avvisi R²<0,3, sintesi in italiano), anche con modello storico
+      (modulo `scomposizione_rischio`). App: selettore del modello + due moduli nuovi.

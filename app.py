@@ -61,6 +61,10 @@ SPIEGA_METODO = {
     "storico": "**Storico:** i rendimenti del passato. ⚠️ Proietta il passato nel futuro: troppo ottimista se scegli titoli che sono già andati bene.",
     "personalizzato": "**Personalizzato:** scegli tu il rendimento medio di ogni portafoglio.",
 }
+SPIEGA_MODELLO = {
+    "storico": ("Storico", "Rimescola pezzi di storia reale dei titoli (metodo attuale)."),
+    "fattori": ("A fattori", "Ogni titolo = esposizioni a fattori comuni (storia dal 2000) + parte specifica. Scarica una ventina di serie in più."),
+}
 MODULI = {
     "stress_test": (
         "Stress test",
@@ -77,6 +81,14 @@ MODULI = {
     "confronto_modelli": (
         "Confronto tra modelli",
         "Rifà i conti con altri due modelli (Student-t e GARCH) e varia il rendimento atteso. Lento.",
+    ),
+    "scomposizione_rischio": (
+        "Da dove viene il rischio",
+        "Scompone il rischio in mercato, regioni, settori, stile, tassi e valute (sempre attivo con il modello a fattori).",
+    ),
+    "backtest_var": (
+        "Validazione del VaR (backtest)",
+        "Confronta il VaR a 1 giorno con la realtà (test di Kupiec e Christoffersen). Lento.",
     ),
     "analisi_C": (
         "Storia dal 1999 (analisi C)",
@@ -146,6 +158,7 @@ def applica_cfg(raw: dict) -> None:
     ss.personalizzato = {str(k): float(v) * 100 for k, v in (ra.get("personalizzato") or {}).items()}
     for k in C.DEFAULT["moduli"]:
         ss[f"mod_{k}"] = bool(cfg["moduli"][k])
+    ss.modello = cfg["modello_simulazione"]
     ss.nsim = max(500, int(cfg["n_simulazioni"]))
     ss.seed = int(cfg["seed"])
     ss.rib = cfg["ribilanciamento"]
@@ -195,6 +208,7 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
             "seed": int(ss.seed),
             "ribilanciamento": ss.rib,
             "costo_ribilanciamento": ss.costo / 100,
+            "modello_simulazione": ss.modello,
         }
     )
     # un campo vuoto o non numerico non diventa mai 0: errore chiaro (solo per i campi del metodo scelto)
@@ -234,7 +248,7 @@ ss = st.session_state
 
 # copia di sicurezza delle impostazioni: vedi stato_app.py (Streamlit può cancellare lo stato dei widget dopo un errore)
 IMPOSTAZIONI = [
-    "nome", "capitale", "versamento", "orizzonte", "intermedi", "metodo", "rf", "mrp", "uguale", "nsim", "seed", "rib", "costo",
+    "nome", "capitale", "versamento", "orizzonte", "intermedi", "metodo", "rf", "mrp", "uguale", "nsim", "seed", "rib", "costo", "modello",
     "b_nome", "b_ticker", "b_ter", "b_proxy", *(f"mod_{k}" for k in C.DEFAULT["moduli"]),
 ]  # fmt: skip
 _RA = C.DEFAULT["rendimento_atteso"]
@@ -242,7 +256,7 @@ PREDEFINITI = {
     "nome": C.DEFAULT["nome"], "capitale": float(C.DEFAULT["capitale_iniziale"]), "versamento": float(C.DEFAULT["versamento_mensile"]),
     "orizzonte": int(C.DEFAULT["orizzonte_anni"]), "metodo": _RA["metodo"], "rf": _RA["tasso_privo_rischio"] * 100,
     "mrp": _RA["premio_mercato"] * 100, "uguale": _RA["valore_uguale"] * 100, "nsim": max(500, int(C.DEFAULT["n_simulazioni"])),
-    "seed": int(C.DEFAULT["seed"]), "rib": C.DEFAULT["ribilanciamento"], "costo": float(C.DEFAULT["costo_ribilanciamento"]) * 100,
+    "seed": int(C.DEFAULT["seed"]), "modello": C.DEFAULT["modello_simulazione"], "rib": C.DEFAULT["ribilanciamento"], "costo": float(C.DEFAULT["costo_ribilanciamento"]) * 100,
 }  # fmt: skip
 if ripristinate := stato_app.conserva(ss, IMPOSTAZIONI, PREDEFINITI):
     log.warning("Impostazioni ripristinate dalla copia di sicurezza: %s", ", ".join(ripristinate))
@@ -752,6 +766,17 @@ with st.sidebar:
         ss.personalizzato = dict(zip(modp["Portafoglio"], modp["Rendimento (%)"].astype(float)))
 
     st.header("4 · Moduli e simulazione", divider="gray")
+    st.radio(
+        "Modello di simulazione",
+        list(SPIEGA_MODELLO),
+        key="modello",
+        horizontal=True,
+        format_func=lambda x: SPIEGA_MODELLO[x][0],
+        help="Storico: si rimescolano pezzi di storia reale dei titoli (come nelle versioni precedenti). Fattori: ogni titolo è "
+        "esposizioni a mercato, regioni, settori, stile, tassi e valute (storia lunga dal 2000) più una parte specifica: "
+        "utile per titoli e fondi con poca storia.",
+    )
+    st.caption(SPIEGA_MODELLO[ss.modello][1])
     for k, (et, aiuto) in MODULI.items():
         st.checkbox(et, key=f"mod_{k}", help=aiuto)
     st.number_input("Numero di simulazioni", min_value=500, max_value=100000, step=1000, key="nsim", help=AIUTO["nsim"])
