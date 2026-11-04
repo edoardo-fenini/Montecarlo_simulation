@@ -69,3 +69,26 @@ def test_simulazione_completa_tutti_i_moduli_senza_elementi_duplicati(tmp_path, 
     # un secondo giro (come quando si clicca su una scheda o si sposta un cursore) non deve rompersi
     at = at.run()
     assert not at.exception
+
+
+def test_simulazione_completa_con_modello_a_fattori(tmp_path, monkeypatch):
+    """v1.5: modello a fattori + scomposizione del rischio + backtest del VaR nell'app, senza errori Streamlit."""
+    shutil.copytree(RADICE / "configurazioni", tmp_path / "configurazioni")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(fonti, "scarica_con_ripiego", finto_scarica)
+    monkeypatch.setattr(isin, "_http", finto_http)
+    monkeypatch.setattr(isin, "ispeziona_ticker", finto_ispettore)
+    at = AppTest.from_file(str(RADICE / "app.py"), default_timeout=900).run()
+    at.session_state["nsim"] = 500
+    at.session_state["modello"] = "fattori"
+    at.session_state["mod_backtest_var"] = True
+    at = at.run()
+    at = next(b for b in at.button if "Avvia simulazione" in b.label).click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    ris = at.session_state["ris"]
+    assert ris["modello_simulazione"] == "fattori" and ris.get("backtest") and ris["fattori"]["scomposizione"]
+    etichette = [t.label for t in at.tabs]
+    for nome in ("Da dove viene il rischio", "Validazione del modello"):
+        assert any(nome in e for e in etichette), etichette
+    at = at.run()
+    assert not at.exception

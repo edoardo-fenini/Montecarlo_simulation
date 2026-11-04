@@ -197,3 +197,25 @@ def test_fondo_non_trovato_errore_rosso_csv_semaforo_verde_e_simulazione(pagina,
         bottone_html.click()
     html = pathlib.Path(d.value.path()).read_text(encoding="utf-8")
     assert "CSV importato" in html and "Costi annui usati" in html
+
+
+# ------------------------------------------------------------------ v1.5: modello a fattori nel browser vero
+def test_modello_a_fattori_completo_senza_errori_streamlit(pagina, tmp_path):
+    import yaml
+
+    raw = yaml.safe_load((pathlib.Path(__file__).resolve().parents[2] / "configurazioni/esempio_tre_portafogli.yaml").read_text(encoding="utf-8"))
+    raw["n_simulazioni"] = 500
+    raw["modello_simulazione"] = "fattori"
+    raw["moduli"] = {"stress_test": True, "verifica_convergenza": False, "backtest_var": True, "scomposizione_rischio": True}
+    f = tmp_path / "fattori.yaml"
+    f.write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
+    pagina.locator("input[type=file]").last.set_input_files(str(f))
+    expect(pagina.get_by_text("caricata.")).to_be_visible()
+    pagina.get_by_role("button", name="Avvia simulazione").first.click()
+    expect(pagina.get_by_role("button", name="Report HTML")).to_be_visible(timeout=600000)
+    expect(pagina.locator(ERRORI_STREAMLIT)).to_have_count(0)
+    for nome in ("Da dove viene il rischio", "Validazione del modello"):
+        pagina.get_by_role("tab", name=nome, exact=True).click()
+        pagina.wait_for_timeout(500)
+        expect(pagina.locator(ERRORI_STREAMLIT)).to_have_count(0)
+        expect(pagina.get_by_text("Niente da mostrare")).to_have_count(0)
