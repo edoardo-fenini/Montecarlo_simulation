@@ -252,3 +252,12 @@ Baseline all'inizio: tutti i test verdi (senza browser), non regressione identic
       Emerso dalla prova nel browser e corretto: dopo un rosso risolto «Avvia simulazione» restava disattivato fino al clic successivo.
       Nella prova nel browser FRED è finto (senza rete vera): altrimenti il controllo dati, che ora calcola anche il beta, aspettava il timeout di FRED.
       Risultato: 248 test verdi in locale (8 min 34 s, prova nel browser inclusa); `ruff check` pulito; non regressione identica.
+
+## Versione 1.5 (ramo `v1.5`): modello di rischio a fattori (4 novembre 2026, lavoro notturno autonomo)
+Ora: tappa 0 chiusa. Prossimo passo: tappa 1 (modulo `fattori.py`, file `configurazioni/fattori.yaml`).
+- [x] Tappa 0 – impostazioni azzerate. Verificato con AppTest: cambio metodo (beta→uguale→personalizzato→beta), pesi uguali, scelte rapide:
+      con la copia di sicurezza della 1.3 (`stato_app.conserva`) i valori non si azzerano mai. Causa più probabile: Streamlit cancella lo stato dei
+      campi non disegnati (rf/mrp esistono solo con metodo «beta») e un number_input senza valore riparte da 0/minimo (capitale 0, orizzonte 1,
+      premio 0). Non riprodotto in locale (come già annotato nella 1.3). Rafforzato: `conserva` accetta valori predefiniti (mai 0 se la chiave
+      manca anche nella copia); pulsanti Prudente (2/3), Base (2,5/4), Ottimista (2,5/5) con callback + didascalia; default 2%/4% invariati;
+      campi sempre liberi (anche 0). Test: `tests/test_impostazioni_non_azzerate.py`.

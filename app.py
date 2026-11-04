@@ -237,8 +237,23 @@ IMPOSTAZIONI = [
     "nome", "capitale", "versamento", "orizzonte", "intermedi", "metodo", "rf", "mrp", "uguale", "nsim", "seed", "rib", "costo",
     "b_nome", "b_ticker", "b_ter", "b_proxy", *(f"mod_{k}" for k in C.DEFAULT["moduli"]),
 ]  # fmt: skip
-if ripristinate := stato_app.conserva(ss, IMPOSTAZIONI):
+_RA = C.DEFAULT["rendimento_atteso"]
+PREDEFINITI = {
+    "nome": C.DEFAULT["nome"], "capitale": float(C.DEFAULT["capitale_iniziale"]), "versamento": float(C.DEFAULT["versamento_mensile"]),
+    "orizzonte": int(C.DEFAULT["orizzonte_anni"]), "metodo": _RA["metodo"], "rf": _RA["tasso_privo_rischio"] * 100,
+    "mrp": _RA["premio_mercato"] * 100, "uguale": _RA["valore_uguale"] * 100, "nsim": max(500, int(C.DEFAULT["n_simulazioni"])),
+    "seed": int(C.DEFAULT["seed"]), "rib": C.DEFAULT["ribilanciamento"], "costo": float(C.DEFAULT["costo_ribilanciamento"]) * 100,
+}  # fmt: skip
+if ripristinate := stato_app.conserva(ss, IMPOSTAZIONI, PREDEFINITI):
     log.warning("Impostazioni ripristinate dalla copia di sicurezza: %s", ", ".join(ripristinate))
+
+
+SCENARI_RENDIMENTO = {"Prudente": (2.0, 3.0), "Base": (2.5, 4.0), "Ottimista": (2.5, 5.0)}  # (tasso privo di rischio %, premio %)
+
+
+def imposta_scenario(rf: float, mrp: float) -> None:
+    """Scelta rapida: compila i due campi (restano modificabili). Usata come callback: gira prima del disegno dei campi."""
+    ss.rf, ss.mrp = rf, mrp
 
 
 def pesi_uguali() -> None:
@@ -723,6 +738,11 @@ with st.sidebar:
         c1, c2 = st.columns(2)
         c1.number_input("Tasso privo di rischio (%)", step=0.25, key="rf", help=AIUTO["rf"])
         c2.number_input("Premio di mercato (%)", step=0.25, key="mrp", help=AIUTO["mrp"])
+        b1, b2, b3 = st.columns(3)
+        for col, (nome_p, (v_rf, v_mrp)) in zip((b1, b2, b3), SCENARI_RENDIMENTO.items(), strict=True):
+            col.button(nome_p, key=f"scenario_{nome_p}", width="stretch", on_click=imposta_scenario, args=(v_rf, v_mrp),
+                       help=f"Tasso privo di rischio {v_rf:g}% · premio di mercato {v_mrp:g}%. Poi puoi modificare i valori.")  # fmt: skip
+        st.caption("Valori indicativi basati su tassi BCE e stime di premio per il rischio di fine 2026, non previsioni.")
     elif ss.metodo == "uguale":
         st.number_input("Rendimento medio annuo per tutti (%)", step=0.5, key="uguale", help=AIUTO["uguale"])
     elif ss.metodo == "personalizzato":
