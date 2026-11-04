@@ -102,9 +102,7 @@ def _riga_vuota(inp: str, ruolo: str) -> dict:
     }  # fmt: skip
 
 
-def controlla(
-    cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, http=None, ispettore=None, ricerca=None, log=print
-) -> dict:
+def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, http=None, ispettore=None, ricerca=None, log=print) -> dict:
     """Controlla tutti i titoli. Ritorna {'righe', 'cfg' (ISIN già sostituiti dai ticker), 'riepilogo', 'blocca', 'messaggio'}.
     Non solleva errori per i singoli titoli: li segna in rosso. Scarica (e mette in cache) i prezzi, così la simulazione dopo è più veloce."""
     oggi = oggi or datetime.date.today()
@@ -147,7 +145,9 @@ def controlla(
         except ErroreDati as e:
             msg = str(e)
             r["rossi"].append(
-                "ticker non trovato su Yahoo Finance" if "non esiste" in msg or "non ha dati" in msg else "dati non disponibili: " + msg.split(".")[0]
+                "ticker non trovato su Yahoo Finance"
+                if "non esiste" in msg or "non ha dati" in msg
+                else "dati non disponibili: " + msg.split(".")[0]
             )
             continue
         if len(s) == 0:
@@ -175,7 +175,9 @@ def controlla(
         if r["anni"] < soglie["storia_min_anni"]:
             r["rossi"].append(f"solo {_it(r['anni'])} anni di storia (minimo {_it(soglie['storia_min_anni'], 0)})")
         elif r["anni"] < soglie["storia_avviso_anni"]:
-            r["gialli"].append(f"solo {_it(r['anni'])} anni di storia (meno di {_it(soglie['storia_avviso_anni'], 0)}): risultati poco affidabili")
+            r["gialli"].append(
+                f"solo {_it(r['anni'])} anni di storia (meno di {_it(soglie['storia_avviso_anni'], 0)}): risultati poco affidabili"
+            )
         if eta > soglie["ultimo_prezzo_blocco_giorni"]:
             r["rossi"].append(f"ultimo prezzo del {_data(r['ultimo'])} ({eta} giorni fa)")
         elif eta > soglie["ultimo_prezzo_avviso_giorni"]:
@@ -215,7 +217,15 @@ def costruisci_esito(righe: list[dict], cfg: dict) -> dict:
             f"Simulazione bloccata: {n_rossi} {'titolo ha' if n_rossi == 1 else 'titoli hanno'} un errore (rosso). "
             f"Correggi o togli {'questo titolo' if n_rossi == 1 else 'questi titoli'} e riprova:\n{elenco}"
         )
-    return {"righe": righe, "cfg": cfg, "riepilogo": riepilogo, "blocca": n_rossi > 0, "messaggio": messaggio, "rossi": n_rossi, "gialli": n_gialli}
+    return {
+        "righe": righe,
+        "cfg": cfg,
+        "riepilogo": riepilogo,
+        "blocca": n_rossi > 0,
+        "messaggio": messaggio,
+        "rossi": n_rossi,
+        "gialli": n_gialli,
+    }
 
 
 # ------------------------------------------------------------------ presentazione

@@ -586,24 +586,36 @@ def blocco_controllo_dati(ris: dict) -> list:
             [
                 esc(x["Input"]),
                 f'<font color="{COLORE_ESITO[esito]}"><b>{esito}</b></font>',
-                esc(x["ISIN"]),
                 esc(x["Ticker usato"]),
                 esc(corto(x["Nome"], 26)),
-                esc(x["Borsa"]),
-                x["Valuta"],
+                esc(f"{x['Borsa']} ({x['Valuta']})" if x["Valuta"] else x["Borsa"]),
                 esc(x["Fonte"]),
                 x["Prima data"],
                 x["Ultima data"],
                 x["Anni di storia"],
                 x["% giorni mancanti"],
-                esc(x["Ultimo prezzo"]),
+                esc(x["Ultimo prezzo"].split(" del ")[0]),
             ]
         )
     B = [
         ("h3", "Controllo dei dati prima della simulazione"),
-        ("p", f"<b>{esc(c['riepilogo'])}.</b> Semaforo: <b>verde</b> = tutto a posto; <b>giallo</b> = avviso, si può procedere; <b>rosso</b> = errore che blocca la simulazione."),
+        (
+            "p",
+            f"<b>{esc(c['riepilogo'])}.</b> La prima colonna è ciò che hai scritto (ticker o ISIN). Semaforo: <b>verde</b> = tutto a posto; <b>giallo</b> = avviso, si può procedere; <b>rosso</b> = errore che blocca la simulazione.",
+        ),
         T(
-            ["Esito", "ISIN", "Ticker usato", "Nome", "Borsa", "Valuta", "Fonte", "Prima data", "Ultima data", "Anni", "% giorni mancanti", "Ultimo prezzo"],
+            [
+                "Esito",
+                "Ticker usato",
+                "Nome",
+                "Borsa (valuta)",
+                "Fonte",
+                "Prima data",
+                "Ultima data",
+                "Anni",
+                "% giorni mancanti",
+                "Ultimo prezzo",
+            ],
             righe,
             sx=True,
         ),
@@ -1613,7 +1625,13 @@ def excel_report(ris) -> bytes:
     larghezze(ws)
     if ris.get("controllo"):
         ws = wb.create_sheet("Controllo dati")
-        scrivi(ws, 1, "Controllo dati: " + ris["controllo"]["riepilogo"], ris["controllo"]["tabella_senza_emoji"].set_index("Input"), lambda m: "")
+        scrivi(
+            ws,
+            1,
+            "Controllo dati: " + ris["controllo"]["riepilogo"],
+            ris["controllo"]["tabella_senza_emoji"].set_index("Input"),
+            lambda m: "",
+        )
         larghezze(ws, 16, 16)
     ws = wb.create_sheet("Titoli")
     info = ris["dati_info"].copy()

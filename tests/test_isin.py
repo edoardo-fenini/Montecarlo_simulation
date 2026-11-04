@@ -54,8 +54,16 @@ def figi(*voci):
 
 
 def scheda(valuta="EUR", borsa="Milan", storia_anni=10, volume=100000, ultimo="2026-11-03", nome="Nome vero"):
-    primo = datetime.datetime.combine(OGGI - datetime.timedelta(days=int(storia_anni * 365.25)), datetime.time(), datetime.timezone.utc)
-    return {"valuta": valuta, "borsa": borsa, "nome": nome, "tipo": "ETF", "primo": int(primo.timestamp()), "volume": volume, "ultimo": ultimo}
+    primo = datetime.datetime.combine(OGGI - datetime.timedelta(days=int(storia_anni * 365.25)), datetime.time(), datetime.UTC)
+    return {
+        "valuta": valuta,
+        "borsa": borsa,
+        "nome": nome,
+        "tipo": "ETF",
+        "primo": int(primo.timestamp()),
+        "volume": volume,
+        "ultimo": ultimo,
+    }
 
 
 class Finto:

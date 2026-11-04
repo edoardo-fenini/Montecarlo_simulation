@@ -18,7 +18,12 @@ ISIN = "IT0003128367"
 def kw():
     figi = json.dumps([{"data": [{"ticker": "AAA", "exchCode": "IM", "name": "AAA SPA"}]}]).encode()
     scheda = {"valuta": "EUR", "borsa": "Milan", "nome": "AAA", "tipo": "EQUITY", "primo": 1.3e9, "volume": 1e5, "ultimo": "2024-12-31"}
-    return {"http": lambda url, dati=None, intestazioni=None: figi, "ispettore": {"AAA.MI": scheda}.get, "ricerca": lambda q: [], "oggi": datetime.date(2025, 1, 2)}
+    return {
+        "http": lambda url, dati=None, intestazioni=None: figi,
+        "ispettore": {"AAA.MI": scheda}.get,
+        "ricerca": lambda q: [],
+        "oggi": datetime.date(2025, 1, 2),
+    }
 
 
 @pytest.fixture(scope="module")
@@ -35,7 +40,13 @@ def ris(tmp_path_factory, cfg_piccola=None):
         "seed": 1,
         "benchmark": {"nome": "Benchmark test", "ticker": "BMK.AS", "ter": 0.002, "proxy_storico": "^IDX"},
         "analisi": {"inizio_B": "2012-06-01", "inizio_C": "2012-06-01"},
-        "moduli": {"stress_test": False, "rischio_singolo_titolo": False, "confronto_modelli": False, "analisi_C": False, "verifica_convergenza": False},
+        "moduli": {
+            "stress_test": False,
+            "rischio_singolo_titolo": False,
+            "confronto_modelli": False,
+            "analisi_C": False,
+            "verifica_convergenza": False,
+        },
         "portafogli": [{"nome": "Uno", "titoli": [ISIN, "BBB.DE"]}, {"nome": "Due", "titoli": {"CCC": 60, ISIN: 40}}],
         "nomi_attesi": {ISIN: "Tesla"},
     }

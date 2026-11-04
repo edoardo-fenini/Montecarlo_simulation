@@ -13,7 +13,6 @@ import confronta
 import controllo
 import dati as D
 import fonti
-import isin
 
 OGGI = datetime.date(2026, 11, 4)
 
@@ -93,7 +92,20 @@ def test_tutto_verde_e_riepilogo(tmp_path):
 def test_tabella_ha_tutte_le_colonne(tmp_path):
     t = controllo.tabella(esegui_controllo(tmp_path, base(), TITOLI)["righe"])
     assert list(t.columns) == controllo.COLONNE_TABELLA
-    for c in ["Input", "Ticker usato", "Nome", "Borsa", "Valuta", "Fonte", "Prima data", "Ultima data", "Anni di storia", "% giorni mancanti", "Ultimo prezzo", "Esito"]:
+    for c in [
+        "Input",
+        "Ticker usato",
+        "Nome",
+        "Borsa",
+        "Valuta",
+        "Fonte",
+        "Prima data",
+        "Ultima data",
+        "Anni di storia",
+        "% giorni mancanti",
+        "Ultimo prezzo",
+        "Esito",
+    ]:
         assert c in t.columns
     assert t.loc[0, "Esito"].startswith("🟢") and t.loc[0, "Ultima data"] == "03/11/2026"
 
@@ -190,7 +202,9 @@ def test_somiglianza_nomi():
 def test_soglie_configurabili(tmp_path):
     e = esegui_controllo(tmp_path, base(AAA_MI=(serie(anni=2), meta())), TITOLI, controllo_dati={"storia_avviso_anni": 1.5})
     assert riga(e, "AAA.MI")["esito"] == "VERDE"
-    e = esegui_controllo(tmp_path / "b", base(AAA_MI=(serie(anni=2), meta())), TITOLI, controllo_dati={"storia_min_anni": 2.5, "storia_avviso_anni": 3})
+    e = esegui_controllo(
+        tmp_path / "b", base(AAA_MI=(serie(anni=2), meta())), TITOLI, controllo_dati={"storia_min_anni": 2.5, "storia_avviso_anni": 3}
+    )
     assert riga(e, "AAA.MI")["esito"] == "ROSSO"
     with pytest.raises(C.ErroreConfig, match="soglie"):
         config(TITOLI, controllo_dati={"storia_min_anni": 5, "storia_avviso_anni": 3})
@@ -203,7 +217,9 @@ def test_il_peggiore_vince_e_i_motivi_si_sommano(tmp_path):
 
 
 # ------------------------------------------------------------------ ISIN nel controllo
-FIGI_ETF = json.dumps([{"data": [{"ticker": "SWDA", "exchCode": "IM", "name": "X"}, {"ticker": "EUNL", "exchCode": "GY", "name": "X"}]}]).encode()
+FIGI_ETF = json.dumps(
+    [{"data": [{"ticker": "SWDA", "exchCode": "IM", "name": "X"}, {"ticker": "EUNL", "exchCode": "GY", "name": "X"}]}]
+).encode()
 
 
 def kw_isin():
@@ -238,7 +254,9 @@ def test_isin_non_trovato_e_rosso(tmp_path):
 # ------------------------------------------------------------------ riga di comando
 def scrivi_config(tmp_path, titoli):
     p = tmp_path / "c.yaml"
-    p.write_text(json.dumps({"nome": "prova", "benchmark": {"nome": "Bench", "ticker": "BMK.AS"}, "portafogli": [{"nome": "P", "titoli": titoli}]}))
+    p.write_text(
+        json.dumps({"nome": "prova", "benchmark": {"nome": "Bench", "ticker": "BMK.AS"}, "portafogli": [{"nome": "P", "titoli": titoli}]})
+    )
     return str(p)
 
 

@@ -38,6 +38,35 @@
 
 Test di non regressione: identico dall'inizio alla fine della 1.1 (anche in parallelo). Nessun numero del calcolo è cambiato.
 
+## Versione 1.2 (ramo `claude/optimistic-gates-68p7ry`): ISIN e controllo dei dati
+- [x] 1. `isin.py`: riconoscimento + cifra di controllo (Luhn), conversione ISIN → ticker Yahoo, scelta della quotazione, cache
+      `cache_prezzi/isin_ticker.json`; opzioni `isin`, `isin_scelte`, `nomi_attesi`, `controllo_dati` in `configurazione.py`.
+- [x] 2. `controllo.py`: tabella «Controllo dati» con semaforo; `confronta.py` (blocco con rosso, `--solo-controllo`); report
+      (Sintesi, CSV, Excel) con ISIN e ticker usato.
+- [x] 3. App: colonna «Ticker o ISIN», pulsante «Controlla i dati», «Avvia simulazione» disattivato con un rosso, menu delle quotazioni.
+- [x] 4. Test: `test_isin.py`, `test_controllo.py`, `test_isin_report.py`, `test_app_controllo.py` (tutti offline); non regressione verde.
+- [x] 5. Prova reale (4/11/2026): `IE00B4L5Y983` → `SWDA.MI`, `US0378331005` → `AAPL`, `IT0003128367` → `ENEL.MI`;
+      `confronta.py --config configurazioni/esempio_isin.yaml --solo-controllo`: 13 titoli, 3 avvisi (movimenti estremi storici), 0 errori.
+
+Scelte fatte (annotate, senza chiedere):
+- **Fonti ISIN provate davvero**: OpenFIGI senza chiave funziona (tutte le quotazioni, ma con codici borsa Bloomberg da tradurre in
+  suffissi Yahoo: tabella `SUFFISSI_YAHOO`); `yfinance.Search` funziona (una sola quotazione, ticker già Yahoo); la ricerca Yahoo
+  chiamata direttamente con lo user-agent del programma dà 429 (non aggirato: il progetto usa uno user-agent onesto). Quindi OpenFIGI
+  principale (+ verifica di ogni candidato su Yahoo con yfinance, ripiego API diretta), `yfinance.Search` come riserva.
+- **Regola di scelta** letta come ordine lessicografico: EUR, poi `.MI`, `.DE`, `.AS`, poi le altre; a parità anni di storia (interi) e
+  volumi. Aggiunte due protezioni non richieste ma necessarie: quotazioni senza scambi da 30 giorni e quelle con volume sotto il 2% della più
+  scambiata vanno in fondo (senza questa regola Apple sarebbe finita su `1AAPL.MI`, 5.000 azioni al giorno, invece di `AAPL`).
+- **Giorni mancanti**: rispetto al calendario comune del progetto (giorni in cui almeno metà dei titoli ha scambiato), non ai giorni
+  feriali: così le festività di una borsa non fanno scattare il giallo. Con un solo titolo il calendario è il suo e il valore è 0.
+- «Prima e ultima data» e «data dell'ultimo prezzo» coincidono: la tabella ha «Ultima data» e «Ultimo prezzo» (valore + valuta + data).
+- Prezzi zero o negativi: `fonti._pulisci` li scartava in silenzio; ora li conta (`prezzi_non_positivi` nei metadati, anche nella cache).
+- Il blocco sta in `confronta.py` e nell'app, **non** in `analisi.esegui` (resta usabile da codice e dai test con dati finti di date vecchie);
+  `esegui` converte comunque gli ISIN rimasti e accetta `controllo=` (salvato nel report) e `archivio=` (niente doppio download).
+- Cache dei prezzi più vecchia di 7 giorni: il controllo riscarica quel ticker una volta prima di dichiarare il rosso/giallo.
+- Nome atteso: solo da `nomi_attesi` (non dalla `descrizione` del benchmark, che ha un default); se manca il nome → giallo.
+- Rimosso il vecchio riquadro «Controllo dei ticker» dall'app (sostituito dal nuovo flusso); `dati.verifica_ticker` resta (test).
+- Non provato: browser reale per l'app con ISIN (provata con `streamlit.testing`), Mac reale.
+
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
       modulo «Le simulazioni bastano?» (attivo, 3 seed); test sul numero di percorsi.
@@ -82,7 +111,7 @@ Test di non regressione: identico dall'inizio alla fine della 1.1 (anche in para
 - Prova con dati reali europei (EUR, CHF, GBp), ETF, versamenti e portafoglio misto.
 
 ## Come riprendere
-`python -m pytest -q tests` (offline). Esempio di configurazione: `configurazioni/esempio_tre_portafogli.yaml`.
+`python -m pytest -q tests` (offline; 112 test). Esempio di configurazione: `configurazioni/esempio_tre_portafogli.yaml`.
 L'analisi iniziale (rendimento uguale 6%) è in `esempi/2026-11-03_analisi_iniziale_rendimento_uguale_6/`.
 - PDF generato con reportlab (solo Python, niente Chrome) e font DejaVu incluso in matplotlib.
 - Stress test: una sola simulazione di "crescita di 1 €" per portafoglio riusata per tutti gli scenari (veloce); 1.000 percorsi.

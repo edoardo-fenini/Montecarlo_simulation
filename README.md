@@ -129,8 +129,67 @@ prezzi_da_file:
   MIOTITOLO: {file: esempi/prezzi_esempio.csv, valuta: EUR}
 ```
 
-### Controllo dei ticker
-Nella barra laterale, **🔎 Controllo dei ticker** mostra per ogni ticker il nome completo della società, la borsa, la valuta, gli anni di storia e la fonte. Serve ad accorgersi subito di un ticker sbagliato che punta a un'altra azienda. I ticker nuovi (fino a tre alla volta) vengono controllati appena li scrivi; per molti ticker nuovi c'è il pulsante **Scarica e controlla tutti i ticker**.
+### ISIN al posto dei ticker
+Nella tabella dei portafogli (colonna **Ticker o ISIN**), nel benchmark e nei file di configurazione puoi scrivere per ogni titolo **un ticker Yahoo oppure un ISIN**. L'ISIN (2 lettere + 9 caratteri + 1 cifra di controllo, es. `IE00B4L5Y983`) è riconosciuto da solo e la **cifra di controllo viene verificata**: un errore di battitura diventa un errore rosso con un messaggio chiaro.
+
+Come viene convertito in ticker (metodi provati davvero, vedi sotto):
+1. **OpenFIGI** (API gratuita, nessuna chiave obbligatoria) elenca tutte le quotazioni dell'ISIN; ogni ticker viene poi controllato su Yahoo (esiste? valuta, anni di storia, volumi, ultimo scambio).
+2. Se OpenFIGI non risponde o non trova nulla di utilizzabile, si usa come riserva la **ricerca di Yahoo Finance** (`yfinance.Search`), che di solito indica la quotazione principale.
+
+**Quale quotazione viene scelta.** Un ISIN può essere quotato su molte borse (l'MSCI World di iShares ne ha una decina). La regola predefinita è: prima le quotazioni attive (scambi negli ultimi 30 giorni) e abbastanza scambiate (volume almeno il 2% di quello della più scambiata: evita, ad esempio, la quotazione in euro poco liquida di Apple a Milano); poi **EUR, poi Borsa Italiana `.MI`, poi Xetra `.DE`, poi Amsterdam `.AS`**, poi le altre; a parità, più anni di storia e più volumi. Si cambia in configurazione:
+
+```yaml
+isin:
+  preferenze: [EUR, .MI, .DE, .AS]   # valuta (EUR, USD...) o suffisso della borsa, in ordine di preferenza
+isin_scelte: {IE00B4L5Y983: EUNL.DE}  # forza una quotazione per un ISIN
+```
+
+Nell'app, dopo **🔎 Controlla i dati**, sotto la tabella compare per ogni ISIN con più quotazioni un **menu** con la quotazione scelta e tutte le altre trovate (borsa, valuta, storia, volumi): scegline un'altra e il controllo si rifà da solo; la scelta finisce nella configurazione scaricabile (`isin_scelte`). Le conversioni sono salvate in `cache_prezzi/isin_ticker.json` e non vengono ripetute (con «Aggiorna i dati» / `--aggiorna-dati` si rifanno). Nel report ogni titolo mostra **sia l'ISIN sia il ticker usato**.
+
+**Chiave OpenFIGI (facoltativa).** Senza chiave OpenFIGI consente, secondo la sua documentazione, circa 25 richieste al minuto: basta per decine di ISIN, e le conversioni restano in cache. Con una chiave gratuita i limiti salgono molto. Come ottenerla: vai su <https://www.openfigi.com/api>, cerca il link per richiedere la chiave (API key) e registrati con la tua email (è gratuita; la procedura è del sito e può cambiare). Poi scrivila in configurazione (`isin: {openfigi_chiave: "..."}`) oppure, meglio, nella variabile d'ambiente `OPENFIGI_API_KEY` (la chiave non viene mai scritta nei report). Non serve per usare lo strumento.
+
+**Cosa ho provato (4 novembre 2026).** OpenFIGI risponde senza chiave e dà l'elenco completo delle quotazioni (198 per `IE00B4L5Y983`), ma con i suoi codici di borsa: vanno tradotti nei suffissi Yahoo e verificati. La ricerca di Yahoo via `yfinance.Search` risponde con il ticker già giusto ma con **una sola** quotazione (per l'MSCI World: `IWDA.L`, in dollari a Londra); la stessa ricerca chiamata direttamente con l'identificativo del programma ha risposto «429 troppe richieste», e non ho cercato di aggirarlo. Perciò: OpenFIGI principale, Yahoo di riserva. Esempio: `IE00B4L5Y983` → `SWDA.MI`, `US0378331005` → `AAPL`, `IT0003128367` → `ENEL.MI`.
+
+Esempio pronto con azioni ed ETF europei: `configurazioni/esempio_isin.yaml`.
+
+### Controllo dei dati prima della simulazione
+Il pulsante **🔎 Controlla i dati** (barra laterale) verifica tutti i titoli, benchmark compreso, **prima** di simulare. Compare la tabella «Controllo dati» con, per ogni titolo: input (ticker o ISIN), ticker usato, nome completo, borsa, valuta, fonte dei dati, prima e ultima data, anni di storia, % di giorni mancanti, ultimo prezzo e semaforo. In cima il riepilogo, ad esempio *«12 titoli trovati, 1 avviso, 0 errori»*. La stessa tabella finisce nel report (sezione Sintesi, CSV `controllo_dati.csv`, scheda Excel «Controllo dati»). Premendo **Avvia simulazione** il controllo viene rifatto da solo.
+
+| Semaforo | Quando | Cosa succede |
+|---|---|---|
+| 🔴 **Rosso** | ticker/ISIN non trovato (o ISIN con cifra di controllo errata); nessun prezzo; meno di 1 anno di storia; ultimo prezzo più vecchio di 30 giorni; prezzi zero o negativi nei dati originali | **La simulazione non parte**: «Avvia simulazione» è disattivato e un messaggio dice cosa correggere |
+| 🟡 **Giallo** | meno di 3 anni di storia; più del 5% di giorni mancanti; ultimo prezzo più vecchio di 7 giorni; movimenti giornalieri oltre ±30%; nome trovato molto diverso da quello atteso | Avviso: si può procedere |
+| 🟢 **Verde** | tutto a posto | – |
+
+I «giorni mancanti» si contano rispetto ai giorni in cui almeno metà dei titoli ha scambiato: le festività di una sola borsa non contano. Il **nome atteso** si indica in configurazione (`nomi_attesi`, vedi `configurazioni/esempio_isin.yaml`). Le soglie si cambiano in configurazione (`controllo_dati`, qui i valori predefiniti):
+
+```yaml
+controllo_dati:
+  storia_min_anni: 1               # rosso sotto
+  storia_avviso_anni: 3            # giallo sotto
+  giorni_mancanti_max: 0.05        # giallo oltre
+  ultimo_prezzo_blocco_giorni: 30  # rosso oltre
+  ultimo_prezzo_avviso_giorni: 7   # giallo oltre
+  movimento_estremo: 0.30          # giallo se un giorno il prezzo si muove di più
+  somiglianza_nome_min: 0.4        # giallo se il nome somiglia a quello atteso meno di così (0-1)
+```
+
+Da riga di comando `confronta.py` stampa la stessa tabella prima di simulare e **si ferma con un messaggio chiaro** (codice di uscita 1) se c'è un errore rosso. Per la sola verifica:
+
+```bash
+python confronta.py --config configurazioni/esempio_isin.yaml --solo-controllo
+```
+
+Esempio di uscita (dati reali, 4 novembre 2026, versione abbreviata):
+
+```
+Controllo dati: 13 titoli trovati, 3 avvisi, 0 errori
+ Esito        Input Ticker usato                         Nome     Borsa Valuta Anni di storia Ultima data
+ Verde IT0003128367      ENEL.MI                     Enel SpA     Milan    EUR           27,0  04/11/2026
+ Verde IE00BK5BQT80      VWCE.MI Vanguard FTSE All-World UCIT     Milan    EUR            6,8  04/11/2026
+Giallo US0378331005         AAPL                   Apple Inc.  NasdaqGS    USD           45,9  03/11/2026
+  US0378331005: avviso: 2 movimenti giornalieri oltre ±30% (il maggiore -52% il 29/09/2000)
+```
 
 ### Come leggere il report: glossario breve
 
@@ -266,7 +325,9 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `confronta.py` | lo stesso confronto da riga di comando |
 | `configurazione.py` | lettura e controllo della configurazione YAML |
 | `fonti.py` | fonti dei prezzi (Yahoo, Stooq, BCE), tentativi ripetuti, lettura dei CSV manuali |
-| `dati.py` | cache dei prezzi, conversione in euro, settori, controllo dei ticker |
+| `dati.py` | cache dei prezzi, conversione in euro, settori |
+| `isin.py` | riconoscimento degli ISIN, cifra di controllo, conversione in ticker (OpenFIGI + ricerca Yahoo), scelta della quotazione, cache |
+| `controllo.py` | «Controllo dati» con semaforo (verde/giallo/rosso) prima della simulazione |
 | `analisi.py` | rendimenti attesi, periodi A/B/C, esecuzione (anche in parallelo) dei moduli |
 | `simula.py` | motore Monte Carlo (bootstrap a blocchi, Student-t, GARCH, crolli sul singolo titolo) |
 | `metriche.py` | metriche e stress test |
@@ -274,7 +335,7 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `grafici_app.py` | grafici interattivi dell'app (Plotly) |
 | `stile.py` | colori e tratti fissi dei portafogli (uguali in app, report e PDF) |
 | `registro.py` | file di log `log.txt` |
-| `configurazioni/` | file di esempio (tre portafogli, core + satellite 80/20, ETF europei, prova automatica) |
+| `configurazioni/` | file di esempio (tre portafogli, core + satellite 80/20, ETF europei, ISIN, prova automatica) |
 | `esempi/` | report di esempio già pronti, verifica della convergenza, file di prezzi di esempio |
 | `strumenti/` | `verifica_convergenza.py` (le simulazioni bastano?) e `verifica_fonti.py` (quali fonti rispondono) |
 | `tests/` | test automatici (`python -m pytest -q tests`), compreso il test di non regressione |

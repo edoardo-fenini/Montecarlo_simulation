@@ -235,7 +235,7 @@ def _ispeziona_diretto(ticker: str, http) -> dict | None:
         "tipo": md.get("instrumentType") or "",
         "primo": md.get("firstTradeDate"),
         "volume": float(vol.mean()) if len(vol) else 0.0,
-        "ultimo": datetime.datetime.fromtimestamp(ts[-1], datetime.timezone.utc).date().isoformat(),
+        "ultimo": datetime.datetime.fromtimestamp(ts[-1], datetime.UTC).date().isoformat(),
     }
 
 
@@ -245,7 +245,7 @@ def _anni_di_storia(primo, oggi: datetime.date) -> float:
         return 0.0
     try:
         if isinstance(primo, (int, float)):
-            d0 = datetime.datetime.fromtimestamp(int(primo), datetime.timezone.utc).date()
+            d0 = datetime.datetime.fromtimestamp(int(primo), datetime.UTC).date()
         else:
             d0 = pd.Timestamp(primo).date()
         return round((oggi - d0).days / 365.25, 1)
@@ -317,7 +317,14 @@ def ordina_quotazioni(
         return (q.get("volume_medio") or 0) >= vmax * volume_minimo_relativo
 
     def chiave(q):
-        return (not attiva(q), not liquida(q), *(not _corrisponde(q, p) for p in preferenze), -int(q.get("storia_anni") or 0), -(q.get("volume_medio") or 0), q["ticker"])
+        return (
+            not attiva(q),
+            not liquida(q),
+            *(not _corrisponde(q, p) for p in preferenze),
+            -int(q.get("storia_anni") or 0),
+            -(q.get("volume_medio") or 0),
+            q["ticker"],
+        )
 
     return sorted(quotazioni, key=chiave)
 
@@ -458,7 +465,17 @@ def risolvi_configurazione(cfg: dict, cartella: str, aggiorna=False, http=None, 
         if log_fn:
             log_fn(f"  converto l'ISIN {i} in ticker ...")
         ris[i] = risolvi(
-            i, cartella, opz["preferenze"], scelte.get(i), aggiorna, http, opz.get("openfigi_chiave"), opz["max_quotazioni"], oggi, ricerca, ispettore
+            i,
+            cartella,
+            opz["preferenze"],
+            scelte.get(i),
+            aggiorna,
+            http,
+            opz.get("openfigi_chiave"),
+            opz["max_quotazioni"],
+            oggi,
+            ricerca,
+            ispettore,
         )
     return applica_mappa(cfg, {i: r["ticker"] for i, r in ris.items()}), ris
 
