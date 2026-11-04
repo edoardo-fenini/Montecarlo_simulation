@@ -645,7 +645,7 @@ def applica_mappa(cfg: dict, mappa: dict[str, str], proxy: dict[str, str] | None
     cfg["proxy_usati"] = {**(cfg.get("proxy_usati") or {}), **proxy}
     b = cfg["benchmark"]
     b["ticker"] = conv(b["ticker"])
-    for chiave in ("settori", "ter", "proxy", "prezzi_da_file"):
+    for chiave in ("settori", "ter", "costi", "proxy", "prezzi_da_file"):
         cfg[chiave] = {normalizza(conv(k)): v for k, v in (cfg.get(chiave) or {}).items()}
     cfg["proxy"] = {k: conv(v) for k, v in cfg["proxy"].items()}
     cfg["composizione"] = C.appiattisci(cfg)

@@ -226,3 +226,19 @@ Baseline all'inizio: tutti i test verdi (senza browser), non regressione identic
       | LU0210536198 | trovato | `0P00000C2V` | JPM US Growth A dist USD | USD | 4,7 |
       Limite: la ricerca di Yahoo per nome è capricciosa; per fondi di altri gestori può non trovare nulla → tappa 3 (CSV o proxy).
       Una storia di 4,7 anni è corta per simulare 15 anni, ma sopra la soglia gialla esistente (3 anni): nessun avviso di storia corta, la serie va solo valutata con attenzione.
+- [x] Tappa 3 – alternative per i fondi non trovati. 3a: `nav.py` + `fonti.leggi_csv_prezzi` più tollerante (separatori `;` `,` tab, decimali con la
+      virgola, date GG/MM/AAAA e AAAA-MM-GG, intestazioni IT/EN, righe in qualsiasi ordine); anteprima e conferma nell'app; valuta chiesta (default dal
+      nome del fondo, poi EUR); storico salvato in cache con l'**ISIN come chiave**, fonte «CSV importato», riusato in automatico (ha la precedenza sulla
+      ricerca online); da YAML: `prezzi_da_file: {ISIN: {file, valuta}}`; avviso GIALLO per classi a distribuzione (`nav.avviso_distribuzione`: calo
+      brusco >2,5 volte la variabilità normale negli stessi giorni dell'anno in ≥60% degli anni, almeno 3). CSV di esempio `esempi/storico_quote_esempio.csv`
+      (numeri INVENTATI; si rigenera con `strumenti/crea_csv_esempio.py` perché il controllo dati rifiuta uno storico con l'ultimo valore oltre 30 giorni fa).
+      3b: `proxy_titoli: {titolo: sostituto}` (YAML e app), sempre segnalato (controllo dati giallo, avviso nel report, riga «proxy» nella tabella dei costi);
+      il tipo mostrato è quello del titolo vero. 3c: messaggio ROSSO «È un fondo comune non quotato…» con i pulsanti «Carica lo storico delle quote» e
+      «Scegli un proxy» (anche per altri titoli non trovati). Scelta: CSV e proxy dichiarati vincono sulla ricerca automatica; il CSV vince sul proxy.
+- [x] Tappa 4 – costi: colonna «Costi annui (%)» nella tabella dell'app e chiave YAML `costi` (per ticker o ISIN); `analisi.costo_titolo`: indicato →
+      default per tipo (fondo comune 1,5% `costo_fondo_default`, ETF/ETC 0,3% `ter_etf_default`) con avviso GIALLO «costi non indicati, uso il default»;
+      azioni 0. Sottratti dal rendimento atteso solo con la ricentratura (con il metodo storico i prezzi sono già al netto, come per gli ETF prima).
+      Report: tabelle «Costi annui usati» e «effetto dei costi» per portafoglio. Benchmark: usa il suo TER una sola volta (colonna BENCH separata,
+      nessun doppio conteggio; il TER dentro il proxy storico non pesa perché la media storica viene sostituita). **Modifica voluta**: il default per gli ETF
+      senza costo passa da 0,20% a 0,30% (richiesto); i fondi comuni (tipo MUTUALFUND) non sono più trattati come «azioni» nel rischio sul singolo titolo e
+      negli stress test. Test di non regressione invariato (i dati finti non hanno ETF o fondi nei portafogli).

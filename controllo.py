@@ -245,11 +245,15 @@ def controlla(cfg: dict, arch: D.Archivio, oggi: datetime.date | None = None, ht
             r["gialli"].append(f"non trovo il nome del titolo per confrontarlo con quello atteso («{atteso}»)")
         elif atteso and somiglianza_nomi(atteso, r["nome"]) < soglie["somiglianza_nome_min"]:
             r["gialli"].append(f"il nome trovato («{r['nome']}») è molto diverso da quello atteso («{atteso}»)")
-    for r in righe:
-        r["esito"] = ROSSO if r["rossi"] else GIALLO if r["gialli"] else VERDE
     cfg2 = I.applica_mappa(cfg, mappa, proxy_map) if (mappa or proxy_map) else cfg
     # tipo di ogni titolo (azione, ETF/ETC, fondo comune): serve ai costi di default; con un proxy vale il tipo del titolo vero
     cfg2["tipi_titolo"] = {r["ticker"]: r["tipo"] for r in righe if r["ticker"] and r["tipo"] and r["ruolo"] == "titolo"}
+    for r in righe:  # costi non indicati per fondi ed ETF: avviso giallo (si userà il default prudente)
+        if cfg["rendimento_atteso"]["metodo"] != "storico" and r["ruolo"] == "titolo" and r["trovato"] and r["tipo"] in (I.TIPO_FONDO, I.TIPO_ETF) and r["ticker"] not in cfg2["costi"] and r["ticker"] not in cfg2["ter"]:
+            d = cfg2["costo_fondo_default"] if r["tipo"] == I.TIPO_FONDO else cfg2["ter_etf_default"]
+            r["gialli"].append(f"costi non indicati, uso il default {_it(d * 100, 2)}% l'anno ({r['tipo']}): scrivi il costo vero in «costi»")
+    for r in righe:
+        r["esito"] = ROSSO if r["rossi"] else GIALLO if r["gialli"] else VERDE
     return costruisci_esito(righe, cfg2)
 
 

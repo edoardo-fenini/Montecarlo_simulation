@@ -72,16 +72,46 @@ def rendimento_colonne(
     return np.array(out)
 
 
-def ter_titolo(cfg, t, tipi=None):
-    """Costo annuo (TER) sottratto con la ricentratura: quello del benchmark, quello indicato in
-    configurazione per gli ETF, oppure il default per gli ETF senza TER noto. Le azioni non hanno TER."""
+def tipo_titolo(cfg, t, tipi=None) -> str:
+    """'azione', 'ETF/ETC' o 'fondo comune' ('' se non si sa). Prima il tipo trovato dal controllo dati (OpenFIGI; con un proxy è quello del
+    titolo vero), poi quello di Yahoo."""
+    return (cfg.get("tipi_titolo") or {}).get(t) or isin.tipo_da_yahoo((tipi or {}).get(t))
+
+
+def costo_titolo(cfg, t, tipi=None) -> tuple[float, str]:
+    """(costo annuo, origine) sottratto con la ricentratura. Benchmark: il suo TER. Altrimenti il costo indicato (`costi`, o `ter`),
+    altrimenti il default prudente per tipo: fondi comuni 1,5%, ETF/ETC 0,3%. Le azioni non hanno costi.
+    Origine: 'benchmark', 'indicato', 'default' o 'azione'/'non applicabile'. Nessun doppio conteggio: il TER del benchmark vale solo per la
+    colonna del benchmark (BENCH), gli altri titoli non lo ereditano."""
     if t == BENCH:
-        return cfg["benchmark"]["ter"]
+        return cfg["benchmark"]["ter"], "benchmark"
+    if t in cfg["costi"]:
+        return cfg["costi"][t], "indicato"
     if t in cfg["ter"]:
-        return cfg["ter"][t]
-    if str((tipi or {}).get(t, "")).upper() == "ETF":
-        return cfg["ter_etf_default"]
-    return 0.0
+        return cfg["ter"][t], "indicato"
+    tipo = tipo_titolo(cfg, t, tipi)
+    if tipo == isin.TIPO_FONDO:
+        return cfg["costo_fondo_default"], "default"
+    if tipo == isin.TIPO_ETF:
+        return cfg["ter_etf_default"], "default"
+    return 0.0, "azione"
+
+
+def ter_titolo(cfg, t, tipi=None):
+    return costo_titolo(cfg, t, tipi)[0]
+
+
+def tabella_costi(cfg: dict, tipi: dict | None = None, nomi: dict | None = None) -> pd.DataFrame:
+    """Una riga per ogni titolo dei portafogli (e il benchmark): tipo, costo annuo usato e origine (indicato / default)."""
+    righe = []
+    for t in dict.fromkeys(t for pesi in cfg["composizione"].values() for t in pesi):
+        c, orig = costo_titolo(cfg, t, tipi)
+        tipo = "benchmark (ETF)" if t == BENCH else tipo_titolo(cfg, t, tipi) or "non noto"
+        titolo = cfg["benchmark"]["ticker"] if t == BENCH else t
+        vero = next((k for k, v in (cfg.get("proxy_usati") or {}).items() if v == t), None) if t != BENCH else None
+        etichetta = f"{vero} (proxy {t})" if vero else titolo
+        righe.append({"Titolo": etichetta, "Nome": (nomi or {}).get(titolo, ""), "Tipo": tipo, "Costo annuo": c, "Origine": orig})
+    return pd.DataFrame(righe, columns=["Titolo", "Nome", "Tipo", "Costo annuo", "Origine"])
 
 
 def spiega_rendimenti(cfg: dict, beta: dict, tipi: dict | None = None) -> pd.DataFrame:
@@ -363,6 +393,7 @@ def esegui(
         "bench_nome": cfg["benchmark"]["nome"],
         "beta": beta,
         "rend_attesi": spiega_rendimenti(cfg, beta, tipi),
+        "costi": tabella_costi(cfg, tipi, dati["info"]["nome"].to_dict()),
         "proxy_info": proxy_info,
         "note": note,
         "periodi": {},
@@ -394,7 +425,7 @@ def esegui(
         if a == "C":
             continue
         if mod["rischio_singolo_titolo"]:
-            azioni = [i for i, (_, t) in enumerate(colonne) if t != BENCH and str(tipi.get(t, "")).upper() != "ETF"]
+            azioni = [i for i, (_, t) in enumerate(colonne) if t != BENCH and tipo_titolo(cfg, t, tipi) not in (isin.TIPO_ETF, isin.TIPO_FONDO)]
             lavori.append(
                 Lavoro(f"idio_{a}", "crolli", f"Analisi {a}: rischio sul singolo titolo", 1.2, Mr, porte, extra={"azioni": azioni})
             )
@@ -402,7 +433,7 @@ def esegui(
             cat = {p: [proxy_info[colonne[i][1]]["categoria"] for i in c] for p, (c, _) in porte.items()}
             singolo = {}
             for p, pesi_p in cfg["composizione"].items():
-                ws = [w for t, w in pesi_p.items() if t != BENCH and str(tipi.get(t, "")).upper() != "ETF"]
+                ws = [w for t, w in pesi_p.items() if t != BENCH and tipo_titolo(cfg, t, tipi) not in (isin.TIPO_ETF, isin.TIPO_FONDO)]
                 singolo[p] = max(ws) if ws else None
             stress_da_fare[a] = (Mr, porte, cat, singolo)
         if mod["confronto_modelli"]:

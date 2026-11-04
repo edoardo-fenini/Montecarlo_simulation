@@ -99,7 +99,19 @@ div[data-testid='stMetricValue']{font-size:1.45rem}
 
 
 # ------------------------------------------------------------------ stato (configurazione <-> controlli)
+COLONNE_TAB = ["Portafoglio", "Ticker", "Peso (%)", "Costi annui (%)"]
+
+
+def con_costi(t: pd.DataFrame) -> pd.DataFrame:
+    """Tabella dei portafogli con la colonna dei costi (vuota se manca) e le colonne nell'ordine giusto."""
+    t = t.copy()
+    if "Costi annui (%)" not in t:
+        t["Costi annui (%)"] = None
+    return t[COLONNE_TAB]
+
+
 def tabella_da_cfg(raw: dict) -> pd.DataFrame:
+    costi = {re.sub(r"\s+", "", str(k)).upper(): float(v) * 100 for k, v in (raw.get("costi") or {}).items()}
     righe = []
     for p in raw.get("portafogli", []):
         tit = p.get("titoli") or []
@@ -111,7 +123,9 @@ def tabella_da_cfg(raw: dict) -> pd.DataFrame:
             righe += [
                 {"Portafoglio": p["nome"], "Ticker": t, "Peso (%)": (float(w) if w not in (None, "") else None)} for t, w in tit.items()
             ]
-    return pd.DataFrame(righe, columns=["Portafoglio", "Ticker", "Peso (%)"])
+    t = pd.DataFrame(righe, columns=["Portafoglio", "Ticker", "Peso (%)"])
+    t["Costi annui (%)"] = [costi.get(re.sub(r"\s+", "", str(x)).upper()) for x in t["Ticker"]]
+    return t
 
 
 def applica_cfg(raw: dict) -> None:
@@ -149,6 +163,7 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
     ss = st.session_state
     raw = copy.deepcopy(ss.raw)
     portafogli: dict[str, dict] = {}
+    costi: dict[str, float] = {}
     for _, r in tabella.iterrows():
         nome, tick = str(r["Portafoglio"] or "").strip(), str(r["Ticker"] or "").strip()
         if nome in ("", "None") and tick in ("", "None"):
@@ -157,6 +172,13 @@ def cfg_da_stato(tabella: pd.DataFrame) -> dict:
             raise C.ErroreConfig("Nella tabella dei portafogli ogni riga deve avere sia il nome del portafoglio sia il ticker.")
         peso = r["Peso (%)"]
         portafogli.setdefault(nome, {})[tick] = None if pd.isna(peso) else float(peso)
+        costo = r.get("Costi annui (%)")  # costi del titolo (TER / spese correnti): vuoto = default prudente con avviso
+        if costo is not None and not pd.isna(costo):
+            costi[re.sub(r"\s+", "", tick).upper()] = float(costo) / 100
+    if costi:
+        raw["costi"] = costi
+    else:
+        raw.pop("costi", None)
     raw["portafogli"] = [{"nome": n, "titoli": (list(t) if all(v is None for v in t.values()) else t)} for n, t in portafogli.items()]
     try:
         inter = [int(x) for x in str(ss.intermedi).replace(";", ",").split(",") if x.strip()]
@@ -248,7 +270,7 @@ def conferma_broker() -> None:
     t = ss.tabella_corrente.copy()
     t = t[t["Portafoglio"].astype(str).str.strip() != a["nome"]]
     nuove = pd.DataFrame([{"Portafoglio": a["nome"], "Ticker": k, "Peso (%)": v} for k, v in a["ris"]["pesi"].items()])
-    ss.tabella = pd.concat([t, nuove], ignore_index=True)[["Portafoglio", "Ticker", "Peso (%)"]]
+    ss.tabella = con_costi(pd.concat([t, nuove], ignore_index=True))
     ss.versione += 1
     ss.msg_broker = f"Portafoglio «{a['nome']}» aggiunto alla tabella ({len(nuove)} titoli). Ora premi «Controlla i dati»."
 
@@ -262,7 +284,7 @@ def aggiungi_da_ricerca(r: dict, portafoglio: str) -> None:
         ss.msg_ricerca = ("info", f"{r['ticker']} è già nel portafoglio «{portafoglio}».")
         return
     nuova = pd.DataFrame([{"Portafoglio": portafoglio, "Ticker": r["ticker"], "Peso (%)": None}])
-    ss.tabella = pd.concat([t, nuova], ignore_index=True)[["Portafoglio", "Ticker", "Peso (%)"]]
+    ss.tabella = con_costi(pd.concat([t, nuova], ignore_index=True))
     ss.versione += 1
     con_pesi = stesso["Peso (%)"].notna().any()
     ss.msg_ricerca = (
@@ -383,7 +405,7 @@ def chiave_dati(tabella: pd.DataFrame) -> str | None:
         g = cfg_da_stato(tabella)
     except C.ErroreConfig:
         return None
-    parti = {k: g.get(k) for k in ("portafogli", "isin", "isin_scelte", "nomi_attesi", "controllo_dati", "prezzi_da_file", "proxy_titoli")}
+    parti = {k: g.get(k) for k in ("portafogli", "isin", "isin_scelte", "nomi_attesi", "controllo_dati", "prezzi_da_file", "proxy_titoli", "costi")}
     parti["benchmark"] = (g.get("benchmark") or {}).get("ticker")
     return yaml.safe_dump(parti, sort_keys=True, allow_unicode=True)
 
@@ -586,6 +608,14 @@ with st.sidebar:
             "Ticker": st.column_config.TextColumn("Ticker o ISIN", width="small", help=AIUTO["tabella"]),
             "Peso (%)": st.column_config.NumberColumn(
                 min_value=0.0, max_value=100.0, format="%.2f", width="small", help="Peso in percentuale; vuoto = pesi uguali"
+            ),
+            "Costi annui (%)": st.column_config.NumberColumn(
+                min_value=0.0,
+                max_value=10.0,
+                format="%.2f",
+                width="small",
+                help="Costi annui del fondo o ETF (TER / spese correnti), in %. Vuoto = default prudente (fondi 1,5%, ETF 0,3%) con avviso giallo. "
+                "Per le azioni lascia vuoto.",
             ),
         },
     )

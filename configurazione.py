@@ -56,7 +56,9 @@ DEFAULT = {
     "verifica_convergenza": {"numero_seed": 3, "soglia": 0.02},  # seed totali (incluso quello principale)
     "analisi": {"inizio_B": "2007-01-01", "inizio_C": "1999-01-04"},
     "rischio_singolo_titolo": {"probabilita_annua": 0.015, "perdita_min": 0.8, "perdita_max": 1.0},
-    "ter_etf_default": 0.002,  # TER annuo usato per gli ETF dentro i portafogli se non indicato in «ter»
+    "ter_etf_default": 0.003,  # costo annuo prudente per ETF/ETC dentro i portafogli se non indicato (con avviso giallo)
+    "costo_fondo_default": 0.015,  # costo annuo prudente per i fondi comuni se non indicato (con avviso giallo)
+    "costi": {},  # opzionale: TICKER_O_ISIN: costi annui (TER / spese correnti) di fondi ed ETF, in frazione (0.015 = 1,5%)
     "ter": {},  # opzionale: TICKER_ETF: TER annuo (es. CSSPX.MI: 0.0007)
     "settori": {},  # opzionale: TICKER: tech | finanza | altro  (per gli stress test)
     "proxy": {},  # opzionale: TICKER: TICKER_PROXY            (per l'analisi C)
@@ -244,6 +246,15 @@ def prepara(dati: dict) -> dict:
     for t, s in cfg["settori"].items():
         if s not in ("tech", "finanza", "altro"):
             raise ErroreConfig(f"Settore di {t}: usa tech, finanza oppure altro (trovato «{s}»).")
+    try:
+        cfg["costo_fondo_default"] = float(cfg["costo_fondo_default"])
+        if not isinstance(cfg.get("costi") or {}, dict):
+            raise TypeError
+        cfg["costi"] = {re.sub(r"\s+", "", str(k)).upper(): float(v) for k, v in (cfg.get("costi") or {}).items()}
+    except (TypeError, ValueError):
+        raise ErroreConfig("«costi» deve essere un elenco «titolo: costo annuo» con numeri (es. LU0073232471: 0.0185 per l'1,85%).") from None
+    if not 0 <= cfg["costo_fondo_default"] <= 0.1 or any(v < 0 or v > 0.1 for v in cfg["costi"].values()):
+        raise ErroreConfig("I costi annui vanno scritti come frazione (0.015 = 1,5%) e devono essere tra 0 e 0.1 (10%).")
     try:
         cfg["ter_etf_default"] = float(cfg["ter_etf_default"])
         cfg["ter"] = {str(k).upper(): float(v) for k, v in (cfg.get("ter") or {}).items()}
