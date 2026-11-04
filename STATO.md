@@ -67,6 +67,28 @@ Scelte fatte (annotate, senza chiedere):
 - Rimosso il vecchio riquadro «Controllo dei ticker» dall'app (sostituito dal nuovo flusso); `dati.verifica_ticker` resta (test).
 - Non provato: browser reale per l'app con ISIN (provata con `streamlit.testing`), Mac reale.
 
+## Versione 1.2: verifiche, merge e release (4 novembre 2026)
+- [x] Prova in **browser vero** (Playwright + Chromium headless, Streamlit su localhost): caricata una configurazione con
+      `IE00B4L5Y983`, `US0378331005`, `IT0003128367` → «Controlla i dati» → «4 titoli trovati, 1 avviso, 0 errori»
+      (Apple gialla per movimenti storici estremi) → «Avvia simulazione» attivo → quotazione di `IE00B4L5Y983` cambiata dal menu
+      (`SWDA.MI` → `EUNL.DE`; la tabella e il report scaricato usano `EUNL.DE`) → simulazione da 500 scenari → download del report HTML
+      → configurazione con `IE00B4L5Y984` (cifra errata): «1 errore», «Avvia simulazione» **disattivato**, messaggio sulla cifra di controllo.
+      Screenshot in `docs/screenshot/` (usati nel README).
+      Nota: la mia asserzione automatica «EUNL.DE compare nel testo della pagina» dava FAIL perché la tabella è un canvas, non testo;
+      la verifica vera è lo screenshot + il report scaricato (contiene `EUNL.DE`, non `SWDA.MI`).
+- [x] Workflow: `prova-mac.yml` ora parte anche sulle pull request verso `main` e aggiunge
+      `confronta.py --solo-controllo --config configurazioni/esempio_isin.yaml` (+ controllo della sezione e del CSV «Controllo dati» nel report);
+      nuovo `test.yml` (Linux: ruff + pytest, push e pull request verso `main`); `zip-release.yml` controlla che `Installa.command` e
+      `Avvia.command` siano eseguibili (`-rwx`), che non ci siano `.venv`, `.python`, `cache_prezzi`, `report` e che ci siano `isin.py`,
+      `controllo.py`, `esempio_isin.yaml` (verificato in locale con `git archive`; `.github` e `.gitattributes` restano esclusi).
+- [x] **Pull request [#2](https://github.com/edoardo-fenini/Montecarlo_simulation/pull/2)** verso `main`: `Test` verde (Linux) e `Prova su Mac`
+      (macOS 14, Apple Silicon) verde sia sul push sia sulla pull request; nessun conflitto con `main` (il ramo era un avanzamento lineare di `main`).
+- [ ] **Release v1.2.0: da creare dal sito** (la GitHub CLI qui non è autenticata e gli strumenti GitHub non creano release): Releases → Draft a new
+      release → tag `v1.2.0` (Create new tag on publish) → Target `main` → incolla `RELEASE_NOTES.md` → Publish. Poi controllare in Actions
+      che «Zip per la release» allegi lo zip (il workflow fallisce se i `.command` non sono eseguibili o se ci sono file non voluti).
+- [ ] Ramo predefinito: impostare `main` dal sito (Settings → General → Default branch) se non è già così.
+- Non provato: la chiave OpenFIGI (indicato nei limiti noti delle note di rilascio).
+
 ## Chiusura del progetto (seconda richiesta)
 - [x] 1. Verifica della convergenza: `strumenti/verifica_convergenza.py` -> `esempi/verifica_convergenza/risultati.md`;
       modulo «Le simulazioni bastano?» (attivo, 3 seed); test sul numero di percorsi.
