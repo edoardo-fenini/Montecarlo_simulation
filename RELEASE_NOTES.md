@@ -1,13 +1,20 @@
-# v1.5.0 – Modello di rischio a fattori
+# v1.5.1 – Correzioni
 
-Nessuna funzione tolta; il test di non regressione è identico. Le note complete vengono dalla sezione 1.5.0 di `CHANGELOG.md`.
+Versione di correzioni dopo la 1.5.0. Nessuna funzione tolta; il modello storico resta il default. Le note complete, con i numeri prima/dopo, sono nella sezione 1.5.1 di `CHANGELOG.md`.
 
-## Novità
-- **Modello a fattori** (opzione «Modello di simulazione»): ogni titolo è scomposto in esposizioni a mercato, regioni, settori, stile, tassi e valute più una parte
-  specifica; utile per titoli e fondi con poca storia, che così «vivono» anche il 2000-2002 e il 2008. Il default resta il modello storico.
-- **Da dove viene il rischio**: quota del rischio per gruppo di fattori, esposizioni, R² dei titoli e una sintesi in italiano semplice.
-- **Validazione del VaR** (facoltativa): backtest con test di Kupiec e Christoffersen e semaforo.
-- Scelte rapide **Prudente / Base / Ottimista** per tasso privo di rischio e premio di mercato; impostazioni più robuste contro gli azzeramenti.
+## Cosa cambia per te
+- **Rendimento simulato = rendimento atteso.** Il controllo di plausibilità ha trovato un errore vero nel modello storico: con giorni «legati» tra loro (rimbalzi dopo i cali) il rendimento composto di un anno
+  restava sotto l'atteso (banche, analisi B: 4,7% invece di 7,4% nel primo anno). Corretto, per tutte le analisi e tutti i metodi; il controllo ora misura il rendimento del primo anno.
+- **Volatilità più vicina alla realtà.** Si misura sui rendimenti di un mese, non su quelli di un giorno: il mondo azionario in euro passa dal 19% (modello a fattori) al 16,3%, in linea con la storia (circa 16%).
+  Corretti anche due valori sbagliati dell'indice MSCI World di Yahoo (aprile e settembre 2001). I livelli di rischio 1-5 possono spostarsi di uno vicino alle soglie.
+- **Modello a fattori più completo:** VaR a 1 giorno che segue il regime corrente (EWMA, code grasse; sforamenti molto più vicini all'attesa), residui dei titoli ricampionati dalle stesse date (nelle crisi i titoli dello
+  stesso settore si muovono insieme), fattori nati tardi ricostruiti dal mercato invece di valere 0.
+- **Fondi:** menu con tutte le classi di quote candidate (nome, valuta, storia), scelta salvata nella configurazione.
+- **Impostazioni:** ogni intervento della rete di sicurezza contro gli azzeramenti è scritto in `log.txt` («RETE DI SICUREZZA»). La causa vera non è stata riprodotta.
 
-## Come aggiornare dalla 1.4
-Scarica `confronta-portafogli-v1.5.0.zip`, estrailo in una nuova cartella, copia `configurazioni/`, `cache_prezzi/` e `report/` dalla vecchia, poi doppio clic su `Installa.command`.
+## Nuove opzioni (facoltative)
+`var_breve_termine: {lambda_ewma: 0.97, code_grasse: true}` nel YAML; in `modelli/fattori.yaml`: `residui_congiunti`, `riempimento_fattori` (`zero` | `condizionato`), `pulizia_mercato`.
+
+## Come aggiornare dalla 1.5.0
+Scarica `confronta-portafogli-v1.5.1.zip`, estrailo in una nuova cartella, copia `configurazioni/`, `cache_prezzi/` e `report/` dalla vecchia, poi doppio clic su `Installa.command`.
+I risultati salvati con la 1.5.0 restano com'erano; per confrontarli con i nuovi rilancia l'analisi.

@@ -1,5 +1,69 @@
 # Registro delle modifiche
 
+## 1.5.1 (5 novembre 2026)
+
+Versione di correzioni dopo la 1.5.0. Nessuna funzione tolta; il modello `storico` resta il default; tasso privo di rischio e premio di mercato restano campi liberi (default 2% / 4%).
+**Il test di non regressione cambia, per correzioni volute** (il riferimento è stato rigenerato): su dati sintetici con giorni indipendenti la mediana delle variazioni dei numeri è 0,005%
+(massimo 5% su una probabilità discreta con 400 simulazioni); la volatilità annua cambia per la nuova definizione (mediana 1,6%, massimo 3,7% sui dati sintetici). Il riferimento ha 1.248 numeri
+(erano 1.236: aggiunta la volatilità giornaliera storica `vol_giorn`). Numeri prima/dopo sull'esempio dei tre portafogli (dati reali del 5/11/2026, 20.000 simulazioni, 15 anni, metodo beta 2% / 4%).
+
+### 1. Controllo di plausibilità fallito nel modello storico (errore vero, corretto)
+- **Causa, in parole semplici**: il modello pesca blocchi di circa 20 giorni consecutivi dalla storia. Nei dati veri un giorno non è indipendente dal successivo (nelle banche, dopo un giorno di calo
+  spesso c'è un rimbalzo: correlazione tra giorni consecutivi −0,10; per l'indice MSCI World in euro −0,11). I blocchi si portano dietro questo legame e il rendimento composto di un anno scende, anche se
+  la media dei rendimenti giornalieri è quella voluta (la ricentratura sistemava solo quella). Non c'entravano la ridistribuzione dei pesi per titoli entrati tardi, i buchi, il ribilanciamento, i costi o
+  il cambio: la media di ogni colonna è esatta per costruzione (verificato). Il vecchio controllo guardava la media giornaliera e nascondeva gran parte dell'errore: il rendimento vero del primo anno delle banche
+  (analisi B) era **4,7%** contro il 7,40% atteso, non 6,58%.
+- **Correzione**: formula esatta (catena di Markov sui giorni storici) della crescita annua attesa con i blocchi; ogni colonna è spostata di una costante minima (fino a ~4% l'anno) perché 1 € cresca in media
+  esattamente del rendimento atteso. Volatilità, code e correlazioni non cambiano. Vale per il bootstrap (default, stress test, rischio sul singolo titolo, sensibilità, prova dei pesi), per il centro del
+  modello a fattori e per il metodo «storico». Student-t e GARCH hanno giorni indipendenti: invariati.
+- **Nuovo controllo**: rendimento medio del primo anno (1 € senza versamenti) contro la media pesata dei rendimenti annui dei titoli (5 errori standard + 0,3%).
+- Rendimento del primo anno, atteso / simulato prima / dopo: A Cyber 7,38 / 5,02 (falliva) / 7,08%; A Banche 7,40 / 6,39 / 7,49%; A Big tech 7,33 / 6,09 / 6,96%; A MSCI World 5,80 / 5,58 / 5,79%;
+  B Cyber 7,38 / 6,18 / 7,53%; B Banche 7,40 / 4,69 (falliva) / 7,18%; B Big tech 7,33 / 6,35 / 7,37%; B MSCI World 5,80 / 5,42 / 5,76%. Modello a fattori (A): 7,38 / 7,40 / 7,33 / 5,80 atteso;
+  prima 6,63 / 6,67 / 6,53 / 5,35; dopo 7,70 / 7,64 / 7,26 / 5,90%.
+- Test: formula esatta contro simulazione; correzione senza toccare le covarianze; portafoglio con un titolo che entra a metà periodo e con buchi, analisi A e B × metodi beta / uguale / personalizzato / storico;
+  modello a fattori; prova che senza correzione l'errore compare (`tests/test_plausibilita_v151.py`).
+
+### 2. Volatilità del benchmark al 19% nel modello a fattori
+- Il 19% era la volatilità **giornaliera** × √252, gonfiata dall'orario sfasato tra indice (chiusura di New York) e cambio: la serie in euro ha correlazione −0,11 tra giorni consecutivi (in dollari ≈ 0).
+  Il rumore si annulla il giorno dopo e non c'è su settimane e mesi. MSCI World in euro dal 2000: giornaliera 19,0%, su 5 giorni 16,2%, su 21 giorni 16,0%; deviazione standard annua dei percorsi simulati 16,0%.
+  Date allineate allo stesso giorno, annualizzazione corretta, nessun doppio conteggio del cambio (regressione congiunta), bootstrap che conserva il legame tra giorni.
+- **Correzioni**: la volatilità annua (simulata e storica) si calcola dai rendimenti di un mese × √12 (`vol_giorn` conserva la vecchia misura); due valori sbagliati isolati dell'indice MSCI World di Yahoo
+  (3/4/2001: +11,9% poi −13,2% mentre l'S&P 500 faceva −3,3% e +0,4%; 24/9/2001: +13,1% poi −7,1% contro +3,5% e +1,0%) sono corretti (`pulizia_mercato`; effetto sulla volatilità giornaliera 19,0 → 18,4%).
+- Prima → dopo (volatilità simulata): modello a fattori benchmark **19,0% → 16,3%**, Cyber 29,2 → 27,2%, Banche 27,3 → 24,4%, Big tech 29,7 → 28,4%. Storico A: 35,6 / 24,2 / 29,8 / 14,0% → 32,6 / 21,8 / 27,8 / 13,2%;
+  storico B: 32,9 / 31,5 / 28,6 / 17,4% → 30,8 / 26,0 / 25,5 / 15,8%. Il livello di rischio 1-5 può cambiare di uno vicino alle soglie.
+- Test: volatilità simulata del fattore mercato = storica entro il 7% (con giorni legati la vecchia misura sbagliava di oltre il 12%); pulizia dei valori sbagliati (`tests/test_volatilita_v151.py`).
+
+### 3. Impostazioni azzerate: causa non riprodotta, rete di sicurezza con log
+- Ipotesi controllate (nessun `value=` con `key=` tra le impostazioni, stato iniziale scritto una sola volta, chiavi stabili, nessun `st.rerun` a metà barra laterale, esecuzione interrotta con e senza la copia):
+  il test `test_ricerca_per_nome_e_aggiunta_con_un_clic` è passato **10 volte su 10** (browser vero) e 5 esecuzioni consecutive di «Test» e «Prova su Mac» su GitHub sono verdi. Causa non trovata.
+- La rete di sicurezza resta e ora **scrive in `log.txt` ogni intervento** («RETE DI SICUREZZA: …» con i campi) e li conta; tolti `value=`+`key=` da due campi minori. Se compare nel log, la causa è ancora lì.
+
+### 4. VaR a breve termine del modello a fattori (backtest)
+- Il VaR a 1 giorno del modello a fattori segue il regime corrente: covarianza dei fattori EWMA (lambda 0,97, `var_breve_termine.lambda_ewma`), varianza specifica EWMA del portafoglio (comprende le correlazioni tra
+  residui) e distribuzione t di Student con gradi di libertà stimati (`code_grasse`). La simulazione di lungo periodo non cambia. Il report ha la tabella prima/dopo e la frase: il modello storico è più adatto al rischio di
+  breve termine, quello a fattori è più informativo per orizzonti lunghi perché include le grandi crisi.
+- Sforamenti prima (1.5.0) → ora (attesi 42 al 95%, 8,4 al 99%): Cyber 95% 63 → 46, 99% 32 → 12; Banche 95% 16 → 48, 99% 4 → 15 (resta rosso, a grappolo); Big tech 95% 35 → 48, 99% 7 → 7; MSCI World 95% 11 → 54, 99% 7 → 13.
+  Semafori: da 5 rossi e 2 gialli a 1 rosso e 3 gialli.
+
+### 5. Residui correlati tra titoli nelle crisi
+- Nel modello a fattori i residui di tutti i titoli sono ricampionati dalle stesse date dei fattori (bootstrap congiunto; `residui_congiunti`, default sì). Dove un titolo non ha il residuo in quella data si ripesca dalla
+  sua storia, come prima, e il report lo annota. Esempio (volatilità; 5° percentile a 15 anni da 5.000 €): Cyber 27,2 → 31,4%, 1.464 → 966 €; Banche 24,4 → 25,5%, 1.920 → 1.836 €; Big tech 28,4 → 30,5%, 1.291 → 1.041 €;
+  MSCI World invariato (16,3%, 3.361 → 3.426 €). Test sulle correlazioni (`tests/test_residui_congiunti.py`).
+
+### 6. Fattori con storia breve
+- Opzione `riempimento_fattori: zero | condizionato` (default `condizionato`): prima della data di inizio un fattore non vale più 0 ma «a + b × mercato del giorno + residuo ricampionato». Volatilità annua del fattore nel 2000-2002, prima → dopo:
+  Momentum 0 → 9,7%, Qualità 0 → 3,4%, Emergenti 0 → 17,5%. Sull'esempio l'effetto è trascurabile (volatilità Cyber 31,4 → 31,3%). Limite: momentum e qualità hanno sensibilità quasi nulla al mercato. Le stime dei titoli usano solo dati veri.
+
+### 7. Stabilità della CI
+- Cinque esecuzioni consecutive verdi di «Test» (compresa la prova nel browser) e di «Prova su Mac» (compreso il job `zip-release`) sul ramo `v1.5.1`. Nessun test intermittente da correggere; i test nuovi più lenti sono fuori dalla prova rapida di
+  `Installa.command` (273 test, 54 s in locale).
+
+### 8. Classe di quote dei fondi
+- Menu delle classi candidate con nome, valuta, storia e differenze rispetto alla classe attesa; scelta salvata in `isin_scelte`; con una sola candidata un avviso. Test: `tests/test_classi_fondi.py`.
+
+### Altro
+- Release 1.5.0 verificata: run «Release» riuscito, tag `v1.5.0` e `confronta-portafogli-v1.5.0.zip` presenti. Nuovo `strumenti/confronto_modelli.py` (rigenera `esempi/confronto_modelli_v1_5_1/`).
+
 ## 1.5.0 (4 novembre 2026)
 
 Versione «modello di rischio a fattori». Nessuna funzione tolta; **il test di non regressione (1.236 numeri) è identico**. Il modello `storico` resta il default.
