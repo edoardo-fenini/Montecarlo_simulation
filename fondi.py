@@ -228,6 +228,7 @@ def cerca_fondo(
                 "somiglianza": round(sim, 2),
                 "penalita": pen + 3 * parole_in_piu(riferimenti, nome),
                 "tipo": q.get("tipo") or "MUTUALFUND",
+                "differenze_fondo": list(avvisi),  # in cosa la classe trovata differisce da quella attesa (per il menu delle classi nell'app)
                 "avvisi_fondo": [
                     f"fondo trovato per nome («{nome}»), non per ISIN: verifica che sia la classe giusta"
                     + (" (" + "; ".join(avvisi) + ")" if avvisi else "")
@@ -236,6 +237,15 @@ def cerca_fondo(
         )
         scelte.append(q)
     return sorted(scelte, key=lambda q: (q["penalita"], -q["somiglianza"], -int(q["storia_anni"]), q["ticker"]))
+
+
+def etichetta_classe(q: dict) -> str:
+    """Riga del menu delle classi di quote di un fondo: nome, valuta, storia e, se ci sono, le differenze rispetto alla classe attesa."""
+    nome = q.get("nome_yahoo") or q.get("nome") or q.get("ticker", "")
+    storia = f"{q['storia_anni']:.1f}".replace(".", ",") if q.get("storia_anni") is not None else "?"
+    riga = f"{nome} · {q.get('valuta') or '?'} · {storia} anni di storia · {q.get('ticker', '')}"
+    diff = q.get("differenze_fondo") or []
+    return riga + (" · ⚠ " + "; ".join(diff) if diff else "")
 
 
 __all__ = ["cerca_fondo", "e_codice_fondo", "costruisci_ricerche", "valuta_attesa", "classe_attesa", "stesso_gestore", "parole"]

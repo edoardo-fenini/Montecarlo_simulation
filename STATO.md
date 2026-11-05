@@ -285,7 +285,7 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
 - Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).
 
 ## Versione 1.5.1 (ramo `v1.5.1`): correzioni dopo la 1.5.0 (5 novembre 2026, lavoro notturno autonomo)
-Ora: tappe 1-6 chiuse. Prossimo passo: tappa 7 (stabilità della CI), poi (se resta tempo) tappa 8, poi tappa 9 (chiusura).
+Ora: tappe 1-8 chiuse (la 7 va ricontrollata a fine lavoro sugli ultimi run). Prossimo passo: tappa 9 (chiusura: confronto modelli v1_5_1, README, CHANGELOG, RELEASE_NOTES, PR, release, report PDF).
 Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione identica. Ramo `v1.5.1` creato da `main` (c45ad85).
 - [x] Tappa 0 – release 1.5.0: workflow «Release» (run 41937609394) **riuscito**, tag `v1.5.0` presente, `confronta-portafogli-v1.5.0.zip` (7,5 MB) allegato. Nessuna correzione necessaria.
 - [x] Tappa 1 – controllo di plausibilità. **Causa trovata (in parole semplici)**: il modello pesca blocchi di ~20 giorni consecutivi dalla storia. Nei dati veri
@@ -399,3 +399,9 @@ Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione 
       soprattutto Emergenti (beta 0,23). Effetto sui portafogli dell'esempio trascurabile (esposizioni piccole a questi fattori): volatilità Cyber 31,4 → 31,3%, Banche 25,5 → 25,5%, Big tech 30,5 → 30,4%,
       5° percentile 15 anni 966 → 975, 1.836 → 1.832, 1.041 → 1.051 €. Nota: il VaR «fattori (1.5.0)» del backtest usa la covarianza dei fattori su tutta la storia, che ora include i giorni riempiti.
       Test (`tests/test_riempimento_fattori.py`, 4): il fattore segue il mercato nella crisi, relazione col mercato conservata, dati veri invariati; riproducibile; poca storia → 0; opzioni zero/condizionato in `serie_fattori`; validazione.
+- [x] Tappa 8 (facoltativa) – classe di quote dei fondi. I candidati verificati da `fondi.cerca_fondo` c'erano già tutti nel menu delle quotazioni (con più di una classe candidata); ora il menu per i fondi
+      mostra **nome della classe, valuta, storia e le differenze rispetto alla classe attesa** (es. «JPM US Growth A dist USD · USD · 4,7 anni di storia · 0P00000002 · ⚠ classe a distribuzione diversa da quella attesa»;
+      `fondi.etichetta_classe`, chiave `differenze_fondo`), il suggerimento spiega come scegliere, e con una sola classe candidata compare una riga «è l'unica candidata: controlla che sia giusta».
+      La scelta va in `scelte_isin` → chiave `isin_scelte` della configurazione scaricabile (già prevista dalla 1.2). Test: `tests/test_classi_fondi.py` (etichette e app con 4 classi candidate: scelta salvata e controllo rifatto).
+      Non fatto: Yahoo non fornisce l'ISIN di ogni classe, quindi la scelta resta dell'utente (il caso LU0073232471 non è verificabile offline; solo la meccanica è provata con dati finti).
+- Tempo della prova rapida (`pytest -m rapido`): i test nuovi più lenti sono segnati come lenti in `tests/conftest.py`; 273 test rapidi in 54 s su questa macchina (prima: 250 in 43 s).
