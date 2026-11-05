@@ -116,3 +116,21 @@ def test_cambi_simultanei_di_molti_campi_sono_un_falso_allarme_del_browser():
     stato_app.segnala(s, "mrp")
     stato_app.conserva(s, chiavi)
     assert s["mrp"] == 0.0 and s["rf"] == 2.0
+
+
+def test_la_rete_di_sicurezza_scrive_nel_log_quando_scatta(caplog):
+    """v1.5.1: ogni volta che il tampone interviene (falso allarme o valore ripristinato) lo annota nel log, così si vede se succede ancora."""
+    import logging
+
+    import stato_app
+
+    stato = {"capitale": 5000.0, "orizzonte": 15, "rf": 2.0, "mrp": 4.0}
+    stato_app.conserva(stato, ["capitale", "orizzonte", "rf", "mrp"])  # prima copia
+    stato.update(capitale=0.0, orizzonte=1, rf=0.0, mrp=0.0)  # il browser manda i valori di partenza di quattro campi insieme
+    stato["_cambiati"] = ["capitale", "orizzonte", "rf", "mrp"]
+    with caplog.at_level(logging.WARNING, logger="confronta"):
+        ripristinate = stato_app.conserva(stato, ["capitale", "orizzonte", "rf", "mrp"])
+    assert stato["capitale"] == 5000.0 and stato["orizzonte"] == 15 and len(ripristinate) == 4
+    testo = caplog.text
+    assert "RETE DI SICUREZZA" in testo and "campi numerici cambiati" in testo and "capitale" in testo
+    assert stato["_scatti_rete_di_sicurezza"] == 1

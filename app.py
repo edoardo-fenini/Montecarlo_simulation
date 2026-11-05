@@ -689,7 +689,8 @@ with st.sidebar:
                     help="Il titolo viene aggiunto come nuova riga della tabella qui sopra.",
                 )
                 if dest == "➕ Nuovo portafoglio":
-                    dest = st.text_input("Nome del nuovo portafoglio", value="Nuovo portafoglio", key="ricerca_nuovo_nome")
+                    ss.setdefault("ricerca_nuovo_nome", "Nuovo portafoglio")  # valore iniziale nello stato, senza value= insieme a key=
+                    dest = st.text_input("Nome del nuovo portafoglio", key="ricerca_nuovo_nome")
                 st.caption(f"Risultati per «{rr['testo']}» (al massimo {R.MASSIMO}): nome · ticker · ISIN · borsa · valuta · tipo")
                 for i, r in enumerate(rr["righe"]):
                     c1, c2 = st.columns([5, 1])
@@ -704,7 +705,8 @@ with st.sidebar:
             "controvalore). Esempio: esempi/portafoglio_broker_esempio.csv."
         )
         f_broker = st.file_uploader("File CSV del broker", type=["csv", "txt"], key="file_broker")
-        nome_broker = st.text_input("Nome del portafoglio", value="Portafoglio importato", key="nome_broker")
+        ss.setdefault("nome_broker", "Portafoglio importato")  # valore iniziale nello stato, senza value= insieme a key=
+        nome_broker = st.text_input("Nome del portafoglio", key="nome_broker")
         if st.button("👀 Mostra anteprima", width="stretch", disabled=f_broker is None, key="btn_anteprima_broker"):
             anteprima_broker(f_broker, nome_broker)
         if ss.get("msg_broker"):

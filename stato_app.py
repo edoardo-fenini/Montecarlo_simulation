@@ -6,7 +6,10 @@ errore a metà della barra laterale). Senza una copia, capitale, orizzonte, tass
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Mapping, MutableMapping
+
+log = logging.getLogger("confronta.stato_app")  # figlio di «confronta»: finisce in log.txt
 
 CHIAVE_COPIA = "_impostazioni"
 CHIAVE_CAMBIATI = "_cambiati"
@@ -35,6 +38,9 @@ def conserva(stato: MutableMapping, chiavi: Iterable[str], predefiniti: Mapping 
     copia = stato.setdefault(CHIAVE_COPIA, {})
     cambiati = list(dict.fromkeys(stato.pop(CHIAVE_CAMBIATI, [])))
     falso_allarme = len([k for k in cambiati if k in CAMPI_A_RISCHIO]) >= SOGLIA_FALSO_ALLARME
+    if falso_allarme:  # la rete di sicurezza scatta: va annotato, così si vede se succede ancora (e con quali campi)
+        log.warning("RETE DI SICUREZZA: %d campi numerici cambiati nella stessa esecuzione (%s): si ripristina la copia", len(cambiati), ", ".join(cambiati))
+        stato["_scatti_rete_di_sicurezza"] = stato.get("_scatti_rete_di_sicurezza", 0) + 1
     if not falso_allarme:  # cambi voluti dall'utente: entrano nella copia
         for k in cambiati:
             if k in stato:
@@ -43,6 +49,7 @@ def conserva(stato: MutableMapping, chiavi: Iterable[str], predefiniti: Mapping 
     for k in chiavi:
         if k in copia:
             if k not in stato or stato[k] != copia[k]:
+                log.warning("RETE DI SICUREZZA: «%s» valeva %r, ripristinato %r", k, stato.get(k, "<assente>"), copia[k])
                 stato[k] = copia[k]
                 ripristinate.append(k)
         elif k in stato:

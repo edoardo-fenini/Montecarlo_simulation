@@ -97,10 +97,23 @@ def serie_portafoglio(R: np.ndarray, pesi: np.ndarray, rib_giorni: int = 252, co
     return np.concatenate(out)
 
 
+def vol_annua(r: np.ndarray, passo: int = 21) -> float:
+    """Volatilità annua dai rendimenti di `passo` giorni (finestre mobili, default un mese) × √(252/passo).
+    Tiene conto del legame tra giorni vicini; è la stessa misura usata per le serie simulate (simula.simula).
+    Con meno di un anno di dati si ripiega sui rendimenti giornalieri."""
+    r = np.asarray(r, float)
+    if len(r) < 252:
+        return float(np.std(r, ddof=1) * np.sqrt(252))
+    v = np.cumprod(1 + r)
+    m = v[passo:] / v[:-passo] - 1
+    return float(np.std(m, ddof=1) * np.sqrt(252 / passo))
+
+
 def stat_storiche(r: np.ndarray) -> dict[str, float]:
     v = np.cumprod(1 + np.asarray(r))
     return {
-        "vol": float(np.std(r, ddof=1) * np.sqrt(252)),
+        "vol": vol_annua(r),
+        "vol_giorn": float(np.std(r, ddof=1) * np.sqrt(252)),
         "mdd": float((v / np.maximum.accumulate(v) - 1).min()),
         "rend_annuo": float(v[-1] ** (252 / len(v)) - 1),
     }

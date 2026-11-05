@@ -285,7 +285,7 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
 - Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).
 
 ## Versione 1.5.1 (ramo `v1.5.1`): correzioni dopo la 1.5.0 (5 novembre 2026, lavoro notturno autonomo)
-Ora: tappa 1 chiusa nel codice (verifica col modello a fattori sui dati reali in corso). Prossimo passo: tappa 2 (volatilità del benchmark nel modello a fattori).
+Ora: tappe 1-3 chiuse. Prossimo passo: tappa 4 (VaR a breve termine con covarianza EWMA e code grasse nel modello a fattori).
 Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione identica. Ramo `v1.5.1` creato da `main` (c45ad85).
 - [x] Tappa 0 – release 1.5.0: workflow «Release» (run 41937609394) **riuscito**, tag `v1.5.0` presente, `confronta-portafogli-v1.5.0.zip` (7,5 MB) allegato. Nessuna correzione necessaria.
 - [x] Tappa 1 – controllo di plausibilità. **Causa trovata (in parole semplici)**: il modello pesca blocchi di ~20 giorni consecutivi dalla storia. Nei dati veri
@@ -318,3 +318,40 @@ Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione 
       indipendenti la mediana delle variazioni è 0,005%, il massimo 5% su una probabilità discreta (400 simulazioni).
       Nota: il peso ridistribuito per un titolo che entra tardi (riempito con la media pesata degli altri) non crea errori sul rendimento medio, ma attenua il
       rischio specifico di quel titolo nel periodo prima dell'ingresso: limite noto, non toccato.
+      Modello a fattori (stesso esempio, 20.000 simulazioni, primo anno): atteso 7,38 / 7,40 / 7,33 / 5,80% (Cyber / Banche / Big tech / MSCI); prima 6,63 / 6,67 / 6,53 / 5,35%,
+      dopo 7,70 / 7,64 / 7,26 / 5,90% (tutti dentro la tolleranza, prima della correzione sotto di 0,7-0,8 punti).
+- [x] Tappa 2 – volatilità del benchmark al 19% nel modello a fattori. **Il 19% non era la volatilità vera di un anno**: era la volatilità GIORNALIERA × √252.
+      Misure dirette dai dati (MSCI World in euro dal 3/1/2000, indice Yahoo ^990100-USD-STRD convertito con il cambio del progetto):
+      | misura | USD | EUR |
+      |---|---|---|
+      | giornaliera × √252 | 17,0% | **19,0%** |
+      | rendimenti di 5 giorni × √50,4 | 16,4% | 16,2% |
+      | rendimenti di 21 giorni × √12 | 16,8% | 16,0% |
+      | std annua dei percorsi simulati dal modello (blocchi, 20.000) | 16,5% | 16,0% |
+      Perché: l'indice in dollari ha correlazione ≈0 tra giorni consecutivi, ma la serie in euro ha −0,108: l'indice (chiusura di New York) e il cambio (fixing BCE/FRED, o
+      Yahoo) sono rilevati in ore diverse. Il cambio dollaro/euro tende ad attutire i crolli (correlazione indice-cambio −0,14 al giorno ma −0,28 alla settimana):
+      con gli orari sfasati quel beneficio si vede solo in parte nei giorni singoli e compare come rumore che si annulla il giorno dopo. Il rumore gonfia
+      la volatilità giornaliera annualizzata ma non quella di settimane e mesi. Verificato: stesso giorno, nessuno sfasamento di date (si usa il cambio del giorno,
+      ultimo disponibile se manca); annualizzazione 252/52 corretta; il bootstrap a blocchi di 20 giorni conserva il legame tra giorni (std annua dei percorsi 16,0%).
+      Non c'è doppio conteggio del cambio: i fattori sono stimati insieme (regressione congiunta), il fattore «Dollaro contro euro» cattura solo l'esposizione in più
+      rispetto al mercato (correlazione tra i due fattori ≈ −0,14).
+      **Anomalia trovata nei dati**: l'indice MSCI World di Yahoo ha valori sbagliati isolati: 3/4/2001 +11,9% e il giorno dopo −13,2% (S&P 500: −3,3% e +0,4%),
+      24/9/2001 +13,1% e −7,1% (S&P 500: +3,5% e +1,0%). Pesano ~0,6 punti sulla volatilità giornaliera (19,0 → 18,4%).
+      **Correzioni**: (a) la volatilità annua mostrata (simulata e storica) ora si calcola da rendimenti di un mese (21 giorni, finestre mobili) × √12, non dai giornalieri × √252
+      (`simula.simula`, `metriche.vol_annua`); la vecchia misura resta in `vol_giorn`; (b) `fattori.togli_picchi` + chiave `pulizia_mercato` in `modelli/fattori.yaml`:
+      un valore isolato dell'indice che si discosta dall'S&P 500 oltre 15 volte lo scarto tipico e si annulla il giorno dopo viene corretto (livello dopo i due giorni invariato);
+      sul MSCI World dal 2000 corregge solo i due giorni sopra (con soglia 6 ne trovava 29, quasi tutti sfasamenti d'orario veri: per questo 15).
+      Prima/dopo sull'esempio (20.000 simulazioni): modello a fattori, benchmark 19,0% → **16,3%**; Cyber 29,2 → 27,2%; Banche 27,3 → 24,4%; Big tech 29,7 → 28,4%.
+      Modello storico A: 35,6 / 24,2 / 29,8 / 14,0% → 32,6 / 21,8 / 27,8 / 13,2%; B: 32,9 / 31,5 / 28,6 / 17,4% → 30,8 / 26,0 / 25,5 / 15,8%.
+      (Banche B scende molto: correlazione −0,10 tra giorni consecutivi, vedi tappa 1.) Il livello di rischio 1-5 usa la volatilità simulata: può cambiare di un livello vicino alle soglie.
+      Test: `tests/test_volatilita_v151.py` (6): vol simulata del fattore mercato = storica entro 7% con giorni legati (la vecchia misura sbagliava di oltre il 12%), giorni indipendenti → misure uguali,
+      pulizia dei picchi (corregge il valore sbagliato e conserva il livello; non tocca giorni veri di forte volatilità; applicata dal file dei fattori).
+- [x] Tappa 3 – azzeramento delle impostazioni: **causa vera NON riprodotta** (3 tentativi). Già in regola: nessun widget con `value=` e `key=` insieme tra le impostazioni, stato iniziale scritto
+      una sola volta in `st.session_state` (`applica_cfg`), chiavi stabili (test AST), nessun `st.rerun` a metà della barra laterale; tolti `value=`+`key=` da due campi minori (nome del nuovo portafoglio, nome del portafoglio importato).
+      Tentativo 1: `test_ricerca_per_nome_e_aggiunta_con_un_clic` eseguito **10 volte di fila** (browser vero, Playwright 1.64.1, Streamlit 1.66.1 come in CI, anche con CPU occupata da altri calcoli): 10/10 verdi (~9 s ciascuna).
+      Tentativo 2: ipotesi «esecuzione interrotta da una nuova mentre i campi sotto la ricerca non sono ancora disegnati» (Streamlit cancella lo stato dei widget non disegnati a fine esecuzione):
+      ricerca resa lenta (4 s), nuova esecuzione a metà (Invio nel nome del confronto) e un altro clic su «Cerca»: dopo l'interruzione capitale 5000, orizzonte 15, tasso 2, premio 4, **anche con la copia
+      di sicurezza spenta** (4 prove): in questo ambiente non si azzera. Tentativo 3: lettura dei punti dell'app che disegnano condizionalmente i campi (rf/mrp solo con metodo «beta») e dei callback: il solo
+      meccanismo noto che cancella i valori è la pulizia di Streamlit dei widget non disegnati, già coperta dalla copia. Escluso: valore iniziale sovrascritto da `value=`, chiavi cambiate fra esecuzioni, differenza di versione con la CI.
+      Resta la rete di sicurezza (`stato_app.conserva`), ora **registra in `log.txt` ogni intervento** («RETE DI SICUREZZA: …», con i campi) e conta gli scatti in `_scatti_rete_di_sicurezza`; test nuovo.
+      Da guardare dopo qualche giorno d'uso e di CI: se compare «RETE DI SICUREZZA» nel log, la causa è ancora lì e il log dice quali campi.

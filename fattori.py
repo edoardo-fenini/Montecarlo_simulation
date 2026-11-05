@@ -68,6 +68,40 @@ def carica_config(percorso: str | None = None) -> dict:
 
 
 # ---------------------------------------------------------------- serie dei fattori
+def togli_picchi(s: pd.Series, rif: pd.Series, soglia: float = 15.0) -> tuple[pd.Series, list]:
+    """Corregge i valori sbagliati isolati di un indice (es. MSCI World su Yahoo nel 2001: +11,9% e il giorno dopo −13,2% mentre l'S&P 500 faceva −3,3% e +0,4%).
+    Un giorno è un «picco» se il rendimento dell'indice si discosta da quello della serie di riferimento (stessa valuta) di più di `soglia` volte lo scarto tipico
+    (MAD) e il giorno dopo si discosta altrettanto nel verso opposto: un errore che si annulla. Il rendimento del primo giorno diventa quello atteso dal
+    riferimento (beta × riferimento) e quello del secondo si adegua, così il livello dell'indice dopo i due giorni resta quello originale.
+    Ritorna (serie corretta, lista delle date corrette)."""
+    r = s.pct_change(fill_method=None)
+    q = rif.reindex(s.index).pct_change(fill_method=None)
+    ok = r.notna() & q.notna()
+    if ok.sum() < 250:
+        return s, []
+    x, y = q[ok].values, r[ok].values
+    beta = float(np.cov(x, y)[0, 1] / x.var(ddof=1))
+    res = (r - beta * q).values
+    sig = 1.4826 * float(np.nanmedian(np.abs(res[ok.values] - np.nanmedian(res[ok.values]))))
+    rr = r.values.copy()
+    corrette = []
+    for t in range(len(rr) - 1):
+        a, b = res[t], res[t + 1]
+        if np.isnan(a) or np.isnan(b) or a * b >= 0 or min(abs(a), abs(b)) <= soglia * sig:
+            continue
+        atteso = beta * q.values[t]
+        if np.isnan(atteso):
+            continue
+        cumulato = (1 + rr[t]) * (1 + rr[t + 1])
+        rr[t] = atteso
+        rr[t + 1] = cumulato / (1 + atteso) - 1
+        corrette.append(s.index[t])
+    if not corrette:
+        return s, []
+    out = pd.Series(s.iloc[0] * np.cumprod(1.0 + np.nan_to_num(rr, nan=0.0)), index=s.index)
+    return out, corrette
+
+
 def _prezzi(arch: D.Archivio, t: str, locale: bool, valuta: str | None) -> pd.Series:
     if t == SPECIALE_USD:
         return 1.0 / D.cambio(arch, "USD")
@@ -91,6 +125,14 @@ def serie_fattori(conf: dict, arch: D.Archivio, log=print) -> tuple[pd.DataFrame
 
     mercato = next(f for f in fatt if f["gruppo"] == "mercato")
     s_merc = prezzi(mercato["lungo"], bool(mercato.get("valuta_locale")), mercato.get("valuta"))
+    pul = conf.get("pulizia_mercato") or {}
+    picchi: list = []
+    if pul.get("riferimento"):  # valori sbagliati isolati dell'indice di mercato, controllati con una serie di riferimento
+        rif = prezzi(pul["riferimento"], False, pul.get("valuta", "USD"))
+        s_merc, picchi = togli_picchi(s_merc, rif, float(pul.get("soglia", 15.0)))
+        cache[(mercato["lungo"], bool(mercato.get("valuta_locale")), mercato.get("valuta"))] = s_merc
+        if picchi:
+            log(f"  fattore mercato: {len(picchi)} valori isolati sbagliati corretti ({', '.join(f'{d:%d/%m/%Y}' for d in picchi[:6])})")
     cal = s_merc.index[(s_merc.index >= conf["inizio_storia"]) & (s_merc.index.day_of_week < 5)]
     if len(cal) < 500:
         raise D.ErroreDati("Il fattore «mercato» ha troppo poca storia dopo la data di inizio.")
@@ -126,7 +168,9 @@ def serie_fattori(conf: dict, arch: D.Archivio, log=print) -> tuple[pd.DataFrame
     senza = [r["fattore"] for r in righe if r["inizio"] is None]
     if senza:
         raise D.ErroreDati(f"Nessun dato per i fattori: {', '.join(senza)}.")
-    return F.fillna(0.0), V, pd.DataFrame(righe).set_index("fattore")
+    info = pd.DataFrame(righe).set_index("fattore")
+    info.attrs["picchi_corretti"] = [d.date().isoformat() for d in picchi]
+    return F.fillna(0.0), V, info
 
 
 # ---------------------------------------------------------------- regressione ridge

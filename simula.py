@@ -253,6 +253,7 @@ def simula(
         for k in nomi
     }
     s1, cross, cnt = np.zeros(P), np.zeros((P, P)), 0
+    s1m, crossm, cntm = np.zeros(P), np.zeros((P, P)), 0  # rendimenti di un mese (21 giorni): volatilità che tiene conto del legame tra giorni
     g1, g2 = np.zeros(P), np.zeros(P)  # somma e somma dei quadrati del rendimento del primo anno (senza versamenti): controllo di plausibilità
     fatti = 0
     while fatti < n:
@@ -274,7 +275,7 @@ def simula(
         for m in range(mesi):
             blocco = gen.blocco(m)
             tabs = m * GG + np.arange(1, GG + 1)
-            rets = []
+            rets, mens = [], []
             for k in nomi:
                 cols, w = porte[k][0], np.asarray(porte[k][1], float)
                 s = st[k]
@@ -298,6 +299,7 @@ def simula(
                         g1[nomi.index(k)] += G.sum()
                         g2[nomi.index(k)] += (G**2).sum()
                 rets.append(Vd / np.concatenate([V0[:, None], Vd[:, :-1]], 1) - 1.0)
+                mens.append(Vd[:, -1] / V0 - 1.0)
                 cm = np.maximum(s["runmax"][:, None], np.maximum.accumulate(Vd, axis=1))
                 s["mdd"] = np.minimum(s["mdd"], (Vd / cm - 1.0).min(1))
                 lp = np.maximum(np.maximum.accumulate(np.where(Vd >= cm, tabs, 0), axis=1), s["last"][:, None])
@@ -312,6 +314,10 @@ def simula(
             s1 += R.sum(0)
             cross += R.T @ R
             cnt += len(R)
+            Rm = np.stack(mens, axis=1)
+            s1m += Rm.sum(0)
+            crossm += Rm.T @ Rm
+            cntm += len(Rm)
         fatti += nn
         if progresso:
             progresso(fatti / n)
@@ -335,8 +341,14 @@ def simula(
         }
         for i, k in enumerate(nomi)
     }
+    # Volatilità annua: dai rendimenti di un MESE dei percorsi simulati (×√12), non da quelli giornalieri (×√252). Se i giorni sono legati tra loro
+    # (per esempio per l'orario diverso di cambio e indice: dopo un giorno di rialzo spesso uno di calo) la volatilità giornaliera annualizzata
+    # sovrastima il rischio vero di un anno; quella mensile no. Dalla 1.5.1; la vecchia è in `vol_giorn`.
+    mean_m = s1m / cntm
+    sd_m = np.sqrt(np.diag(crossm / cntm - np.outer(mean_m, mean_m)))
     for i, k in enumerate(nomi):
-        out[k]["vol"] = float(sd[i] * np.sqrt(giorni))
+        out[k]["vol"] = float(sd_m[i] * np.sqrt(12))
+        out[k]["vol_giorn"] = float(sd[i] * np.sqrt(giorni))
     with np.errstate(invalid="ignore", divide="ignore"):
         out["_corr"] = (nomi, cov / np.outer(sd, sd))
     return out

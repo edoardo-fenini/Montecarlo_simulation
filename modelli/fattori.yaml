@@ -17,6 +17,9 @@ ridge:
   minimo: 0.5                   # penalità minima assoluta (sui fattori standardizzati)
   frazione_minima: 0.5          # penalità minima = questa frazione del numero di settimane: provata fuori campione su titoli reali, dà
                                 # R² migliori di 0 / 0,1 (esposizioni meno estreme). Il fattore «mercato» non viene penalizzato.
+pulizia_mercato:                # controllo dei valori sbagliati isolati dell'indice di mercato (Yahoo, 2001): confronto con un'altra serie
+  riferimento: SPY              # S&P 500 (in dollari, convertito come l'indice)
+  soglia: 15                    # un giorno è un errore se si discosta dal riferimento oltre 15 volte lo scarto tipico e il giorno dopo si annulla (i soli due casi dal 2000: aprile e settembre 2001)
 min_settimane: 52               # sotto questa storia il titolo non è stimato: esposizione 1 al mercato e resto specifico
 r2_minimo_avviso: 0.30          # sotto questo R² il titolo è spiegato poco dai fattori (avviso nel report)
 
