@@ -440,7 +440,10 @@ def esegui(
         log("     backtest del VaR (validazione del modello)")
         M_bt, porte_bt, colonne_bt, idx_bt = matrice(cfg, per["A"])
         try:
-            ris["backtest"] = backtest_var.esegui(M_bt, porte_bt, colonne_bt, idx_bt, fatt["F"], fatt["V"], fatt["conf"], log=log)
+            vb = cfg["var_breve_termine"]
+            ris["backtest"] = backtest_var.esegui(
+                M_bt, porte_bt, colonne_bt, idx_bt, fatt["F"], fatt["V"], fatt["conf"], log=log, lam=vb["lambda_ewma"], code_grasse=vb["code_grasse"]
+            )
         except ValueError as e:
             ris["avvisi"].append(f"Backtest del VaR non eseguito: {e}")
 

@@ -285,7 +285,7 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
 - Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).
 
 ## Versione 1.5.1 (ramo `v1.5.1`): correzioni dopo la 1.5.0 (5 novembre 2026, lavoro notturno autonomo)
-Ora: tappe 1-3 chiuse. Prossimo passo: tappa 4 (VaR a breve termine con covarianza EWMA e code grasse nel modello a fattori).
+Ora: tappe 1-4 chiuse. Prossimo passo: tappa 5 (residui correlati tra titoli nel bootstrap del modello a fattori).
 Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione identica. Ramo `v1.5.1` creato da `main` (c45ad85).
 - [x] Tappa 0 – release 1.5.0: workflow «Release» (run 41937609394) **riuscito**, tag `v1.5.0` presente, `confronta-portafogli-v1.5.0.zip` (7,5 MB) allegato. Nessuna correzione necessaria.
 - [x] Tappa 1 – controllo di plausibilità. **Causa trovata (in parole semplici)**: il modello pesca blocchi di ~20 giorni consecutivi dalla storia. Nei dati veri
@@ -355,3 +355,24 @@ Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione 
       meccanismo noto che cancella i valori è la pulizia di Streamlit dei widget non disegnati, già coperta dalla copia. Escluso: valore iniziale sovrascritto da `value=`, chiavi cambiate fra esecuzioni, differenza di versione con la CI.
       Resta la rete di sicurezza (`stato_app.conserva`), ora **registra in `log.txt` ogni intervento** («RETE DI SICUREZZA: …», con i campi) e conta gli scatti in `_scatti_rete_di_sicurezza`; test nuovo.
       Da guardare dopo qualche giorno d'uso e di CI: se compare «RETE DI SICUREZZA» nel log, la causa è ancora lì e il log dice quali campi.
+- [x] Tappa 4 – calibrazione del VaR a breve termine del modello a fattori (`backtest_var.var_fattori_ewma`). Solo backtest e VaR a 1 giorno; la simulazione di lungo periodo
+      usa ancora la storia lunga. Covarianza dei fattori EWMA aggiornata ogni giorno (lambda 0,97, configurabile: `var_breve_termine.lambda_ewma`, validato 0,80-0,999);
+      varianza specifica EWMA del residuo del PORTAFOGLIO (rendimento − esposizioni×fattori), che comprende le correlazioni tra residui dei titoli (scelta: più adatta
+      del singolo titolo per un VaR di portafoglio); distribuzione t di Student con gradi di libertà e scala stimati (massima verosimiglianza) sui residui standardizzati
+      della finestra di 2 anni (mediana gdl: Cyber 5, Banche 8, Big tech 6, MSCI 4,5), normale se le code non sono più grasse (`var_breve_termine.code_grasse`).
+      Scelta: la t è stimata sempre (non solo per titoli con molto rischio specifico): i gradi di libertà salgono da soli dove le code non sono grasse.
+      Il modello della 1.5.0 resta nel report come «fattori (1.5.0)» per il confronto. Backtest reale (esempio, dati 5/11/2026, 839 giorni di prova), sforamenti (attesi 42 al 95%, 8,4 al 99%):
+      | serie | VaR | 1.5.0 | ora | storico |
+      |---|---|---|---|---|
+      | Cyber security | 95% | 63 🔴 | 46 🟢 | 49 🟢 |
+      | Cyber security | 99% | 32 🔴 | 12 🟢 | 10 🟢 |
+      | Banche / PE | 95% | 16 🔴 (troppo prudente) | 48 🟢 | 36 🟢 |
+      | Banche / PE | 99% | 4 🟡 | 15 🔴 (sforamenti a grappolo) | 9 🟢 |
+      | Big tech USA | 95% | 35 🟢 | 48 🟢 | 35 🟢 |
+      | Big tech USA | 99% | 7 🟡 | 7 🟡 | 7 🟡 |
+      | MSCI World | 95% | 11 🔴 (troppo prudente) | 54 🟢 | 37 🔴 |
+      | MSCI World | 99% | 7 🔴 | 13 🟡 | 11 🔴 |
+      Resta un rosso (Banche al 99%, sforamenti a grappolo) e due gialli: non ho rincorso i numeri (nessuna taratura sul test). Il modello storico resta il più adatto al breve termine; il modello
+      a fattori è più informativo per orizzonti lunghi perché include le grandi crisi (frase nel report, nella scheda «Validazione del modello»).
+      Test (7 nuovi in `tests/test_backtest_var.py`): EWMA usa solo il passato e converge; segue il regime (storia lunga no); stima t; con mercato turbolento poi calmo il VaR 1.5.0 è troppo
+      prudente (<50% degli sforamenti attesi) e il nuovo no (60-160%); tabella prima/dopo nel report; validazione di lambda.
