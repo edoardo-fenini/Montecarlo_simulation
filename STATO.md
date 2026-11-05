@@ -285,7 +285,7 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
 - Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).
 
 ## Versione 1.5.1 (ramo `v1.5.1`): correzioni dopo la 1.5.0 (5 novembre 2026, lavoro notturno autonomo)
-Ora: tappe 0-8 chiuse, tappa 9 quasi: confronto, README, CHANGELOG, RELEASE_NOTES fatti. Prossimo passo: PR verso main, merge a controlli verdi, release v1.5.1 (Actions → Release), report PDF.
+Ora: **tutto chiuso**: PR #7 unita in main, release v1.5.1 pubblicata. Prossimo passo (per chi riprende): cancellare i rami di sessione già uniti (vedi sotto) e guardare «log.txt» / log della CI per «RETE DI SICUREZZA».
 Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione identica. Ramo `v1.5.1` creato da `main` (c45ad85).
 - [x] Tappa 0 – release 1.5.0: workflow «Release» (run 41937609394) **riuscito**, tag `v1.5.0` presente, `confronta-portafogli-v1.5.0.zip` (7,5 MB) allegato. Nessuna correzione necessaria.
 - [x] Tappa 1 – controllo di plausibilità. **Causa trovata (in parole semplici)**: il modello pesca blocchi di ~20 giorni consecutivi dalla storia. Nei dati veri
@@ -412,3 +412,12 @@ Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione 
       (modello storico, 20.000 simulazioni, HTML+PDF+Excel+CSV), rigenerati con `strumenti/confronto_modelli.py` e `confronta.py`. README, CHANGELOG (sezione 1.5.1 con numeri prima/dopo), RELEASE_NOTES aggiornati.
       Nel confronto (dati di oggi) il backtest 1.5.0 dà Cyber 95% 62 sforamenti (63 nella tabella della tappa 4: i giorni riempiti della tappa 6 entrano nella covarianza storica del VaR 1.5.0); tutti i controlli di plausibilità coincidono.
       Nota minore (già presente nella 1.5.0, non toccata): nel PDF le icone dei semafori (emoji) non hanno glifo nel font e si vedono come quadratini; il testo («verde», «giallo», «rosso») resta leggibile; la nuova tabella prima/dopo usa solo parole.
+- [x] **Pull request [#7](https://github.com/edoardo-fenini/Montecarlo_simulation/pull/7)** verso `main`: «Test» e «Prova su Mac» (compreso `zip-release`) verdi sul push e sulla pull request → unita (merge c574638).
+- [x] **Release v1.5.1 pubblicata** con il workflow «Release» (Actions → Release → Run workflow, versione 1.5.1, ramo main; run 41949177417, il push del tag dal terminale è bloccato dal proxy): test verdi → zip → tag `v1.5.1` su c574638 →
+      release con le note della sezione 1.5.1 del CHANGELOG → `confronta-portafogli-v1.5.1.zip` (10,2 MB, più grande dei 7,5 MB della 1.5.0 per gli esempi rigenerati) allegato e verificato.
+- [x] Report PDF del lavoro: `docs/Report_lavoro_v1_5_1.pdf` (esito di ogni tappa, numeri prima/dopo, problemi aperti, cosa deve fare l'utente).
+- [ ] **Rami di sessione già uniti da cancellare** (non ho il permesso: `git push --delete` risponde 403 dal proxy, gli strumenti GitHub non cancellano rami): `claude/new-session-extdst` e `claude/optimistic-gates-68p7ry`
+      (già in main); `claude/determined-goldberg-ijql7y` (ramo di questa sessione, già in main) a lavoro finito. I rami `v1.3`, `v1.3.1`, `v1.4`, `v1.5` hanno un commit in più (note di STATO dopo l'unione): non sono rami di sessione, lasciati.
+      Dal sito: Code → Branches → icona cestino; dal terminale: `git push origin --delete claude/new-session-extdst claude/optimistic-gates-68p7ry`.
+- Scelte annotate (senza chiedere): ramo `v1.5.1` come da richiesta (non il ramo di sessione assegnato); correzione della media giornaliera dei blocchi applicata anche al metodo «storico»; volatilità annua da rendimenti mensili per tutte le analisi;
+  VaR del modello a fattori con rischio specifico del portafoglio (non del singolo titolo) e t di Student sempre stimata; soglia 15 per la pulizia dell'indice di mercato (con 6 troppi falsi positivi); `riempimento_fattori` e `residui_congiunti` nel file dei fattori, `var_breve_termine` nel YAML del portafoglio.
