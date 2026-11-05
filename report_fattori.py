@@ -195,7 +195,18 @@ def blocchi(ris: dict) -> list:
     B.append(_tab(["Fattore", "Gruppo", "Costruzione", "Primo dato"], [[n, r["gruppo"], r["ticker"], r["inizio"].strftime("%d/%m/%Y")] for n, r in info.iterrows()]))
     tardi = [n for n, r in info.iterrows() if pd.Timestamp(r["inizio"]) > pd.Timestamp(conf["inizio_storia"]) + pd.Timedelta(days=45)]
     if tardi:
-        B.append(("nota", f"I fattori {', '.join(tardi)} nascono dopo l'inizio della storia ({pd.Timestamp(conf['inizio_storia']):%d/%m/%Y}): prima valgono 0 nelle simulazioni (nessuna esposizione nota) e non entrano nelle regressioni."))
+        if conf.get("riempimento_fattori", "condizionato") == "condizionato":
+            B.append(
+                (
+                    "nota",
+                    f"I fattori {', '.join(tardi)} nascono dopo l'inizio della storia ({pd.Timestamp(conf['inizio_storia']):%d/%m/%Y}): non entrano nelle regressioni. Per le date "
+                    "precedenti, nelle simulazioni, non valgono 0: si ricostruiscono dal mercato del giorno (regressione del fattore sul mercato nel periodo in cui esiste) più un "
+                    "residuo pescato a caso dai residui veri del fattore. Così nel 2000-2002 e nel 2008 il fattore si muove con il mercato invece di restare fermo "
+                    "(opzione «riempimento_fattori: zero» per tornare al vecchio comportamento).",
+                )
+            )
+        else:
+            B.append(("nota", f"I fattori {', '.join(tardi)} nascono dopo l'inizio della storia ({pd.Timestamp(conf['inizio_storia']):%d/%m/%Y}): prima valgono 0 nelle simulazioni (nessuna esposizione nota) e non entrano nelle regressioni."))
     B.append(("nota", "La regressione usa rendimenti settimanali in euro, con penalità ridge (esposizioni più prudenti quando la storia è breve o i fattori si somigliano; il fattore mercato non è penalizzato)."))
     return B
 

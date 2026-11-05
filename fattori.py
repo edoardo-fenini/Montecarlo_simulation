@@ -47,6 +47,9 @@ def carica_config(percorso: str | None = None) -> dict:
     c["ridge"].setdefault("lambda", "auto")
     c["ridge"].setdefault("minimo", 0.5)
     c["ridge"].setdefault("frazione_minima", 0.5)
+    c["riempimento_fattori"] = str(c.get("riempimento_fattori", "condizionato")).lower()
+    if c["riempimento_fattori"] not in ("zero", "condizionato"):
+        raise ErroreConfig("«riempimento_fattori» nel file dei fattori deve essere «zero» o «condizionato».")
     c.setdefault("min_settimane", 52)
     c["residui_congiunti"] = bool(c.get("residui_congiunti", True))
     c.setdefault("r2_minimo_avviso", 0.30)
@@ -112,6 +115,34 @@ def _prezzi(arch: D.Archivio, t: str, locale: bool, valuta: str | None) -> pd.Se
     return D.serie_eur(arch, t, valuta_default=valuta or "USD")[0]
 
 
+def riempi_condizionato(F: pd.DataFrame, V: pd.DataFrame, nome_mercato: str, seme: int = 20260101) -> tuple[pd.DataFrame, dict]:
+    """Per le date in cui un fattore non esiste ancora (V falso) invece di 0 si mette: a + b × mercato del giorno + un residuo pescato a caso dai residui veri
+    del fattore (regressione del fattore sul mercato nel periodo in cui esiste). Così nel 2000-2002 il fattore si muove con il mercato (b) e ha
+    un'oscillazione propria (residuo) come quando esisteva. Il seme è fissato: stessi dati, stessi numeri. Ritorna (F riempita, {fattore: (giorni riempiti, b)}).
+    Limiti: la relazione col mercato è quella del periodo recente; il residuo è pescato a caso, senza i periodi di maggiore turbolenza."""
+    import zlib
+
+    out = F.copy()
+    info = {}
+    m = F[nome_mercato]
+    for c in F.columns:
+        manca = ~V[c].astype(bool) | F[c].isna()
+        if c == nome_mercato or not manca.any():
+            continue
+        ok = ~manca & m.notna()
+        if ok.sum() < 250:  # troppo pochi dati veri per stimare la relazione: resta 0
+            continue
+        x, y = m[ok].values, F.loc[ok, c].values
+        b = float(np.cov(x, y)[0, 1] / x.var(ddof=1))
+        a = float(y.mean() - b * x.mean())
+        res = y - a - b * x
+        rng = np.random.default_rng(seme + zlib.crc32(c.encode()))
+        n = int(manca.sum())
+        out.loc[manca, c] = a + b * m[manca].fillna(0.0).values + rng.choice(res, size=n)
+        info[c] = (n, b)
+    return out, info
+
+
 def serie_fattori(conf: dict, arch: D.Archivio, log=print) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Ritorna (F, valido, info): rendimenti giornalieri dei fattori (0 prima dell'inizio), maschera dei dati veri, tabella
     con gruppo, ticker e data di inizio di ogni fattore. Calendario = giorni del fattore «mercato» dall'inizio della storia."""
@@ -171,6 +202,11 @@ def serie_fattori(conf: dict, arch: D.Archivio, log=print) -> tuple[pd.DataFrame
         raise D.ErroreDati(f"Nessun dato per i fattori: {', '.join(senza)}.")
     info = pd.DataFrame(righe).set_index("fattore")
     info.attrs["picchi_corretti"] = [d.date().isoformat() for d in picchi]
+    if conf.get("riempimento_fattori", "condizionato") == "condizionato":
+        F, riempiti = riempi_condizionato(F, V, next(f["nome"] for f in fatt if f["gruppo"] == "mercato"))
+        info.attrs["riempiti"] = {k: {"giorni": n, "beta_mercato": b} for k, (n, b) in riempiti.items()}
+        for k, (n, b) in riempiti.items():
+            log(f"  fattore {k}: {n} giorni senza dato riempiti con a + {b:.2f} × mercato + residuo ricampionato")
     return F.fillna(0.0), V, info
 
 
@@ -248,6 +284,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
     """R: rendimenti giornalieri dei titoli (NaN prima della quotazione, colonna BENCH inclusa). F, V: vedi serie_fattori."""
     titoli = titoli or list(R.columns)
     nf = list(F.columns)
+    F = F.where(V.reindex(F.index).fillna(False).astype(bool), 0.0)  # i valori «riempiti» (prima dell'inizio di un fattore) non entrano nelle stime: solo dati veri
     Fw = _settimanali_df(F)
     # settimana valida per un fattore solo se tutti i giorni erano veri (la settimana a cavallo dell'inizio non vale)
     Vw = V.astype(float).resample("W-FRI").min().reindex(Fw.index).fillna(0).astype(bool)

@@ -285,7 +285,7 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
 - Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).
 
 ## Versione 1.5.1 (ramo `v1.5.1`): correzioni dopo la 1.5.0 (5 novembre 2026, lavoro notturno autonomo)
-Ora: tappe 1-5 chiuse. Prossimo passo: tappa 6 (fattori con storia breve: riempimento condizionato al mercato).
+Ora: tappe 1-6 chiuse. Prossimo passo: tappa 7 (stabilità della CI), poi (se resta tempo) tappa 8, poi tappa 9 (chiusura).
 Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione identica. Ramo `v1.5.1` creato da `main` (c45ad85).
 - [x] Tappa 0 – release 1.5.0: workflow «Release» (run 41937609394) **riuscito**, tag `v1.5.0` presente, `confronta-portafogli-v1.5.0.zip` (7,5 MB) allegato. Nessuna correzione necessaria.
 - [x] Tappa 1 – controllo di plausibilità. **Causa trovata (in parole semplici)**: il modello pesca blocchi di ~20 giorni consecutivi dalla storia. Nei dati veri
@@ -389,3 +389,13 @@ Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione 
       | max drawdown mediano | −64% → −71% | −59% → −61% | −66% → −70% | −42% → −42% |
       Controllo di plausibilità: verde prima e dopo. Test (`tests/test_residui_congiunti.py`, 4): correlazione dei residui conservata (0,6 storica → 0,6 simulata; con residui indipendenti ≈0),
       titolo con residui solo in parte delle date (nessuna distorsione di media e volatilità, correlazione solo sulle date vere), allineamento alle date dei fattori, rendimento atteso invariato.
+- [x] Tappa 6 – fattori con storia breve (`fattori.riempi_condizionato`, opzione `riempimento_fattori: zero | condizionato` in `modelli/fattori.yaml`, default `condizionato`).
+      Metodo in parole semplici: per i giorni in cui il fattore non esisteva ancora si prende «a + b × rendimento del mercato di quel giorno + un residuo pescato a caso tra quelli veri del
+      fattore», con a e b dalla regressione del fattore sul mercato nel periodo in cui esiste (seme fisso: stessi dati, stessi numeri). Con meno di 250 giorni veri il fattore resta a 0.
+      La maschera dei dati veri non cambia: regressioni dei titoli, residui e R² usano solo dati veri (i valori riempiti sono azzerati dentro `stima_titoli`: stime identiche con le due opzioni, test).
+      Effetto sui fattori (volatilità annua giornaliera, 2000-2002 / 2008, prima = 0): Momentum 0 → 9,7% / 9,8%; Qualità 0 → 3,4% / 3,4%; Emergenti 0 → 17,5% / 47,4% (2008: era già reale);
+      beta sul mercato stimata: Emergenti 0,23, Obbligazioni −0,20, Momentum 0,05, Qualità −0,01.
+      Limite onesto: Momentum e Qualità hanno beta quasi nulla sul mercato, quindi il riempimento è quasi una ripetizione del loro rischio recente (non sale nelle crisi); migliora
+      soprattutto Emergenti (beta 0,23). Effetto sui portafogli dell'esempio trascurabile (esposizioni piccole a questi fattori): volatilità Cyber 31,4 → 31,3%, Banche 25,5 → 25,5%, Big tech 30,5 → 30,4%,
+      5° percentile 15 anni 966 → 975, 1.836 → 1.832, 1.041 → 1.051 €. Nota: il VaR «fattori (1.5.0)» del backtest usa la covarianza dei fattori su tutta la storia, che ora include i giorni riempiti.
+      Test (`tests/test_riempimento_fattori.py`, 4): il fattore segue il mercato nella crisi, relazione col mercato conservata, dati veri invariati; riproducibile; poca storia → 0; opzioni zero/condizionato in `serie_fattori`; validazione.
