@@ -285,7 +285,7 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
 - Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).
 
 ## Versione 1.5.1 (ramo `v1.5.1`): correzioni dopo la 1.5.0 (5 novembre 2026, lavoro notturno autonomo)
-Ora: tappe 1-8 chiuse (la 7 va ricontrollata a fine lavoro sugli ultimi run). Prossimo passo: tappa 9 (chiusura: confronto modelli v1_5_1, README, CHANGELOG, RELEASE_NOTES, PR, release, report PDF).
+Ora: tappe 0-8 chiuse, tappa 9 quasi: confronto, README, CHANGELOG, RELEASE_NOTES fatti. Prossimo passo: PR verso main, merge a controlli verdi, release v1.5.1 (Actions → Release), report PDF.
 Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione identica. Ramo `v1.5.1` creato da `main` (c45ad85).
 - [x] Tappa 0 – release 1.5.0: workflow «Release» (run 41937609394) **riuscito**, tag `v1.5.0` presente, `confronta-portafogli-v1.5.0.zip` (7,5 MB) allegato. Nessuna correzione necessaria.
 - [x] Tappa 1 – controllo di plausibilità. **Causa trovata (in parole semplici)**: il modello pesca blocchi di ~20 giorni consecutivi dalla storia. Nei dati veri
@@ -405,3 +405,10 @@ Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione 
       La scelta va in `scelte_isin` → chiave `isin_scelte` della configurazione scaricabile (già prevista dalla 1.2). Test: `tests/test_classi_fondi.py` (etichette e app con 4 classi candidate: scelta salvata e controllo rifatto).
       Non fatto: Yahoo non fornisce l'ISIN di ogni classe, quindi la scelta resta dell'utente (il caso LU0073232471 non è verificabile offline; solo la meccanica è provata con dati finti).
 - Tempo della prova rapida (`pytest -m rapido`): i test nuovi più lenti sono segnati come lenti in `tests/conftest.py`; 273 test rapidi in 54 s su questa macchina (prima: 250 in 43 s).
+- [x] Tappa 7 – stabilità della CI. Sul ramo `v1.5.1`: «Test» (con la prova nel browser) e «Prova su Mac» (con il job `zip-release`) verdi su 6 push consecutivi (run Test 56-61, Prova su Mac 82-87 al momento della scrittura);
+      nessun test intermittente da correggere (il test della ricerca per nome è passato anche 10/10 in locale). Suite completa locale: 314 test verdi in 9 min 51 s (browser incluso); prova rapida 273 in 54 s; `ruff check` pulito.
+      Rami di sessione: da pulire alla fine (vedi sotto).
+- [x] Tappa 9 (parte documenti) – `esempi/confronto_modelli_v1_5_1/` (risultati.md, backtest_var.csv, report_fattori/ con HTML+PDF del modello a fattori con backtest) e report di esempio `esempi/2026-11-05_tre_portafogli_v1_5_1/`
+      (modello storico, 20.000 simulazioni, HTML+PDF+Excel+CSV), rigenerati con `strumenti/confronto_modelli.py` e `confronta.py`. README, CHANGELOG (sezione 1.5.1 con numeri prima/dopo), RELEASE_NOTES aggiornati.
+      Nel confronto (dati di oggi) il backtest 1.5.0 dà Cyber 95% 62 sforamenti (63 nella tabella della tappa 4: i giorni riempiti della tappa 6 entrano nella covarianza storica del VaR 1.5.0); tutti i controlli di plausibilità coincidono.
+      Nota minore (già presente nella 1.5.0, non toccata): nel PDF le icone dei semafori (emoji) non hanno glifo nel font e si vedono come quadratini; il testo («verde», «giallo», «rosso») resta leggibile; la nuova tabella prima/dopo usa solo parole.

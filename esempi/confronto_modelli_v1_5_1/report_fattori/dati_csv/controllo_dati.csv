@@ -1,0 +1,21 @@
+﻿Esito;Input;ISIN;Ticker usato;Nome;Tipo;Borsa;Valuta;Fonte;Prima data;Ultima data;Anni di storia;% giorni mancanti;Ultimo prezzo;Dettagli
+Verde;PANW;;PANW;Palo Alto Networks, Inc.;azione;NasdaqGS;USD;Yahoo Finance;20/07/2012;04/11/2026;14,3;0,0;348,04 USD del 04/11/2026;tutto a posto
+Verde;FTNT;;FTNT;Fortinet, Inc.;azione;NasdaqGS;USD;Yahoo Finance;18/11/2009;04/11/2026;17,0;0,0;129,39 USD del 04/11/2026;tutto a posto
+Giallo;FFIV;;FFIV;F5, Inc.;azione;NasdaqGS;USD;Yahoo Finance;04/06/1999;04/11/2026;27,4;0,0;329,72 USD del 04/11/2026;avviso: 4 movimenti giornalieri oltre ±30% (il maggiore +40% il 19/04/2001)
+Giallo;CHKP;;CHKP;Check Point Software Technologies Ltd.;azione;NasdaqGS;USD;Yahoo Finance;28/06/1996;04/11/2026;30,4;0,0;147,41 USD del 04/11/2026;avviso: 2 movimenti giornalieri oltre ±30% (il maggiore +32% il 30/01/1997)
+Verde;CRWD;;CRWD;CrowdStrike Holdings, Inc.;azione;NasdaqGS;USD;Yahoo Finance;12/06/2019;04/11/2026;7,4;0,0;241,00 USD del 04/11/2026;tutto a posto
+Giallo;S;;S;SentinelOne, Inc.;azione;NYSE;USD;Yahoo Finance;30/06/2021;04/11/2026;5,3;0,0;23,49 USD del 04/11/2026;avviso: 1 movimenti giornalieri oltre ±30% (il maggiore -35% il 02/06/2023)
+Giallo;ZS;;ZS;Zscaler, Inc.;azione;NasdaqGS;USD;Yahoo Finance;16/03/2018;04/11/2026;8,6;0,0;224,44 USD del 04/11/2026;avviso: 1 movimenti giornalieri oltre ±30% (il maggiore -32% il 27/05/2026)
+Verde;GS;;GS;The Goldman Sachs Group, Inc.;azione;NYSE;USD;Yahoo Finance;04/05/1999;04/11/2026;27,5;0,0;928,00 USD del 04/11/2026;tutto a posto
+Verde;JPM;;JPM;JPMorgan Chase & Co.;azione;NYSE;USD;Yahoo Finance;17/03/1980;04/11/2026;46,6;0,0;352,11 USD del 04/11/2026;tutto a posto
+Giallo;MS;;MS;Morgan Stanley;azione;NYSE;USD;Yahoo Finance;23/02/1993;04/11/2026;33,7;0,0;193,97 USD del 04/11/2026;avviso: 2 movimenti giornalieri oltre ±30% (il maggiore +87% il 13/10/2008)
+Verde;BLK;;BLK;BlackRock, Inc.;azione;NYSE;USD;Yahoo Finance;01/10/1999;04/11/2026;27,1;0,0;1.224,37 USD del 04/11/2026;tutto a posto
+Giallo;BX;;BX;Blackstone Inc.;azione;NYSE;USD;Yahoo Finance;22/06/2007;04/11/2026;19,4;0,0;125,57 USD del 04/11/2026;avviso: 2 movimenti giornalieri oltre ±30% (il maggiore +38% il 24/11/2008)
+Verde;HSBC;;HSBC;HSBC Holdings plc;azione;NYSE;USD;Yahoo Finance;16/07/1999;04/11/2026;27,3;0,0;89,37 USD del 04/11/2026;tutto a posto
+Giallo;UBS;;UBS;UBS Group AG;azione;NYSE;USD;Yahoo Finance;16/05/2000;04/11/2026;26,5;0,0;50,67 USD del 04/11/2026;avviso: 2 movimenti giornalieri oltre ±30% (il maggiore +33% il 26/11/2014)
+Giallo;PLTR;;PLTR;Palantir Technologies Inc.;azione;NasdaqGS;USD;Yahoo Finance;30/09/2020;04/11/2026;6,1;0,0;171,70 USD del 04/11/2026;avviso: 1 movimenti giornalieri oltre ±30% (il maggiore +31% il 06/02/2024)
+Giallo;AAPL;;AAPL;Apple Inc.;azione;NasdaqGS;USD;Yahoo Finance;12/12/1980;04/11/2026;45,9;0,0;349,51 USD del 04/11/2026;avviso: 2 movimenti giornalieri oltre ±30% (il maggiore -52% il 29/09/2000)
+Giallo;MSFT;;MSFT;Microsoft Corporation;azione;NasdaqGS;USD;Yahoo Finance;13/03/1986;04/11/2026;40,6;0,0;555,80 USD del 04/11/2026;avviso: 1 movimenti giornalieri oltre ±30% (il maggiore -30% il 19/10/1987)
+Verde;GOOGL;;GOOGL;Alphabet Inc.;azione;NasdaqGS;USD;Yahoo Finance;19/08/2004;04/11/2026;22,2;0,0;288,93 USD del 04/11/2026;tutto a posto
+Giallo;AMZN;;AMZN;Amazon.com, Inc.;azione;NasdaqGS;USD;Yahoo Finance;15/05/1997;04/11/2026;29,5;0,0;266,03 USD del 04/11/2026;avviso: 3 movimenti giornalieri oltre ±30% (il maggiore +34% il 26/11/2001)
+Verde;IWDA.AS;;IWDA.AS;iShares Core MSCI World UCITS ETF USD (Acc);ETF/ETC;Amsterdam;EUR;Yahoo Finance;25/09/2009;03/11/2026;17,1;1,0;128,95 EUR del 03/11/2026;tutto a posto

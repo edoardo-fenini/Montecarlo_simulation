@@ -1,0 +1,19 @@
+﻿fattore;gruppo;ticker;inizio;descrizione
+Mercato mondiale;Mercato;^990100-USD-STRD;2000-01-04;Indice azionario MSCI World
+USA;Regioni;SPY − @MERCATO;2000-01-04;S&P 500 meno mondo
+Europa;Regioni;IEV − @MERCATO;2000-07-31;iShares Europe 350 meno mondo
+Giappone;Regioni;EWJ − @MERCATO;2000-01-04;Giappone meno mondo
+Emergenti;Regioni;EEM − @MERCATO;2003-04-15;Mercati emergenti meno mondo
+Tecnologia;Settori;XLK − SPY;2000-01-04;Settore tecnologico USA meno S&P 500
+Finanziari;Settori;XLF − SPY;2000-01-04;Settore finanziario USA meno S&P 500
+Salute;Settori;XLV − SPY;2000-01-04;Settore salute USA meno S&P 500
+Energia;Settori;XLE − SPY;2000-01-04;Settore energia USA meno S&P 500
+Industriali;Settori;XLI − SPY;2000-01-04;Settore industriale USA meno S&P 500
+Consumi ciclici;Settori;XLY − SPY;2000-01-04;Consumi discrezionali USA meno S&P 500
+Consumi difensivi;Settori;XLP − SPY;2000-01-04;Beni di prima necessità USA meno S&P 500
+Growth contro value;Stile;IWF − IWD;2000-05-29;Russell 1000 Growth meno Value (positivo = growth)
+Piccole imprese;Stile;IWM − SPY;2000-05-29;Russell 2000 meno S&P 500
+Momentum;Stile;MTUM − SPY;2013-04-19;iShares MSCI USA Momentum meno S&P 500 (solo dal 2013)
+Qualità;Stile;QUAL − SPY;2013-07-19;iShares MSCI USA Quality meno S&P 500 (solo dal 2013)
+Obbligazioni lunghe;Tassi e valute;TLT;2002-07-31;Titoli di Stato USA 20+ anni (in dollari)
+Dollaro contro euro;Tassi e valute;@USD_EUR;2000-01-04;Valore del dollaro in euro

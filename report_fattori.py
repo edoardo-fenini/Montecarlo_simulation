@@ -300,11 +300,11 @@ def blocchi_backtest(ris: dict) -> list:
                     serie,
                     f"{int(round(lv * 100))}%",
                     f"{a['attesi']:.1f}".replace(".", ","),
-                    f"{int(a['sforamenti'])} {SEMAFORO[a['semaforo']].split()[0]}",
-                    f"{int(n['sforamenti'])} {SEMAFORO[n['semaforo']].split()[0]}",
+                    f"{int(a['sforamenti'])} ({a['semaforo']})",
+                    f"{int(n['sforamenti'])} ({n['semaforo']})",
                 ]
             )
-        B.append(("tab", {"intest": ["Serie", "VaR", "Sforamenti attesi", "Prima (1.5.0)", "Ora"], "righe": righe, "gruppi": None, "sx": True}))
+        B.append(("tab", {"intest": ["VaR", "Sforamenti attesi", "Prima (1.5.0)", "Ora"], "righe": righe, "gruppi": None, "sx": True}))
         gdl = ", ".join(f"{int(round(v))} per {RPcorto(k)}" for k, v in (bt.get("gdl") or {}).items() if v == v)
         lam = f"{bt.get('lambda', 0.97):.2f}".replace(".", ",")
         B.append(

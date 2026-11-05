@@ -68,7 +68,7 @@ def main():
     testo = [
         f"# Confronto tra modello «storico» e modello «a fattori» (versione 1.5.1, {__import__('datetime').date.today():%d/%m/%Y})",
         "",
-        f"Esempio `configurazioni/esempio_tre_portafogli.yaml` (3 portafogli + MSCI World), dati reali Yahoo, {n:,} simulazioni, {h_fin} anni, capitale 5.000 €,".replace(",", "."),
+        f"Esempio `configurazioni/esempio_tre_portafogli.yaml` (3 portafogli + MSCI World), dati reali Yahoo, {n:,} simulazioni, {h_fin} anni, capitale 5.000 €,".replace(f"{n:,}", f"{n:,}".replace(",", ".")),
         "rendimento atteso con metodo beta (2% / 4%), stesso seed. Valori in euro. La **volatilità annua** è calcolata dai rendimenti di un mese (×√12), come dalla 1.5.1.",
         f"Storico A: periodo comune dal {rs['periodi']['A'][0]:%d/%m/%Y}; storico B: dal {rs['periodi']['B'][0]:%d/%m/%Y}; fattori: storia dei fattori dal 2000 (residui dei titoli dalle stesse date).",
         "",
@@ -86,8 +86,9 @@ def main():
         testo += [
             f"## Backtest del VaR a 1 giorno ({int(t['giorni'].iloc[0])} giorni di prova dopo la finestra di 2 anni)",
             "",
-            "Sforamenti (attesi: 5% dei giorni al 95%, 1% al 99%) e semaforo. «fattori (1.5.0)» = modello precedente; «fattori» = covarianza e rischio specifico EWMA (lambda "
-            f"{bt['lambda']:.2f}), code grasse.".replace(".", ",", 1),
+            "Sforamenti (attesi: 5% dei giorni al 95%, 1% al 99%) e semaforo. «fattori (1.5.0)» = modello precedente; «fattori (ora)» = covarianza e rischio specifico EWMA (lambda "
+            + f"{bt['lambda']:.2f}".replace(".", ",")
+            + "), code grasse.",
             "",
             "| serie | VaR | attesi | storico | fattori (1.5.0) | fattori (ora) |",
             "|---|---|---|---|---|---|",
@@ -98,7 +99,8 @@ def main():
                 x = g[g["modello"] == m].iloc[0]
                 return f"{int(x['sforamenti'])} {icone[x['semaforo']]}"
 
-            testo.append(f"| {NOMI.get(serie, serie)} | {int(round(lv * 100))}% | {g.iloc[0]['attesi']:.1f} | {cella('storico')} | {cella('fattori (1.5.0)')} | {cella('fattori')} |".replace(".", ",", 1) if False else f"| {NOMI.get(serie, serie)} | {int(round(lv * 100))}% | {g.iloc[0]['attesi']:.1f} | {cella('storico')} | {cella('fattori (1.5.0)')} | {cella('fattori')} |")
+            attesi = f"{g.iloc[0]['attesi']:.1f}".replace(".", ",")
+            testo.append(f"| {NOMI.get(serie, serie)} | {int(round(lv * 100))}% | {attesi} | {cella('storico')} | {cella('fattori (1.5.0)')} | {cella('fattori')} |")
         t.drop(columns=[]).to_csv(os.path.join(uscita, "backtest_var.csv"), index=False, sep=";", decimal=",")
         testo += ["", "Il modello storico è più adatto al rischio di breve termine; il modello a fattori è più informativo per orizzonti lunghi perché include le grandi crisi.", ""]
     open(os.path.join(uscita, "risultati.md"), "w", encoding="utf-8").write("\n".join(testo))
