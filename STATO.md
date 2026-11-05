@@ -285,7 +285,7 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
 - Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).
 
 ## Versione 1.5.1 (ramo `v1.5.1`): correzioni dopo la 1.5.0 (5 novembre 2026, lavoro notturno autonomo)
-Ora: tappe 1-4 chiuse. Prossimo passo: tappa 5 (residui correlati tra titoli nel bootstrap del modello a fattori).
+Ora: tappe 1-5 chiuse. Prossimo passo: tappa 6 (fattori con storia breve: riempimento condizionato al mercato).
 Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione identica. Ramo `v1.5.1` creato da `main` (c45ad85).
 - [x] Tappa 0 – release 1.5.0: workflow «Release» (run 41937609394) **riuscito**, tag `v1.5.0` presente, `confronta-portafogli-v1.5.0.zip` (7,5 MB) allegato. Nessuna correzione necessaria.
 - [x] Tappa 1 – controllo di plausibilità. **Causa trovata (in parole semplici)**: il modello pesca blocchi di ~20 giorni consecutivi dalla storia. Nei dati veri
@@ -376,3 +376,16 @@ Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione 
       a fattori è più informativo per orizzonti lunghi perché include le grandi crisi (frase nel report, nella scheda «Validazione del modello»).
       Test (7 nuovi in `tests/test_backtest_var.py`): EWMA usa solo il passato e converge; segue il regime (storia lunga no); stima t; con mercato turbolento poi calmo il VaR 1.5.0 è troppo
       prudente (<50% degli sforamenti attesi) e il nuovo no (60-160%); tabella prima/dopo nel report; validazione di lambda.
+- [x] Tappa 5 – residui correlati tra titoli nelle crisi (`fattori.Fattoriale`, `matrice_residui`, opzione `residui_congiunti: true` in `modelli/fattori.yaml`, default true; false = 1.5.0).
+      Ogni giorno simulato ha una data storica (quella del blocco di fattori): il residuo di ogni titolo è quello vero di quella data (anche tra portafogli diversi). Dove il titolo non
+      ha il residuo in quella data (non quotava ancora, o senza dati) si ripesca dalla sua storia come prima: annotato nella scheda «Da dove viene il rischio» (quota dei giorni con residuo vero
+      per titolo; esempio: S 20%, PLTR 22%, CRWD 27%, PANW 53%, BX 72%, titoli storici 99%). La correzione della media annua (tappa 1) include i residui che viaggiano con le date.
+      Effetto sull'esempio (modello a fattori, analisi A, 20.000 simulazioni, 15 anni; prima → dopo):
+      | | Cyber | Banche/PE | Big tech | MSCI World |
+      |---|---|---|---|---|
+      | volatilità | 27,2 → 31,4% | 24,4 → 25,5% | 28,4 → 30,5% | 16,3 → 16,3% |
+      | 5° percentile (da 5.000 €) | 1.464 → 966 | 1.920 → 1.836 | 1.291 → 1.041 | 3.361 → 3.426 |
+      | mediana | 8.307 → 7.145 | 9.498 → 9.273 | 7.914 → 7.395 | 9.701 → 9.753 |
+      | max drawdown mediano | −64% → −71% | −59% → −61% | −66% → −70% | −42% → −42% |
+      Controllo di plausibilità: verde prima e dopo. Test (`tests/test_residui_congiunti.py`, 4): correlazione dei residui conservata (0,6 storica → 0,6 simulata; con residui indipendenti ≈0),
+      titolo con residui solo in parte delle date (nessuna distorsione di media e volatilità, correlazione solo sulle date vere), allineamento alle date dei fattori, rendimento atteso invariato.

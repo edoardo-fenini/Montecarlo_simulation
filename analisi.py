@@ -344,7 +344,10 @@ def stima_fattori(cfg: dict, R: pd.DataFrame, arch: D.Archivio, log=print) -> di
     titoli = sorted({t for comp in cfg["composizione"].values() for t in comp} | {BENCH})
     stima = FA.stima_titoli(R, F, V, conf, titoli)
     scomp = {p: FA.scomposizione_rischio(stima, F, dict(comp), conf) for p, comp in cfg["composizione"].items() if all(t in stima.beta.index for t in comp)}
-    return {"conf": conf, "F": F, "V": V, "info": info, "stima": stima, "scomposizione": scomp, "avvisi_r2": FA.avvisi_r2(stima, conf)}
+    return {
+        "conf": conf, "F": F, "V": V, "info": info, "stima": stima, "scomposizione": scomp, "avvisi_r2": FA.avvisi_r2(stima, conf),
+        "copertura_residui": FA.copertura_residui(stima, F),
+    }  # fmt: skip
 
 
 def esegui(
@@ -461,7 +464,7 @@ def esegui(
         tipo_base, extra_base = "bootstrap", {}
         if modello == "fattori":
             tipo_base = "fattori"
-            extra_base = {"fatt": FA.prepara_generatore(fatt["stima"], fatt["F"], colonne, Mr0, cfg["blocco_medio_giorni"])}
+            extra_base = {"fatt": FA.prepara_generatore(fatt["stima"], fatt["F"], colonne, Mr0, cfg["blocco_medio_giorni"], fatt["conf"]["residui_congiunti"])}
         lavori.append(Lavoro(f"base_{a}", tipo_base, f"Analisi {a}: simulazione principale", 1.0, Mr, porte, extra=extra_base))
         if a == "A":
             ris["matrici"] = {"A": (Mr, porte)}  # per la prova rapida dei pesi nell'app

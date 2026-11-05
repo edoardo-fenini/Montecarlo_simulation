@@ -182,6 +182,12 @@ def blocchi(ris: dict) -> list:
         B.append(("warn", a))
     for n in stima.note:
         B.append(("warn", n))
+    cop = f.get("copertura_residui") or {}
+    if f["conf"].get("residui_congiunti", True) and cop:
+        corte = {t: v for t, v in cop.items() if v < 0.9}
+        B.append(("nota", "Residui: nella simulazione i residui di tutti i titoli sono pescati dalle stesse date dei fattori, così nelle crisi i titoli dello stesso settore si muovono insieme come è successo davvero."))
+        if corte:
+            B.append(("nota", "Per i titoli senza residui in quelle date (non quotavano ancora) il residuo è ripescato dalla loro storia: " + ", ".join(f"{t} ({_p(v, 0)} dei giorni con residuo vero)" for t, v in corte.items()) + "."))
     for t, esc in stima.fattori_esclusi.items():
         B.append(("nota", f"{t}: storia troppo breve per usare {', '.join(esc)}; questi fattori non sono stati usati per questo titolo."))
     # fattori

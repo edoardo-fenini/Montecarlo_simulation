@@ -10,7 +10,7 @@ evita esposizioni assurde quando la storia è breve o i fattori sono correlati. 
 from __future__ import annotations
 
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -48,6 +48,7 @@ def carica_config(percorso: str | None = None) -> dict:
     c["ridge"].setdefault("minimo", 0.5)
     c["ridge"].setdefault("frazione_minima", 0.5)
     c.setdefault("min_settimane", 52)
+    c["residui_congiunti"] = bool(c.get("residui_congiunti", True))
     c.setdefault("r2_minimo_avviso", 0.30)
     try:
         c["inizio_storia"] = pd.Timestamp(c["inizio_storia"])
@@ -236,6 +237,7 @@ class Stima:
     residui: dict  # titolo -> array dei residui giornalieri (media 0)
     note: list  # avvisi (titoli con poca storia, fattori esclusi...)
     fattori_esclusi: dict  # titolo -> fattori non usati per mancanza di storia
+    date_residui: dict = field(default_factory=dict)  # titolo -> date (DatetimeIndex) dei residui giornalieri: servono al bootstrap congiunto
 
 
 def _settimanali_df(x: pd.DataFrame | pd.Series):
@@ -253,6 +255,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
     mercati = {f["nome"] for f in conf["fattori"] if f["gruppo"] == "mercato"}
     minw = int(conf["min_settimane"])
     betas, alfa, r2, nsett, pen, vol, volsp, residui, note, esclusi = {}, {}, {}, {}, {}, {}, {}, {}, [], {}
+    date_res: dict = {}
     for t in titoli:
         r = R[t].dropna()
         r = r[r.index.isin(F.index)]
@@ -263,6 +266,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
             b[next(iter(mercati))] = 1.0
             betas[t], alfa[t], r2[t], pen[t], nsett[t] = b, 0.0, np.nan, 0.0, len(_settimanali_df(r).dropna())
             vol[t], volsp[t], residui[t] = float(r.std() * np.sqrt(252)), 0.0, np.zeros(2)
+            date_res[t] = pd.DatetimeIndex([])
             continue
         if len(r) < 60:
             note.append(f"{t}: meno di 60 giorni di storia in comune con i fattori, non stimato.")
@@ -303,6 +307,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
         vol[t] = float(r.std() * np.sqrt(252))
         volsp[t] = float(res_d.std() * np.sqrt(252))
         residui[t] = res_d
+        date_res[t] = r.index
     if not betas:
         raise D.ErroreDati("Nessun titolo ha abbastanza storia per il modello a fattori.")
     ix = list(betas)
@@ -318,6 +323,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
         residui=residui,
         note=note,
         fattori_esclusi=esclusi,
+        date_residui=date_res,
     )
 
 
@@ -327,8 +333,14 @@ class Fattoriale:
     rendimento = centro + beta·(fattori − media) + (residuo − media). `centro` = rendimento medio giornaliero voluto per colonna
     (già ricentrato sul rendimento atteso e al netto dei costi, come per il metodo storico)."""
 
-    def __init__(self, F: np.ndarray, beta: np.ndarray, residui: list, colonna_titolo: np.ndarray, centro: np.ndarray, blocco: int = 20):
+    def __init__(
+        self, F: np.ndarray, beta: np.ndarray, residui: list, colonna_titolo: np.ndarray, centro: np.ndarray, blocco: int = 20, res_matrice: np.ndarray | None = None
+    ):  # fmt: skip
         F = np.asarray(F, float)
+        # res_matrice (giorni dei fattori × titoli, NaN dove il titolo non ha il residuo): se c'è, i residui si pescano dalle STESSE date dei
+        # fattori (bootstrap congiunto), così le correlazioni tra residui di titoli diversi restano quelle reali; dove manca si ripesca
+        # dalla storia del titolo, come prima.
+        self.Rres = None if res_matrice is None else np.asarray(res_matrice, float)
         self.F = F - F.mean(0)
         self.beta = np.asarray(beta, float)  # (titoli unici × fattori)
         self.res = [np.asarray(x, float) - np.mean(x) for x in residui]
@@ -343,12 +355,40 @@ class Fattoriale:
     def blocco(self, m):
         f = self.boot.blocco(m)  # (n, GG, fattori)
         core = f @ self.beta.T  # (n, GG, titoli unici)
-        for j, r in enumerate(self.res):
-            core[:, :, j] += r[self.rng.integers(0, len(r), size=(self.n, GG))]
+        if self.Rres is None:  # residui indipendenti tra titoli (1.5.0)
+            for j, r in enumerate(self.res):
+                core[:, :, j] += r[self.rng.integers(0, len(r), size=(self.n, GG))]
+        else:  # bootstrap congiunto: stessa data storica dei fattori
+            res = self.Rres[self.boot.idx[:, m * GG : (m + 1) * GG]]  # (n, GG, titoli unici)
+            for j, r in enumerate(self.res):
+                manca = np.isnan(res[:, :, j])
+                if manca.any():
+                    res[:, :, j][manca] = r[self.rng.integers(0, len(r), size=int(manca.sum()))]
+            core += res
         return np.maximum(core[:, :, self.col] + self.centro, -0.99)
 
 
-def prepara_generatore(stima: Stima, F: pd.DataFrame, colonne: list, Mr: np.ndarray, blocco: int = 20) -> dict:
+def matrice_residui(stima: Stima, F: pd.DataFrame, tick: list) -> np.ndarray:
+    """Residui giornalieri di ogni titolo sulle date dei fattori (giorni × titoli); NaN dove il titolo non ha il residuo (non quotava o senza dati)."""
+    out = np.full((len(F.index), len(tick)), np.nan)
+    for j, t in enumerate(tick):
+        d = stima.date_residui.get(t)
+        if d is None or len(d) == 0 or len(stima.residui[t]) != len(d):
+            continue
+        pos = F.index.get_indexer(d)
+        ok = pos >= 0
+        out[pos[ok], j] = np.asarray(stima.residui[t])[ok]
+    return out
+
+
+def copertura_residui(stima: Stima, F: pd.DataFrame) -> dict:
+    """{titolo: quota dei giorni della storia dei fattori in cui il titolo ha un residuo vero} (gli altri giorni il residuo è ripescato dalla sua storia)."""
+    tick = [t for t in stima.beta.index if t != BENCH]
+    m = matrice_residui(stima, F, tick)
+    return {t: float(np.mean(~np.isnan(m[:, j]))) for j, t in enumerate(tick)}
+
+
+def prepara_generatore(stima: Stima, F: pd.DataFrame, colonne: list, Mr: np.ndarray, blocco: int = 20, congiunti: bool = True) -> dict:
     """Dati (leggeri e serializzabili) per costruire il generatore in un altro processo. colonne: [(portafoglio, titolo)]."""
     tick = list(dict.fromkeys(t for _, t in colonne))
     mancanti = [t for t in tick if t not in stima.residui]
@@ -359,9 +399,13 @@ def prepara_generatore(stima: Stima, F: pd.DataFrame, colonne: list, Mr: np.ndar
     centro = np.asarray(Mr).mean(0)
     # dalla 1.5.1: come per il bootstrap dei titoli, il legame tra giorni vicini dei fattori sposta la crescita annua attesa;
     # si corregge il centro (meno di 0,01% al giorno) perché 1 € cresca in media esattamente del rendimento annuo atteso.
-    # I residui sono indipendenti e a media zero: non cambiano il valore atteso del prodotto.
+    # I residui ripescati dalla storia del titolo sono indipendenti e a media zero: non cambiano il valore atteso. Quelli del bootstrap congiunto
+    # viaggiano con le date dei fattori: entrano nel calcolo (dove mancano valgono 0).
+    res_m = matrice_residui(stima, F, tick) if congiunti else None
     Fv = F.values - F.values.mean(0)
     X = (Fv @ beta.T)[:, col] + centro
+    if res_m is not None:
+        X = X + np.nan_to_num(res_m, nan=0.0)[:, col]
     centro = centro + allinea_media_composta(X, blocco)[1]
     return {
         "F": F.values,
@@ -370,11 +414,12 @@ def prepara_generatore(stima: Stima, F: pd.DataFrame, colonne: list, Mr: np.ndar
         "colonna_titolo": col,
         "centro": centro,
         "blocco": blocco,
+        "res_matrice": res_m,
     }
 
 
 def crea_generatore(dati: dict) -> Fattoriale:
-    return Fattoriale(dati["F"], dati["beta"], dati["residui"], dati["colonna_titolo"], dati["centro"], dati["blocco"])
+    return Fattoriale(dati["F"], dati["beta"], dati["residui"], dati["colonna_titolo"], dati["centro"], dati["blocco"], dati.get("res_matrice"))
 
 
 # ---------------------------------------------------------------- scomposizione del rischio (tappa 2)

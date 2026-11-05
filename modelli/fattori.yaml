@@ -20,6 +20,8 @@ ridge:
 pulizia_mercato:                # controllo dei valori sbagliati isolati dell'indice di mercato (Yahoo, 2001): confronto con un'altra serie
   riferimento: SPY              # S&P 500 (in dollari, convertito come l'indice)
   soglia: 15                    # un giorno è un errore se si discosta dal riferimento oltre 15 volte lo scarto tipico e il giorno dopo si annulla (i soli due casi dal 2000: aprile e settembre 2001)
+residui_congiunti: true         # simulazione: i residui di tutti i titoli si pescano dalle STESSE date dei fattori (correlazioni reali nelle crisi);
+                                # false = residui indipendenti tra titoli (come nella 1.5.0). Dove un titolo non ha il residuo si ripesca dalla sua storia.
 min_settimane: 52               # sotto questa storia il titolo non è stimato: esposizione 1 al mercato e resto specifico
 r2_minimo_avviso: 0.30          # sotto questo R² il titolo è spiegato poco dai fattori (avviso nel report)
 
