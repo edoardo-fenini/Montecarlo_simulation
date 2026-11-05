@@ -283,3 +283,132 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
 - [x] PR #6 aperta verso main (v1.5). Da verificare: controlli GitHub (Test, Prova su Mac); poi merge e tag v1.5.0 (Actions → Release → Run workflow, versione 1.5.0).
 - Correzione tappa 0 (dopo CI rossa sulla PR 6: test_ricerca_per_nome, capitale 0/orizzonte 1/tasso 0/premio 0 dopo il clic su ➕, stato presente ma azzerato): la copia delle impostazioni è ora autorevole (`stato_app.conserva` rimette ogni volta lo stato uguale alla copia; solo `on_change` dei campi o codice dell app aggiornano la copia). Test app adattati all API dei widget. Da verificare: test lenti + browser, poi merge PR 6 e tag.
 - Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).
+
+## Versione 1.5.1 (ramo `v1.5.1`): correzioni dopo la 1.5.0 (5 novembre 2026, lavoro notturno autonomo)
+Ora: tappe 0-8 chiuse, tappa 9 quasi: confronto, README, CHANGELOG, RELEASE_NOTES fatti. Prossimo passo: PR verso main, merge a controlli verdi, release v1.5.1 (Actions → Release), report PDF.
+Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione identica. Ramo `v1.5.1` creato da `main` (c45ad85).
+- [x] Tappa 0 – release 1.5.0: workflow «Release» (run 41937609394) **riuscito**, tag `v1.5.0` presente, `confronta-portafogli-v1.5.0.zip` (7,5 MB) allegato. Nessuna correzione necessaria.
+- [x] Tappa 1 – controllo di plausibilità. **Causa trovata (in parole semplici)**: il modello pesca blocchi di ~20 giorni consecutivi dalla storia. Nei dati veri
+      un giorno non è indipendente dal successivo (nelle banche, dopo un giorno di calo spesso c'è un rimbalzo: correlazione tra giorni consecutivi −0,10).
+      I blocchi si portano dietro questo legame e il rendimento composto di un anno scende, anche se la media dei rendimenti giornalieri è
+      quella voluta (la ricentratura sistemava solo quella). Non era un problema di pesi ridistribuiti, buchi, ribilanciamento o cambio:
+      la media di ogni colonna è esatta per costruzione (verificato). In più il vecchio controllo guardava la media giornaliera, che nasconde
+      gran parte dell'errore: il rendimento vero del primo anno era 4,7% (Banche, analisi B) contro il 7,40% atteso, non 6,58%.
+      **Correzione** (`simula.crescita_attesa_bootstrap`, `allinea_media_composta`): formula esatta (catena di Markov sui giorni storici) della crescita
+      annua attesa con i blocchi; ogni colonna è spostata di una costante minima (fino a ~4%/anno, ~0,017%/giorno) perché 1 € cresca in media esattamente
+      del rendimento atteso. Volatilità, code e correlazioni non cambiano (verificato). Vale per bootstrap (default, stress test, rischio sul singolo
+      titolo, sensibilità, prova pesi), per il centro del modello a fattori e per il metodo «storico». Student-t e GARCH hanno giorni indipendenti: invariati.
+      **Nuovo controllo**: simula misura il rendimento medio del PRIMO ANNO (1 € senza versamenti, `anno1`/`se_anno1`) e lo confronta con la media pesata dei
+      rendimenti annui dei titoli (tolleranza 5 errori standard + 0,3%).
+      Riproduzione (esempio tre portafogli, dati reali 5/11/2026, 20.000 simulazioni, metodo beta, nuova misura del primo anno):
+      | analisi, portafoglio | atteso | simulato prima | simulato dopo |
+      |---|---|---|---|
+      | A Cyber security | 7,38% | 5,02% (FALLISCE) | 7,08% |
+      | A Banche / PE | 7,40% | 6,39% | 7,49% |
+      | A Big tech USA | 7,33% | 6,09% | 6,96% |
+      | A MSCI World | 5,80% | 5,58% | 5,79% |
+      | B Cyber security | 7,38% | 6,18% | 7,53% |
+      | B Banche / PE | 7,40% | 4,69% (FALLISCE) | 7,18% |
+      | B Big tech USA | 7,33% | 6,35% | 7,37% |
+      | B MSCI World | 5,80% | 5,42% | 5,76% |
+      Volatilità simulate identiche prima e dopo (es. B Banche 31,5%).
+      Test nuovi (`tests/test_plausibilita_v151.py`, 10): formula esatta = simulazione; correzione riporta la crescita al valore voluto senza toccare covarianze;
+      portafoglio con titolo che entra a metà periodo e con buchi (dati con legame tra giorni), analisi A e B × metodi beta/uguale/personalizzato/storico;
+      modello a fattori; prova che SENZA correzione l'errore compare. Riferimento di non regressione rigenerato (correzione voluta): su dati sintetici con giorni
+      indipendenti la mediana delle variazioni è 0,005%, il massimo 5% su una probabilità discreta (400 simulazioni).
+      Nota: il peso ridistribuito per un titolo che entra tardi (riempito con la media pesata degli altri) non crea errori sul rendimento medio, ma attenua il
+      rischio specifico di quel titolo nel periodo prima dell'ingresso: limite noto, non toccato.
+      Modello a fattori (stesso esempio, 20.000 simulazioni, primo anno): atteso 7,38 / 7,40 / 7,33 / 5,80% (Cyber / Banche / Big tech / MSCI); prima 6,63 / 6,67 / 6,53 / 5,35%,
+      dopo 7,70 / 7,64 / 7,26 / 5,90% (tutti dentro la tolleranza, prima della correzione sotto di 0,7-0,8 punti).
+- [x] Tappa 2 – volatilità del benchmark al 19% nel modello a fattori. **Il 19% non era la volatilità vera di un anno**: era la volatilità GIORNALIERA × √252.
+      Misure dirette dai dati (MSCI World in euro dal 3/1/2000, indice Yahoo ^990100-USD-STRD convertito con il cambio del progetto):
+      | misura | USD | EUR |
+      |---|---|---|
+      | giornaliera × √252 | 17,0% | **19,0%** |
+      | rendimenti di 5 giorni × √50,4 | 16,4% | 16,2% |
+      | rendimenti di 21 giorni × √12 | 16,8% | 16,0% |
+      | std annua dei percorsi simulati dal modello (blocchi, 20.000) | 16,5% | 16,0% |
+      Perché: l'indice in dollari ha correlazione ≈0 tra giorni consecutivi, ma la serie in euro ha −0,108: l'indice (chiusura di New York) e il cambio (fixing BCE/FRED, o
+      Yahoo) sono rilevati in ore diverse. Il cambio dollaro/euro tende ad attutire i crolli (correlazione indice-cambio −0,14 al giorno ma −0,28 alla settimana):
+      con gli orari sfasati quel beneficio si vede solo in parte nei giorni singoli e compare come rumore che si annulla il giorno dopo. Il rumore gonfia
+      la volatilità giornaliera annualizzata ma non quella di settimane e mesi. Verificato: stesso giorno, nessuno sfasamento di date (si usa il cambio del giorno,
+      ultimo disponibile se manca); annualizzazione 252/52 corretta; il bootstrap a blocchi di 20 giorni conserva il legame tra giorni (std annua dei percorsi 16,0%).
+      Non c'è doppio conteggio del cambio: i fattori sono stimati insieme (regressione congiunta), il fattore «Dollaro contro euro» cattura solo l'esposizione in più
+      rispetto al mercato (correlazione tra i due fattori ≈ −0,14).
+      **Anomalia trovata nei dati**: l'indice MSCI World di Yahoo ha valori sbagliati isolati: 3/4/2001 +11,9% e il giorno dopo −13,2% (S&P 500: −3,3% e +0,4%),
+      24/9/2001 +13,1% e −7,1% (S&P 500: +3,5% e +1,0%). Pesano ~0,6 punti sulla volatilità giornaliera (19,0 → 18,4%).
+      **Correzioni**: (a) la volatilità annua mostrata (simulata e storica) ora si calcola da rendimenti di un mese (21 giorni, finestre mobili) × √12, non dai giornalieri × √252
+      (`simula.simula`, `metriche.vol_annua`); la vecchia misura resta in `vol_giorn`; (b) `fattori.togli_picchi` + chiave `pulizia_mercato` in `modelli/fattori.yaml`:
+      un valore isolato dell'indice che si discosta dall'S&P 500 oltre 15 volte lo scarto tipico e si annulla il giorno dopo viene corretto (livello dopo i due giorni invariato);
+      sul MSCI World dal 2000 corregge solo i due giorni sopra (con soglia 6 ne trovava 29, quasi tutti sfasamenti d'orario veri: per questo 15).
+      Prima/dopo sull'esempio (20.000 simulazioni): modello a fattori, benchmark 19,0% → **16,3%**; Cyber 29,2 → 27,2%; Banche 27,3 → 24,4%; Big tech 29,7 → 28,4%.
+      Modello storico A: 35,6 / 24,2 / 29,8 / 14,0% → 32,6 / 21,8 / 27,8 / 13,2%; B: 32,9 / 31,5 / 28,6 / 17,4% → 30,8 / 26,0 / 25,5 / 15,8%.
+      (Banche B scende molto: correlazione −0,10 tra giorni consecutivi, vedi tappa 1.) Il livello di rischio 1-5 usa la volatilità simulata: può cambiare di un livello vicino alle soglie.
+      Test: `tests/test_volatilita_v151.py` (6): vol simulata del fattore mercato = storica entro 7% con giorni legati (la vecchia misura sbagliava di oltre il 12%), giorni indipendenti → misure uguali,
+      pulizia dei picchi (corregge il valore sbagliato e conserva il livello; non tocca giorni veri di forte volatilità; applicata dal file dei fattori).
+- [x] Tappa 3 – azzeramento delle impostazioni: **causa vera NON riprodotta** (3 tentativi). Già in regola: nessun widget con `value=` e `key=` insieme tra le impostazioni, stato iniziale scritto
+      una sola volta in `st.session_state` (`applica_cfg`), chiavi stabili (test AST), nessun `st.rerun` a metà della barra laterale; tolti `value=`+`key=` da due campi minori (nome del nuovo portafoglio, nome del portafoglio importato).
+      Tentativo 1: `test_ricerca_per_nome_e_aggiunta_con_un_clic` eseguito **10 volte di fila** (browser vero, Playwright 1.64.1, Streamlit 1.66.1 come in CI, anche con CPU occupata da altri calcoli): 10/10 verdi (~9 s ciascuna).
+      Tentativo 2: ipotesi «esecuzione interrotta da una nuova mentre i campi sotto la ricerca non sono ancora disegnati» (Streamlit cancella lo stato dei widget non disegnati a fine esecuzione):
+      ricerca resa lenta (4 s), nuova esecuzione a metà (Invio nel nome del confronto) e un altro clic su «Cerca»: dopo l'interruzione capitale 5000, orizzonte 15, tasso 2, premio 4, **anche con la copia
+      di sicurezza spenta** (4 prove): in questo ambiente non si azzera. Tentativo 3: lettura dei punti dell'app che disegnano condizionalmente i campi (rf/mrp solo con metodo «beta») e dei callback: il solo
+      meccanismo noto che cancella i valori è la pulizia di Streamlit dei widget non disegnati, già coperta dalla copia. Escluso: valore iniziale sovrascritto da `value=`, chiavi cambiate fra esecuzioni, differenza di versione con la CI.
+      Resta la rete di sicurezza (`stato_app.conserva`), ora **registra in `log.txt` ogni intervento** («RETE DI SICUREZZA: …», con i campi) e conta gli scatti in `_scatti_rete_di_sicurezza`; test nuovo.
+      Da guardare dopo qualche giorno d'uso e di CI: se compare «RETE DI SICUREZZA» nel log, la causa è ancora lì e il log dice quali campi.
+- [x] Tappa 4 – calibrazione del VaR a breve termine del modello a fattori (`backtest_var.var_fattori_ewma`). Solo backtest e VaR a 1 giorno; la simulazione di lungo periodo
+      usa ancora la storia lunga. Covarianza dei fattori EWMA aggiornata ogni giorno (lambda 0,97, configurabile: `var_breve_termine.lambda_ewma`, validato 0,80-0,999);
+      varianza specifica EWMA del residuo del PORTAFOGLIO (rendimento − esposizioni×fattori), che comprende le correlazioni tra residui dei titoli (scelta: più adatta
+      del singolo titolo per un VaR di portafoglio); distribuzione t di Student con gradi di libertà e scala stimati (massima verosimiglianza) sui residui standardizzati
+      della finestra di 2 anni (mediana gdl: Cyber 5, Banche 8, Big tech 6, MSCI 4,5), normale se le code non sono più grasse (`var_breve_termine.code_grasse`).
+      Scelta: la t è stimata sempre (non solo per titoli con molto rischio specifico): i gradi di libertà salgono da soli dove le code non sono grasse.
+      Il modello della 1.5.0 resta nel report come «fattori (1.5.0)» per il confronto. Backtest reale (esempio, dati 5/11/2026, 839 giorni di prova), sforamenti (attesi 42 al 95%, 8,4 al 99%):
+      | serie | VaR | 1.5.0 | ora | storico |
+      |---|---|---|---|---|
+      | Cyber security | 95% | 63 🔴 | 46 🟢 | 49 🟢 |
+      | Cyber security | 99% | 32 🔴 | 12 🟢 | 10 🟢 |
+      | Banche / PE | 95% | 16 🔴 (troppo prudente) | 48 🟢 | 36 🟢 |
+      | Banche / PE | 99% | 4 🟡 | 15 🔴 (sforamenti a grappolo) | 9 🟢 |
+      | Big tech USA | 95% | 35 🟢 | 48 🟢 | 35 🟢 |
+      | Big tech USA | 99% | 7 🟡 | 7 🟡 | 7 🟡 |
+      | MSCI World | 95% | 11 🔴 (troppo prudente) | 54 🟢 | 37 🔴 |
+      | MSCI World | 99% | 7 🔴 | 13 🟡 | 11 🔴 |
+      Resta un rosso (Banche al 99%, sforamenti a grappolo) e due gialli: non ho rincorso i numeri (nessuna taratura sul test). Il modello storico resta il più adatto al breve termine; il modello
+      a fattori è più informativo per orizzonti lunghi perché include le grandi crisi (frase nel report, nella scheda «Validazione del modello»).
+      Test (7 nuovi in `tests/test_backtest_var.py`): EWMA usa solo il passato e converge; segue il regime (storia lunga no); stima t; con mercato turbolento poi calmo il VaR 1.5.0 è troppo
+      prudente (<50% degli sforamenti attesi) e il nuovo no (60-160%); tabella prima/dopo nel report; validazione di lambda.
+- [x] Tappa 5 – residui correlati tra titoli nelle crisi (`fattori.Fattoriale`, `matrice_residui`, opzione `residui_congiunti: true` in `modelli/fattori.yaml`, default true; false = 1.5.0).
+      Ogni giorno simulato ha una data storica (quella del blocco di fattori): il residuo di ogni titolo è quello vero di quella data (anche tra portafogli diversi). Dove il titolo non
+      ha il residuo in quella data (non quotava ancora, o senza dati) si ripesca dalla sua storia come prima: annotato nella scheda «Da dove viene il rischio» (quota dei giorni con residuo vero
+      per titolo; esempio: S 20%, PLTR 22%, CRWD 27%, PANW 53%, BX 72%, titoli storici 99%). La correzione della media annua (tappa 1) include i residui che viaggiano con le date.
+      Effetto sull'esempio (modello a fattori, analisi A, 20.000 simulazioni, 15 anni; prima → dopo):
+      | | Cyber | Banche/PE | Big tech | MSCI World |
+      |---|---|---|---|---|
+      | volatilità | 27,2 → 31,4% | 24,4 → 25,5% | 28,4 → 30,5% | 16,3 → 16,3% |
+      | 5° percentile (da 5.000 €) | 1.464 → 966 | 1.920 → 1.836 | 1.291 → 1.041 | 3.361 → 3.426 |
+      | mediana | 8.307 → 7.145 | 9.498 → 9.273 | 7.914 → 7.395 | 9.701 → 9.753 |
+      | max drawdown mediano | −64% → −71% | −59% → −61% | −66% → −70% | −42% → −42% |
+      Controllo di plausibilità: verde prima e dopo. Test (`tests/test_residui_congiunti.py`, 4): correlazione dei residui conservata (0,6 storica → 0,6 simulata; con residui indipendenti ≈0),
+      titolo con residui solo in parte delle date (nessuna distorsione di media e volatilità, correlazione solo sulle date vere), allineamento alle date dei fattori, rendimento atteso invariato.
+- [x] Tappa 6 – fattori con storia breve (`fattori.riempi_condizionato`, opzione `riempimento_fattori: zero | condizionato` in `modelli/fattori.yaml`, default `condizionato`).
+      Metodo in parole semplici: per i giorni in cui il fattore non esisteva ancora si prende «a + b × rendimento del mercato di quel giorno + un residuo pescato a caso tra quelli veri del
+      fattore», con a e b dalla regressione del fattore sul mercato nel periodo in cui esiste (seme fisso: stessi dati, stessi numeri). Con meno di 250 giorni veri il fattore resta a 0.
+      La maschera dei dati veri non cambia: regressioni dei titoli, residui e R² usano solo dati veri (i valori riempiti sono azzerati dentro `stima_titoli`: stime identiche con le due opzioni, test).
+      Effetto sui fattori (volatilità annua giornaliera, 2000-2002 / 2008, prima = 0): Momentum 0 → 9,7% / 9,8%; Qualità 0 → 3,4% / 3,4%; Emergenti 0 → 17,5% / 47,4% (2008: era già reale);
+      beta sul mercato stimata: Emergenti 0,23, Obbligazioni −0,20, Momentum 0,05, Qualità −0,01.
+      Limite onesto: Momentum e Qualità hanno beta quasi nulla sul mercato, quindi il riempimento è quasi una ripetizione del loro rischio recente (non sale nelle crisi); migliora
+      soprattutto Emergenti (beta 0,23). Effetto sui portafogli dell'esempio trascurabile (esposizioni piccole a questi fattori): volatilità Cyber 31,4 → 31,3%, Banche 25,5 → 25,5%, Big tech 30,5 → 30,4%,
+      5° percentile 15 anni 966 → 975, 1.836 → 1.832, 1.041 → 1.051 €. Nota: il VaR «fattori (1.5.0)» del backtest usa la covarianza dei fattori su tutta la storia, che ora include i giorni riempiti.
+      Test (`tests/test_riempimento_fattori.py`, 4): il fattore segue il mercato nella crisi, relazione col mercato conservata, dati veri invariati; riproducibile; poca storia → 0; opzioni zero/condizionato in `serie_fattori`; validazione.
+- [x] Tappa 8 (facoltativa) – classe di quote dei fondi. I candidati verificati da `fondi.cerca_fondo` c'erano già tutti nel menu delle quotazioni (con più di una classe candidata); ora il menu per i fondi
+      mostra **nome della classe, valuta, storia e le differenze rispetto alla classe attesa** (es. «JPM US Growth A dist USD · USD · 4,7 anni di storia · 0P00000002 · ⚠ classe a distribuzione diversa da quella attesa»;
+      `fondi.etichetta_classe`, chiave `differenze_fondo`), il suggerimento spiega come scegliere, e con una sola classe candidata compare una riga «è l'unica candidata: controlla che sia giusta».
+      La scelta va in `scelte_isin` → chiave `isin_scelte` della configurazione scaricabile (già prevista dalla 1.2). Test: `tests/test_classi_fondi.py` (etichette e app con 4 classi candidate: scelta salvata e controllo rifatto).
+      Non fatto: Yahoo non fornisce l'ISIN di ogni classe, quindi la scelta resta dell'utente (il caso LU0073232471 non è verificabile offline; solo la meccanica è provata con dati finti).
+- Tempo della prova rapida (`pytest -m rapido`): i test nuovi più lenti sono segnati come lenti in `tests/conftest.py`; 273 test rapidi in 54 s su questa macchina (prima: 250 in 43 s).
+- [x] Tappa 7 – stabilità della CI. Sul ramo `v1.5.1`: «Test» (con la prova nel browser) e «Prova su Mac» (con il job `zip-release`) verdi su 6 push consecutivi (run Test 56-61, Prova su Mac 82-87 al momento della scrittura);
+      nessun test intermittente da correggere (il test della ricerca per nome è passato anche 10/10 in locale). Suite completa locale: 314 test verdi in 9 min 51 s (browser incluso); prova rapida 273 in 54 s; `ruff check` pulito.
+      Rami di sessione: da pulire alla fine (vedi sotto).
+- [x] Tappa 9 (parte documenti) – `esempi/confronto_modelli_v1_5_1/` (risultati.md, backtest_var.csv, report_fattori/ con HTML+PDF del modello a fattori con backtest) e report di esempio `esempi/2026-11-05_tre_portafogli_v1_5_1/`
+      (modello storico, 20.000 simulazioni, HTML+PDF+Excel+CSV), rigenerati con `strumenti/confronto_modelli.py` e `confronta.py`. README, CHANGELOG (sezione 1.5.1 con numeri prima/dopo), RELEASE_NOTES aggiornati.
+      Nel confronto (dati di oggi) il backtest 1.5.0 dà Cyber 95% 62 sforamenti (63 nella tabella della tappa 4: i giorni riempiti della tappa 6 entrano nella covarianza storica del VaR 1.5.0); tutti i controlli di plausibilità coincidono.
+      Nota minore (già presente nella 1.5.0, non toccata): nel PDF le icone dei semafori (emoji) non hanno glifo nel font e si vedono come quadratini; il testo («verde», «giallo», «rosso») resta leggibile; la nuova tabella prima/dopo usa solo parole.

@@ -10,7 +10,7 @@ evita esposizioni assurde quando la storia è breve o i fattori sono correlati. 
 from __future__ import annotations
 
 import pathlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -18,7 +18,7 @@ import yaml
 
 import dati as D
 from configurazione import BENCH, ErroreConfig
-from simula import GG, Bootstrap
+from simula import GG, Bootstrap, allinea_media_composta
 
 FILE_PREDEFINITO = str(pathlib.Path(__file__).resolve().parent / "modelli" / "fattori.yaml")
 GRUPPI = {
@@ -47,7 +47,11 @@ def carica_config(percorso: str | None = None) -> dict:
     c["ridge"].setdefault("lambda", "auto")
     c["ridge"].setdefault("minimo", 0.5)
     c["ridge"].setdefault("frazione_minima", 0.5)
+    c["riempimento_fattori"] = str(c.get("riempimento_fattori", "condizionato")).lower()
+    if c["riempimento_fattori"] not in ("zero", "condizionato"):
+        raise ErroreConfig("«riempimento_fattori» nel file dei fattori deve essere «zero» o «condizionato».")
     c.setdefault("min_settimane", 52)
+    c["residui_congiunti"] = bool(c.get("residui_congiunti", True))
     c.setdefault("r2_minimo_avviso", 0.30)
     try:
         c["inizio_storia"] = pd.Timestamp(c["inizio_storia"])
@@ -68,6 +72,40 @@ def carica_config(percorso: str | None = None) -> dict:
 
 
 # ---------------------------------------------------------------- serie dei fattori
+def togli_picchi(s: pd.Series, rif: pd.Series, soglia: float = 15.0) -> tuple[pd.Series, list]:
+    """Corregge i valori sbagliati isolati di un indice (es. MSCI World su Yahoo nel 2001: +11,9% e il giorno dopo −13,2% mentre l'S&P 500 faceva −3,3% e +0,4%).
+    Un giorno è un «picco» se il rendimento dell'indice si discosta da quello della serie di riferimento (stessa valuta) di più di `soglia` volte lo scarto tipico
+    (MAD) e il giorno dopo si discosta altrettanto nel verso opposto: un errore che si annulla. Il rendimento del primo giorno diventa quello atteso dal
+    riferimento (beta × riferimento) e quello del secondo si adegua, così il livello dell'indice dopo i due giorni resta quello originale.
+    Ritorna (serie corretta, lista delle date corrette)."""
+    r = s.pct_change(fill_method=None)
+    q = rif.reindex(s.index).pct_change(fill_method=None)
+    ok = r.notna() & q.notna()
+    if ok.sum() < 250:
+        return s, []
+    x, y = q[ok].values, r[ok].values
+    beta = float(np.cov(x, y)[0, 1] / x.var(ddof=1))
+    res = (r - beta * q).values
+    sig = 1.4826 * float(np.nanmedian(np.abs(res[ok.values] - np.nanmedian(res[ok.values]))))
+    rr = r.values.copy()
+    corrette = []
+    for t in range(len(rr) - 1):
+        a, b = res[t], res[t + 1]
+        if np.isnan(a) or np.isnan(b) or a * b >= 0 or min(abs(a), abs(b)) <= soglia * sig:
+            continue
+        atteso = beta * q.values[t]
+        if np.isnan(atteso):
+            continue
+        cumulato = (1 + rr[t]) * (1 + rr[t + 1])
+        rr[t] = atteso
+        rr[t + 1] = cumulato / (1 + atteso) - 1
+        corrette.append(s.index[t])
+    if not corrette:
+        return s, []
+    out = pd.Series(s.iloc[0] * np.cumprod(1.0 + np.nan_to_num(rr, nan=0.0)), index=s.index)
+    return out, corrette
+
+
 def _prezzi(arch: D.Archivio, t: str, locale: bool, valuta: str | None) -> pd.Series:
     if t == SPECIALE_USD:
         return 1.0 / D.cambio(arch, "USD")
@@ -75,6 +113,34 @@ def _prezzi(arch: D.Archivio, t: str, locale: bool, valuta: str | None) -> pd.Se
         s, _ = arch.prezzi(t)
         return s
     return D.serie_eur(arch, t, valuta_default=valuta or "USD")[0]
+
+
+def riempi_condizionato(F: pd.DataFrame, V: pd.DataFrame, nome_mercato: str, seme: int = 20260101) -> tuple[pd.DataFrame, dict]:
+    """Per le date in cui un fattore non esiste ancora (V falso) invece di 0 si mette: a + b × mercato del giorno + un residuo pescato a caso dai residui veri
+    del fattore (regressione del fattore sul mercato nel periodo in cui esiste). Così nel 2000-2002 il fattore si muove con il mercato (b) e ha
+    un'oscillazione propria (residuo) come quando esisteva. Il seme è fissato: stessi dati, stessi numeri. Ritorna (F riempita, {fattore: (giorni riempiti, b)}).
+    Limiti: la relazione col mercato è quella del periodo recente; il residuo è pescato a caso, senza i periodi di maggiore turbolenza."""
+    import zlib
+
+    out = F.copy()
+    info = {}
+    m = F[nome_mercato]
+    for c in F.columns:
+        manca = ~V[c].astype(bool) | F[c].isna()
+        if c == nome_mercato or not manca.any():
+            continue
+        ok = ~manca & m.notna()
+        if ok.sum() < 250:  # troppo pochi dati veri per stimare la relazione: resta 0
+            continue
+        x, y = m[ok].values, F.loc[ok, c].values
+        b = float(np.cov(x, y)[0, 1] / x.var(ddof=1))
+        a = float(y.mean() - b * x.mean())
+        res = y - a - b * x
+        rng = np.random.default_rng(seme + zlib.crc32(c.encode()))
+        n = int(manca.sum())
+        out.loc[manca, c] = a + b * m[manca].fillna(0.0).values + rng.choice(res, size=n)
+        info[c] = (n, b)
+    return out, info
 
 
 def serie_fattori(conf: dict, arch: D.Archivio, log=print) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
@@ -91,6 +157,14 @@ def serie_fattori(conf: dict, arch: D.Archivio, log=print) -> tuple[pd.DataFrame
 
     mercato = next(f for f in fatt if f["gruppo"] == "mercato")
     s_merc = prezzi(mercato["lungo"], bool(mercato.get("valuta_locale")), mercato.get("valuta"))
+    pul = conf.get("pulizia_mercato") or {}
+    picchi: list = []
+    if pul.get("riferimento"):  # valori sbagliati isolati dell'indice di mercato, controllati con una serie di riferimento
+        rif = prezzi(pul["riferimento"], False, pul.get("valuta", "USD"))
+        s_merc, picchi = togli_picchi(s_merc, rif, float(pul.get("soglia", 15.0)))
+        cache[(mercato["lungo"], bool(mercato.get("valuta_locale")), mercato.get("valuta"))] = s_merc
+        if picchi:
+            log(f"  fattore mercato: {len(picchi)} valori isolati sbagliati corretti ({', '.join(f'{d:%d/%m/%Y}' for d in picchi[:6])})")
     cal = s_merc.index[(s_merc.index >= conf["inizio_storia"]) & (s_merc.index.day_of_week < 5)]
     if len(cal) < 500:
         raise D.ErroreDati("Il fattore «mercato» ha troppo poca storia dopo la data di inizio.")
@@ -126,7 +200,14 @@ def serie_fattori(conf: dict, arch: D.Archivio, log=print) -> tuple[pd.DataFrame
     senza = [r["fattore"] for r in righe if r["inizio"] is None]
     if senza:
         raise D.ErroreDati(f"Nessun dato per i fattori: {', '.join(senza)}.")
-    return F.fillna(0.0), V, pd.DataFrame(righe).set_index("fattore")
+    info = pd.DataFrame(righe).set_index("fattore")
+    info.attrs["picchi_corretti"] = [d.date().isoformat() for d in picchi]
+    if conf.get("riempimento_fattori", "condizionato") == "condizionato":
+        F, riempiti = riempi_condizionato(F, V, next(f["nome"] for f in fatt if f["gruppo"] == "mercato"))
+        info.attrs["riempiti"] = {k: {"giorni": n, "beta_mercato": b} for k, (n, b) in riempiti.items()}
+        for k, (n, b) in riempiti.items():
+            log(f"  fattore {k}: {n} giorni senza dato riempiti con a + {b:.2f} × mercato + residuo ricampionato")
+    return F.fillna(0.0), V, info
 
 
 # ---------------------------------------------------------------- regressione ridge
@@ -192,6 +273,7 @@ class Stima:
     residui: dict  # titolo -> array dei residui giornalieri (media 0)
     note: list  # avvisi (titoli con poca storia, fattori esclusi...)
     fattori_esclusi: dict  # titolo -> fattori non usati per mancanza di storia
+    date_residui: dict = field(default_factory=dict)  # titolo -> date (DatetimeIndex) dei residui giornalieri: servono al bootstrap congiunto
 
 
 def _settimanali_df(x: pd.DataFrame | pd.Series):
@@ -202,6 +284,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
     """R: rendimenti giornalieri dei titoli (NaN prima della quotazione, colonna BENCH inclusa). F, V: vedi serie_fattori."""
     titoli = titoli or list(R.columns)
     nf = list(F.columns)
+    F = F.where(V.reindex(F.index).fillna(False).astype(bool), 0.0)  # i valori «riempiti» (prima dell'inizio di un fattore) non entrano nelle stime: solo dati veri
     Fw = _settimanali_df(F)
     # settimana valida per un fattore solo se tutti i giorni erano veri (la settimana a cavallo dell'inizio non vale)
     Vw = V.astype(float).resample("W-FRI").min().reindex(Fw.index).fillna(0).astype(bool)
@@ -209,6 +292,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
     mercati = {f["nome"] for f in conf["fattori"] if f["gruppo"] == "mercato"}
     minw = int(conf["min_settimane"])
     betas, alfa, r2, nsett, pen, vol, volsp, residui, note, esclusi = {}, {}, {}, {}, {}, {}, {}, {}, [], {}
+    date_res: dict = {}
     for t in titoli:
         r = R[t].dropna()
         r = r[r.index.isin(F.index)]
@@ -219,6 +303,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
             b[next(iter(mercati))] = 1.0
             betas[t], alfa[t], r2[t], pen[t], nsett[t] = b, 0.0, np.nan, 0.0, len(_settimanali_df(r).dropna())
             vol[t], volsp[t], residui[t] = float(r.std() * np.sqrt(252)), 0.0, np.zeros(2)
+            date_res[t] = pd.DatetimeIndex([])
             continue
         if len(r) < 60:
             note.append(f"{t}: meno di 60 giorni di storia in comune con i fattori, non stimato.")
@@ -259,6 +344,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
         vol[t] = float(r.std() * np.sqrt(252))
         volsp[t] = float(res_d.std() * np.sqrt(252))
         residui[t] = res_d
+        date_res[t] = r.index
     if not betas:
         raise D.ErroreDati("Nessun titolo ha abbastanza storia per il modello a fattori.")
     ix = list(betas)
@@ -274,6 +360,7 @@ def stima_titoli(R: pd.DataFrame, F: pd.DataFrame, V: pd.DataFrame, conf: dict, 
         residui=residui,
         note=note,
         fattori_esclusi=esclusi,
+        date_residui=date_res,
     )
 
 
@@ -283,8 +370,14 @@ class Fattoriale:
     rendimento = centro + beta·(fattori − media) + (residuo − media). `centro` = rendimento medio giornaliero voluto per colonna
     (già ricentrato sul rendimento atteso e al netto dei costi, come per il metodo storico)."""
 
-    def __init__(self, F: np.ndarray, beta: np.ndarray, residui: list, colonna_titolo: np.ndarray, centro: np.ndarray, blocco: int = 20):
+    def __init__(
+        self, F: np.ndarray, beta: np.ndarray, residui: list, colonna_titolo: np.ndarray, centro: np.ndarray, blocco: int = 20, res_matrice: np.ndarray | None = None
+    ):  # fmt: skip
         F = np.asarray(F, float)
+        # res_matrice (giorni dei fattori × titoli, NaN dove il titolo non ha il residuo): se c'è, i residui si pescano dalle STESSE date dei
+        # fattori (bootstrap congiunto), così le correlazioni tra residui di titoli diversi restano quelle reali; dove manca si ripesca
+        # dalla storia del titolo, come prima.
+        self.Rres = None if res_matrice is None else np.asarray(res_matrice, float)
         self.F = F - F.mean(0)
         self.beta = np.asarray(beta, float)  # (titoli unici × fattori)
         self.res = [np.asarray(x, float) - np.mean(x) for x in residui]
@@ -299,29 +392,71 @@ class Fattoriale:
     def blocco(self, m):
         f = self.boot.blocco(m)  # (n, GG, fattori)
         core = f @ self.beta.T  # (n, GG, titoli unici)
-        for j, r in enumerate(self.res):
-            core[:, :, j] += r[self.rng.integers(0, len(r), size=(self.n, GG))]
+        if self.Rres is None:  # residui indipendenti tra titoli (1.5.0)
+            for j, r in enumerate(self.res):
+                core[:, :, j] += r[self.rng.integers(0, len(r), size=(self.n, GG))]
+        else:  # bootstrap congiunto: stessa data storica dei fattori
+            res = self.Rres[self.boot.idx[:, m * GG : (m + 1) * GG]]  # (n, GG, titoli unici)
+            for j, r in enumerate(self.res):
+                manca = np.isnan(res[:, :, j])
+                if manca.any():
+                    res[:, :, j][manca] = r[self.rng.integers(0, len(r), size=int(manca.sum()))]
+            core += res
         return np.maximum(core[:, :, self.col] + self.centro, -0.99)
 
 
-def prepara_generatore(stima: Stima, F: pd.DataFrame, colonne: list, Mr: np.ndarray, blocco: int = 20) -> dict:
+def matrice_residui(stima: Stima, F: pd.DataFrame, tick: list) -> np.ndarray:
+    """Residui giornalieri di ogni titolo sulle date dei fattori (giorni × titoli); NaN dove il titolo non ha il residuo (non quotava o senza dati)."""
+    out = np.full((len(F.index), len(tick)), np.nan)
+    for j, t in enumerate(tick):
+        d = stima.date_residui.get(t)
+        if d is None or len(d) == 0 or len(stima.residui[t]) != len(d):
+            continue
+        pos = F.index.get_indexer(d)
+        ok = pos >= 0
+        out[pos[ok], j] = np.asarray(stima.residui[t])[ok]
+    return out
+
+
+def copertura_residui(stima: Stima, F: pd.DataFrame) -> dict:
+    """{titolo: quota dei giorni della storia dei fattori in cui il titolo ha un residuo vero} (gli altri giorni il residuo è ripescato dalla sua storia)."""
+    tick = [t for t in stima.beta.index if t != BENCH]
+    m = matrice_residui(stima, F, tick)
+    return {t: float(np.mean(~np.isnan(m[:, j]))) for j, t in enumerate(tick)}
+
+
+def prepara_generatore(stima: Stima, F: pd.DataFrame, colonne: list, Mr: np.ndarray, blocco: int = 20, congiunti: bool = True) -> dict:
     """Dati (leggeri e serializzabili) per costruire il generatore in un altro processo. colonne: [(portafoglio, titolo)]."""
     tick = list(dict.fromkeys(t for _, t in colonne))
     mancanti = [t for t in tick if t not in stima.residui]
     if mancanti:
         raise D.ErroreDati(f"Titoli senza stima a fattori: {', '.join(mancanti)}.")
+    col = np.array([tick.index(t) for _, t in colonne])
+    beta = stima.beta.loc[tick].values
+    centro = np.asarray(Mr).mean(0)
+    # dalla 1.5.1: come per il bootstrap dei titoli, il legame tra giorni vicini dei fattori sposta la crescita annua attesa;
+    # si corregge il centro (meno di 0,01% al giorno) perché 1 € cresca in media esattamente del rendimento annuo atteso.
+    # I residui ripescati dalla storia del titolo sono indipendenti e a media zero: non cambiano il valore atteso. Quelli del bootstrap congiunto
+    # viaggiano con le date dei fattori: entrano nel calcolo (dove mancano valgono 0).
+    res_m = matrice_residui(stima, F, tick) if congiunti else None
+    Fv = F.values - F.values.mean(0)
+    X = (Fv @ beta.T)[:, col] + centro
+    if res_m is not None:
+        X = X + np.nan_to_num(res_m, nan=0.0)[:, col]
+    centro = centro + allinea_media_composta(X, blocco)[1]
     return {
         "F": F.values,
-        "beta": stima.beta.loc[tick].values,
+        "beta": beta,
         "residui": [stima.residui[t] for t in tick],
-        "colonna_titolo": np.array([tick.index(t) for _, t in colonne]),
-        "centro": np.asarray(Mr).mean(0),
+        "colonna_titolo": col,
+        "centro": centro,
         "blocco": blocco,
+        "res_matrice": res_m,
     }
 
 
 def crea_generatore(dati: dict) -> Fattoriale:
-    return Fattoriale(dati["F"], dati["beta"], dati["residui"], dati["colonna_titolo"], dati["centro"], dati["blocco"])
+    return Fattoriale(dati["F"], dati["beta"], dati["residui"], dati["colonna_titolo"], dati["centro"], dati["blocco"], dati.get("res_matrice"))
 
 
 # ---------------------------------------------------------------- scomposizione del rischio (tappa 2)

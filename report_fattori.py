@@ -182,6 +182,12 @@ def blocchi(ris: dict) -> list:
         B.append(("warn", a))
     for n in stima.note:
         B.append(("warn", n))
+    cop = f.get("copertura_residui") or {}
+    if f["conf"].get("residui_congiunti", True) and cop:
+        corte = {t: v for t, v in cop.items() if v < 0.9}
+        B.append(("nota", "Residui: nella simulazione i residui di tutti i titoli sono pescati dalle stesse date dei fattori, così nelle crisi i titoli dello stesso settore si muovono insieme come è successo davvero."))
+        if corte:
+            B.append(("nota", "Per i titoli senza residui in quelle date (non quotavano ancora) il residuo è ripescato dalla loro storia: " + ", ".join(f"{t} ({_p(v, 0)} dei giorni con residuo vero)" for t, v in corte.items()) + "."))
     for t, esc in stima.fattori_esclusi.items():
         B.append(("nota", f"{t}: storia troppo breve per usare {', '.join(esc)}; questi fattori non sono stati usati per questo titolo."))
     # fattori
@@ -189,7 +195,18 @@ def blocchi(ris: dict) -> list:
     B.append(_tab(["Fattore", "Gruppo", "Costruzione", "Primo dato"], [[n, r["gruppo"], r["ticker"], r["inizio"].strftime("%d/%m/%Y")] for n, r in info.iterrows()]))
     tardi = [n for n, r in info.iterrows() if pd.Timestamp(r["inizio"]) > pd.Timestamp(conf["inizio_storia"]) + pd.Timedelta(days=45)]
     if tardi:
-        B.append(("nota", f"I fattori {', '.join(tardi)} nascono dopo l'inizio della storia ({pd.Timestamp(conf['inizio_storia']):%d/%m/%Y}): prima valgono 0 nelle simulazioni (nessuna esposizione nota) e non entrano nelle regressioni."))
+        if conf.get("riempimento_fattori", "condizionato") == "condizionato":
+            B.append(
+                (
+                    "nota",
+                    f"I fattori {', '.join(tardi)} nascono dopo l'inizio della storia ({pd.Timestamp(conf['inizio_storia']):%d/%m/%Y}): non entrano nelle regressioni. Per le date "
+                    "precedenti, nelle simulazioni, non valgono 0: si ricostruiscono dal mercato del giorno (regressione del fattore sul mercato nel periodo in cui esiste) più un "
+                    "residuo pescato a caso dai residui veri del fattore. Così nel 2000-2002 e nel 2008 il fattore si muove con il mercato invece di restare fermo "
+                    "(opzione «riempimento_fattori: zero» per tornare al vecchio comportamento).",
+                )
+            )
+        else:
+            B.append(("nota", f"I fattori {', '.join(tardi)} nascono dopo l'inizio della storia ({pd.Timestamp(conf['inizio_storia']):%d/%m/%Y}): prima valgono 0 nelle simulazioni (nessuna esposizione nota) e non entrano nelle regressioni."))
     B.append(("nota", "La regressione usa rendimenti settimanali in euro, con penalità ridge (esposizioni più prudenti quando la storia è breve o i fattori si somigliano; il fattore mercato non è penalizzato)."))
     return B
 
@@ -229,6 +246,12 @@ def grafico_backtest(ris: dict) -> bytes:
     return RP.png(fig)
 
 
+def RPcorto(nome: str) -> str:  # noqa: N802
+    import report as RP
+
+    return RP.corto(nome, 24)
+
+
 def blocchi_backtest(ris: dict) -> list:
     bt = ris.get("backtest")
     if not bt:
@@ -266,10 +289,42 @@ def blocchi_backtest(ris: dict) -> list:
                 ]
             )
         B.append(("tab", {"intest": ["Modello", "Giorni", "Sforamenti", "Kupiec (p)", "Christoffersen (p)", "Esito"], "righe": righe, "gruppi": None, "sx": True}))
+    vecchio = "fattori (1.5.0)"
+    if vecchio in set(t["modello"]):  # prima/dopo la calibrazione del modello a fattori (v1.5.1)
+        B.append(("h3", "Modello a fattori: prima e dopo la calibrazione di breve termine"))
+        righe = []
+        for (serie, lv), g in t.groupby(["serie", "livello"], sort=False):
+            a, n = g[g["modello"] == vecchio].iloc[0], g[g["modello"] == "fattori"].iloc[0]
+            righe.append(
+                [
+                    serie,
+                    f"{int(round(lv * 100))}%",
+                    f"{a['attesi']:.1f}".replace(".", ","),
+                    f"{int(a['sforamenti'])} ({a['semaforo']})",
+                    f"{int(n['sforamenti'])} ({n['semaforo']})",
+                ]
+            )
+        B.append(("tab", {"intest": ["VaR", "Sforamenti attesi", "Prima (1.5.0)", "Ora"], "righe": righe, "gruppi": None, "sx": True}))
+        gdl = ", ".join(f"{int(round(v))} per {RPcorto(k)}" for k, v in (bt.get("gdl") or {}).items() if v == v)
+        lam = f"{bt.get('lambda', 0.97):.2f}".replace(".", ",")
+        B.append(
+            (
+                "nota",
+                "Prima: covarianza dei fattori su tutta la storia, rischio specifico medio della finestra, distribuzione normale. Ora: covarianza dei fattori e rischio specifico "
+                f"EWMA (lambda {lam}, memoria di circa un mese, modificabile in «var_breve_termine»), code grasse (t di Student; gradi di libertà stimati, mediana {gdl}).",
+            )
+        )
+        B.append(("box", ["<b>In parole semplici</b>: il modello storico è più adatto al rischio di breve termine; il modello a fattori è più informativo per orizzonti lunghi perché include le grandi crisi."]))
     B.append(("h3", "Rendimenti effettivi contro VaR"))
     B.append(("img", grafico_backtest(ris)))
     B.append(("didascalia", "Linee: VaR 95% dei due modelli (cambiato di segno). Punti e croci: giorni in cui la perdita ha superato il VaR."))
     mig = t.groupby("modello")["semaforo"].apply(lambda s: s.map({"verde": 0, "giallo": 1, "rosso": 2}).mean())
     B.append(("nota", "Voto medio dei semafori (0 = tutti verdi, 2 = tutti rossi): " + ", ".join(f"{m} {v:.2f}".replace(".", ",") for m, v in mig.items()) + "."))
-    B.append(("nota", "Il modello «fattori» usa un VaR normale con la covarianza dei fattori su tutta la loro storia; il modello «storico» è il quantile degli ultimi 2 anni. Un test su pochi anni ha poca forza: un esito verde non è una garanzia."))
+    B.append(
+        (
+            "nota",
+            "Il modello «fattori» del VaR a 1 giorno segue il regime corrente (covarianza e rischio specifico EWMA, code grasse); il modello «storico» è il quantile degli ultimi 2 anni. "
+            "La simulazione di lungo periodo usa invece la storia lunga dei fattori. Un test su pochi anni ha poca forza: un esito verde non è una garanzia.",
+        )
+    )
     return B

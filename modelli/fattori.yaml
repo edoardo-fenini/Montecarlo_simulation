@@ -8,7 +8,7 @@
 #   - tassi e valute: obbligazioni USA a lungo termine (in dollari) e valore del dollaro in euro.
 # Parole speciali: @MERCATO = serie del fattore «mercato»; @USD_EUR = valore di 1 dollaro in euro (cambio BCE/FRED/Yahoo).
 # La data di inizio di ogni fattore è quella del primo prezzo disponibile (la tabella è nel report e nel README).
-# Prima di quella data il fattore vale 0 nelle simulazioni (nessuna esposizione nota) e non entra nelle regressioni.
+# Prima di quella data il fattore non entra nelle regressioni; nelle simulazioni vale 0 oppure è riempito, secondo `riempimento_fattori` (vedi sotto).
 
 inizio_storia: "2000-01-03"     # la storia dei fattori usata per simulare parte da qui (include 2000-2002 e 2008)
 passo_regressione: settimanale  # i rendimenti dei titoli si regrediscono su base settimanale (riduce i fusi orari)
@@ -17,6 +17,15 @@ ridge:
   minimo: 0.5                   # penalità minima assoluta (sui fattori standardizzati)
   frazione_minima: 0.5          # penalità minima = questa frazione del numero di settimane: provata fuori campione su titoli reali, dà
                                 # R² migliori di 0 / 0,1 (esposizioni meno estreme). Il fattore «mercato» non viene penalizzato.
+riempimento_fattori: condizionato  # prima della data di inizio di un fattore (momentum, qualità, emergenti, obbligazioni):
+                                   #   zero = vale 0 (rischio sottostimato nel 2000-2002);
+                                   #   condizionato = a + b × mercato del giorno + residuo pescato a caso dai residui veri del fattore (regressione sul mercato
+                                   #   nel periodo in cui esiste): resta coerente con le crisi (se il mercato crolla, il fattore si muove di conseguenza)
+pulizia_mercato:                # controllo dei valori sbagliati isolati dell'indice di mercato (Yahoo, 2001): confronto con un'altra serie
+  riferimento: SPY              # S&P 500 (in dollari, convertito come l'indice)
+  soglia: 15                    # un giorno è un errore se si discosta dal riferimento oltre 15 volte lo scarto tipico e il giorno dopo si annulla (i soli due casi dal 2000: aprile e settembre 2001)
+residui_congiunti: true         # simulazione: i residui di tutti i titoli si pescano dalle STESSE date dei fattori (correlazioni reali nelle crisi);
+                                # false = residui indipendenti tra titoli (come nella 1.5.0). Dove un titolo non ha il residuo si ripesca dalla sua storia.
 min_settimane: 52               # sotto questa storia il titolo non è stimato: esposizione 1 al mercato e resto specifico
 r2_minimo_avviso: 0.30          # sotto questo R² il titolo è spiegato poco dai fattori (avviso nel report)
 

@@ -49,6 +49,13 @@ LENTI = (
     "tests/test_prova_rapida.py::test_il_sottoinsieme_rapido_esclude_i_test_lenti",  # rilancia pytest  # salva report HTML, PDF ed Excel (già provati da altri test rapidi)
     "tests/test_isin_report.py::test_il_report_si_salva_con_pdf_ed_excel",
     "tests/test_garch.py::test_end_to_end_ripiego_garch_segnalato_nel_report",
+    "tests/test_classi_fondi.py::test_menu_delle_classi_del_fondo_e_scelta_salvata_nella_configurazione",  # AppTest, ~12 s
+    "tests/test_backtest_var.py::test_modello_a_fattori_di_breve_termine_e_meno_prudente_con_mercato_calmo",  # ~10 s
+    "tests/test_backtest_var.py::test_prima_e_dopo_nel_report",
+    "tests/test_backtest_var.py::test_backtest_completo_su_dati_sintetici",  # ~8 s
+    "tests/test_plausibilita_v151.py::test_plausibilita_storico_analisi_A_e_B_tutti_i_metodi",  # 4 simulazioni complete, ~7 s
+    "tests/test_plausibilita_v151.py::test_senza_correzione_il_rendimento_simulato_era_troppo_basso",
+    "tests/test_plausibilita_v151.py::test_modello_a_fattori_plausibile",
 )
 
 

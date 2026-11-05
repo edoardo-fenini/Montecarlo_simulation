@@ -8,6 +8,12 @@ Uno strumento per confrontare il **rischio** di più portafogli di azioni ed ETF
 |---|---|---|
 | ![Pagina iniziale](docs/immagini/01_pagina_iniziale.png) | ![Schede con il livello di rischio](docs/immagini/02_in_una_pagina.png) | ![Fan chart](docs/immagini/03_fan_chart.png) |
 
+**Novità della versione 1.5.1 (correzioni):** il rendimento simulato ora coincide con quello atteso anche per titoli con «rimbalzi» tra giorni vicini (prima, nel
+modello storico, poteva restare 1-3 punti sotto: errore trovato dal controllo di plausibilità); la **volatilità annua** è calcolata dai rendimenti di un mese e non più
+dai giornalieri (il modello a fattori dava 19% al mondo azionario in euro, il valore vero è circa 16%); corretti due valori sbagliati dell'indice MSCI World di Yahoo;
+VaR a breve termine del modello a fattori che segue il regime corrente; residui dei titoli ricampionati dalle stesse date; fattori nati tardi ricostruiti dal mercato;
+menu delle classi di quote dei fondi. Dettagli e numeri prima/dopo in `CHANGELOG.md`.
+
 **Novità della versione 1.5:** modello di rischio a fattori (opzione «Modello di simulazione»), scheda «Da dove viene il rischio»,
 validazione del VaR (backtest) e scelte rapide Prudente/Base/Ottimista per tasso privo di rischio e premio di mercato. Vedi «Modello a fattori».
 
@@ -203,6 +209,9 @@ IE00BK5BQT80;VANGUARD FTSE ALL-WORLD UCITS ETF;40;;
 
 ### Fondi comuni (non quotati in borsa)
 
+*Dalla 1.5.1:* per i fondi trovati su Yahoo per nome, sotto il controllo dati compare un menu con **tutte le classi di quote candidate** (nome, valuta, anni di storia e, con ⚠,
+in cosa differiscono dalla classe attesa): Yahoo non dice a quale classe appartiene l'ISIN, quindi la scelta finale è tua. La scelta viene salvata nella configurazione (`isin_scelte`).
+
 Un **fondo comune** (per esempio un fondo lussemburghese con ISIN `LU…`) non è quotato in borsa: ha un valore della quota calcolato ogni giorno
 (il «NAV»). Molte fonti online non lo hanno. Il controllo dei dati riconosce il **tipo di strumento** di ogni ISIN (azione, ETF/ETC o fondo comune,
 colonna «Tipo») e per i fondi prova tre strade, in quest'ordine:
@@ -269,6 +278,10 @@ l'1%; **rosso** se un campo è vuoto o non è un numero (un campo vuoto non vale
 simulati viene confrontato con quello atteso (al netto dei costi), con una tolleranza basata sull'errore standard: se non coincide, errore rosso e i
 risultati non vengono presentati come validi.
 
+Dalla 1.5.1 il confronto è fatto sul **rendimento del primo anno** di 1 € investito (senza versamenti), che è la misura giusta per un rendimento annuo atteso: la media dei
+rendimenti giornalieri nascondeva gran parte dell'errore quando giorni vicini sono legati tra loro. Il motore corregge di una frazione minima la media giornaliera (di norma meno
+di 0,02% al giorno; volatilità e correlazioni non cambiano) perché 1 € cresca in media esattamente del rendimento atteso con i blocchi del bootstrap.
+
 ### Controllo dei dati prima della simulazione
 | ![Controllo dati con ISIN](docs/screenshot/01_controllo_dati_isin.png) | ![Menu della quotazione](docs/screenshot/02_menu_quotazione.png) | ![ISIN errato: simulazione bloccata](docs/screenshot/04_isin_errato_bloccato.png) |
 |---|---|---|
@@ -316,7 +329,7 @@ Giallo US0378331005         AAPL                   Apple Inc.  NasdaqGS    USD  
 
 | Termine | Significato |
 |---|---|
-| **Volatilità** | Quanto oscilla il valore in un anno. 30% = oscillazioni tipiche di ±30%. |
+| **Volatilità** | Quanto oscilla il valore in un anno. 30% = oscillazioni tipiche di ±30%. Dalla 1.5.1 si misura sui rendimenti di un mese (×√12), non su quelli di un giorno (×√252): se un giorno di rialzo è spesso seguito da uno di calo (anche solo perché indice e cambio sono rilevati a ore diverse) la misura giornaliera sovrastima l'oscillazione vera di un anno. |
 | **Max drawdown** | Il calo più grande da un massimo al minimo successivo. Da 10.000 a 4.000 € = −60%. |
 | **Tempo sott'acqua** | Il periodo più lungo passato sotto il massimo precedente. |
 | **Percentili** | Il 5° percentile è il valore sotto cui finisce il 5% dei casi peggiori; la mediana (50°) è il caso tipico; il 95° è il 5% dei casi migliori. |
@@ -340,17 +353,25 @@ lo stile, i tassi, il dollaro) più una piccola parte tutta sua.
   regioni (USA, Europa, Giappone, Emergenti, come scarto dal mondo); settori USA (tecnologia, finanziari, salute, energia, industriali, consumi
   ciclici e difensivi, come scarto da S&P 500); stile (growth contro value, piccole imprese, momentum, qualità); obbligazioni USA a lungo termine e
   cambio dollaro/euro. Date di inizio: la maggior parte dal 4/1/2000; Europa 31/7/2000; growth-value e piccole imprese 29/5/2000;
-  obbligazioni 31/7/2002; emergenti 15/4/2003; momentum e qualità dal 2013 (prima valgono 0 nelle simulazioni e non entrano nelle regressioni).
+  obbligazioni 31/7/2002; emergenti 15/4/2003; momentum e qualità dal 2013. Prima di quelle date il fattore non entra nelle regressioni; nelle simulazioni (dalla 1.5.1,
+  opzione `riempimento_fattori: condizionato`, default) si ricostruisce con «a + b × rendimento del mercato di quel giorno + un residuo pescato a caso dai residui veri del fattore»
+  (a e b da una regressione sul mercato nel periodo in cui il fattore esiste), così nelle crisi il fattore si muove con il mercato invece di restare fermo; con `zero` vale 0 come nella 1.5.0.
+  Limite: per momentum e qualità la sensibilità al mercato è quasi nulla, quindi il riempimento ripete soprattutto il loro rischio recente.
 - **Con il modello a fattori si fa solo l'analisi A** (la storia lunga entra già dai fattori). Stress test, rischio sul singolo titolo e
   confronto tra modelli restano quelli sullo storico dei titoli.
 - **Da dove viene il rischio** (scheda del report, anche con il modello storico, attivala con «Da dove viene il rischio»): barre impilate con la
   quota di rischio dovuta a mercato, regioni, settori, stile, tassi/valute e rischio specifico; esposizioni di ogni portafoglio; R² dei titoli
   (avviso sotto 0,3: il titolo è spiegato poco dai fattori); una frase in italiano semplice sulle scommesse comuni tra portafogli.
 - **Validazione del modello** (facoltativa, più lenta): backtest del VaR a 1 giorno (95% e 99%) su finestra mobile di 2 anni, test di Kupiec e di
-  Christoffersen con semaforo, confronto tra modello storico e a fattori, grafico dei rendimenti contro il VaR.
+  Christoffersen con semaforo, confronto tra modello storico e a fattori, grafico dei rendimenti contro il VaR. Dalla 1.5.1 il VaR a 1 giorno del modello a fattori **segue il regime
+  corrente**: covarianza dei fattori e rischio specifico EWMA (lambda 0,97, cioè memoria di circa un mese; si cambia con `var_breve_termine: {lambda_ewma: 0.97, code_grasse: true}`)
+  e distribuzione t di Student con gradi di libertà stimati. Il report mostra la tabella prima/dopo rispetto al modello della 1.5.0. In parole semplici: il modello storico è più adatto al
+  rischio di breve termine; il modello a fattori è più informativo per orizzonti lunghi perché include le grandi crisi (la simulazione di lungo periodo non cambia).
 - **Limiti**: i fattori sono ETF (gli ETF USA hanno costi e composizione propri); il benchmark ETF ha un orario di chiusura diverso dall'indice
-  MSCI, quindi la sua parte «specifica» è in parte rumore; i residui dei titoli sono indipendenti tra loro (in crisi i titoli dello stesso settore
-  possono muoversi insieme più di quanto il modello preveda); un fattore nato nel 2013 non ha storia nelle crisi precedenti.
+  MSCI, quindi la sua parte «specifica» è in parte rumore. **Residui**: dalla 1.5.1 i residui di tutti i titoli sono ricampionati dalle *stesse date* dei fattori
+  (bootstrap congiunto): nelle crisi i titoli dello stesso settore si muovono insieme come è successo davvero (`residui_congiunti: false` in `modelli/fattori.yaml` per tornare ai residui
+  indipendenti). Per i titoli senza residui in quelle date (non quotavano ancora) il residuo è ripescato dalla loro storia; il report dice per quali e per quanta parte dei giorni.
+  I dati dell'indice di mercato sono controllati contro l'S&P 500 (`pulizia_mercato` in `modelli/fattori.yaml`): i valori sbagliati isolati che si annullano il giorno dopo (Yahoo, aprile e settembre 2001) vengono corretti.
 
 ## 7. Creare una configurazione a mano (file YAML)
 
@@ -403,6 +424,9 @@ portafogli:
 
 # Facoltativo: settore per gli stress test (tech | finanza | altro), se quello automatico non ti convince
 # settori: {AMZN: tech}
+
+# Facoltativo (v1.5.1): VaR a 1 giorno del modello a fattori (backtest): memoria EWMA (0,80-0,999) e code grasse (t di Student)
+# var_breve_termine: {lambda_ewma: 0.97, code_grasse: true}
 
 # Facoltativo: costi annui (TER / spese correnti) di fondi ed ETF usati come titoli, per ticker o ISIN. Se non li indichi si usano
 # costo_fondo_default (1,5%) per i fondi comuni e ter_etf_default (0,3%) per ETF/ETC, con un avviso giallo.
@@ -537,6 +561,7 @@ A ogni push, e su richiesta da **Actions → Prova su Mac → Run workflow**, Gi
 | `analisi.py` | rendimenti attesi, periodi A/B/C, esecuzione (anche in parallelo) dei moduli |
 | `simula.py` | motore Monte Carlo (bootstrap a blocchi, Student-t, GARCH, crolli sul singolo titolo) |
 | `metriche.py` | metriche e stress test |
+| `strumenti/confronto_modelli.py` | rigenera il confronto storico / fattori sull'esempio (`esempi/confronto_modelli_v1_5_1/`) |
 | `fattori.py`, `report_fattori.py`, `backtest_var.py`, `modelli/fattori.yaml` | modello a fattori (stima ridge, simulazione, scomposizione del rischio), sue sezioni nel report, backtest del VaR, elenco dei fattori |
 | `report.py` | report HTML, PDF, Excel e CSV; analisi salvate |
 | `grafici_app.py` | grafici interattivi dell'app (Plotly) |

@@ -59,6 +59,9 @@ DEFAULT = {
         "backtest_var": False,  # validazione del VaR (Kupiec, Christoffersen): lento, disattivato di default
     },
     "verifica_convergenza": {"numero_seed": 3, "soglia": 0.02},  # seed totali (incluso quello principale)
+    # VaR a 1 giorno del modello a fattori (backtest, v1.5.1): covarianza dei fattori e varianza specifica EWMA con questa memoria (0,97 = circa un mese);
+    # code_grasse: t di Student con gradi di libertà stimati invece della normale. La simulazione di lungo periodo non usa questi parametri.
+    "var_breve_termine": {"lambda_ewma": 0.97, "code_grasse": True},
     "analisi": {"inizio_B": "2007-01-01", "inizio_C": "1999-01-04"},
     "rischio_singolo_titolo": {"probabilita_annua": 0.015, "perdita_min": 0.8, "perdita_max": 1.0},
     "ter_etf_default": 0.003,  # costo annuo prudente per ETF/ETC dentro i portafogli se non indicato (con avviso giallo)
@@ -246,6 +249,15 @@ def prepara(dati: dict) -> dict:
         raise ErroreConfig("«verifica_convergenza»: numero_seed deve essere un intero e soglia un numero (es. 0.02).") from None
     if not 2 <= vc["numero_seed"] <= 10:
         raise ErroreConfig("«verifica_convergenza.numero_seed» deve essere tra 2 e 10.")
+
+    vb = cfg["var_breve_termine"]
+    try:
+        vb["lambda_ewma"] = float(vb["lambda_ewma"])
+    except (TypeError, ValueError):
+        raise ErroreConfig("«var_breve_termine.lambda_ewma» deve essere un numero tra 0,80 e 0,999 (es. 0.97).") from None
+    if not 0.80 <= vb["lambda_ewma"] <= 0.999:
+        raise ErroreConfig("«var_breve_termine.lambda_ewma» deve essere tra 0,80 e 0,999 (default 0,97).")
+    vb["code_grasse"] = bool(vb.get("code_grasse", True))
 
     cfg["composizione"] = appiattisci(cfg)
     _controlla_isin_e_soglie(cfg)

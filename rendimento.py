@@ -64,9 +64,10 @@ def avvisi_tabella(rend: pd.DataFrame | None) -> list[tuple[str, str]]:
 
 # ------------------------------------------------------------------ plausibilità dei risultati
 def atteso_netto_annuo(mu_giornaliero_colonne: np.ndarray, indici: np.ndarray, pesi: np.ndarray, giorni: int = 252) -> float:
-    """Rendimento annuo atteso del portafoglio dal rendimento medio giornaliero dei suoi titoli (media pesata, poi composizione)."""
-    d = float(np.dot(pesi, mu_giornaliero_colonne[indici]))
-    return (1.0 + d) ** giorni - 1.0
+    """Rendimento annuo atteso del portafoglio dal rendimento medio giornaliero dei suoi titoli: media pesata dei rendimenti annui
+    dei titoli (un anno senza ribilanciare: i pesi iniziali restano quelli indicati)."""
+    annui = (1.0 + np.asarray(mu_giornaliero_colonne, float)[indici]) ** giorni - 1.0
+    return float(np.dot(pesi, annui))
 
 
 def controlla_plausibilita(som: dict, M: np.ndarray, porte: dict, attesi: dict | None = None, giorni: int = 252) -> pd.DataFrame:
@@ -79,11 +80,14 @@ def controlla_plausibilita(som: dict, M: np.ndarray, porte: dict, attesi: dict |
     righe = {}
     for p, (cols, w) in porte.items():
         r = som["rend_sim"][p]
-        sim = (1.0 + r["media_giorn"]) ** giorni - 1.0
+        if "anno1" in r:  # dalla 1.5.1: rendimento medio del primo anno (il confronto giusto con un rendimento annuo atteso)
+            sim, se_annuo = r["anno1"], r["se_anno1"]
+        else:  # somme vecchie: dalla media giornaliera (approssimato)
+            sim, se_annuo = (1.0 + r["media_giorn"]) ** giorni - 1.0, r["se_giorn"] * giorni
         att = (attesi or {}).get(p)
         if att is None:
             att = atteso_netto_annuo(mu_col, np.asarray(cols), np.asarray(w, float), giorni)
-        tol = N_ERRORI_STANDARD * r["se_giorn"] * giorni + MARGINE_FISSO
+        tol = N_ERRORI_STANDARD * se_annuo + MARGINE_FISSO
         righe[p] = {"atteso": att, "simulato": sim, "tolleranza": tol, "scarto": sim - att, "ok": bool(abs(sim - att) <= tol)}
     return pd.DataFrame(righe).T
 

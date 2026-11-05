@@ -475,6 +475,8 @@ def scegli_quotazione(isin_cod: str, chiave_widget: str, predefinita: str) -> No
 
 
 def etichetta_quotazione(q: dict) -> str:
+    if q.get("avvisi_fondo"):  # fondo comune: la classe di quote si riconosce dal nome, dalla valuta e dalla storia
+        return fondi.etichetta_classe(q)
     return (
         f"{q['ticker']} · {q['borsa']} · {q['valuta']} · {report.num(q['storia_anni'])} anni di storia · "
         f"volume medio {report.num_it(int(q['volume_medio']))}"
@@ -580,6 +582,10 @@ def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
             st.caption("Ticker usati: " + " · ".join(usati), help="Gli stessi dati della tabella, in forma di testo.")
         st.caption("🟢 tutto a posto · 🟡 avviso, si può procedere · 🔴 errore, la simulazione non parte finché non lo correggi.")
         pannello_non_trovati(e)
+        for r in e["righe"]:  # fondo con una sola classe candidata: niente menu, ma si dice quale è stata scelta
+            q_unica = (r.get("risoluzione") or {}).get("quotazioni") or []
+            if len(q_unica) == 1 and q_unica[0].get("avvisi_fondo"):
+                st.caption(f"Classe di quote trovata per {r['isin']}: {fondi.etichetta_classe(q_unica[0])}. È l'unica candidata: controlla che sia quella giusta.")
         multi = [r for r in e["righe"] if r.get("risoluzione") and len(r["risoluzione"]["quotazioni"]) > 1]
         for r in multi:
             ris_i = r["risoluzione"]
@@ -597,8 +603,13 @@ def pannello_controllo(chiave_attuale: str | None, con_ris: bool) -> None:
                 key=k,
                 on_change=scegli_quotazione,
                 args=(r["isin"], k, ris_i["predefinito"]),
-                help=f"Trovate {len(elenco)} quotazioni con {ris_i['metodo']}. Scelta automatica: {ris_i['predefinito']} "
-                "(preferisce EUR, poi Borsa Italiana, Xetra, Amsterdam; poi più storia e volumi).",
+                help=(
+                    f"Trovate {len(elenco)} classi di quote con {ris_i['metodo']}: Yahoo non indica l'ISIN, scegli quella con valuta e tipo (accumulazione o distribuzione) giusti. "
+                    f"Scelta automatica: {ris_i['predefinito']}. La scelta viene salvata nella configurazione (scarica la configurazione per conservarla)."
+                    if any(q.get("avvisi_fondo") for q in ris_i["quotazioni"])
+                    else f"Trovate {len(elenco)} quotazioni con {ris_i['metodo']}. Scelta automatica: {ris_i['predefinito']} "
+                    "(preferisce EUR, poi Borsa Italiana, Xetra, Amsterdam; poi più storia e volumi)."
+                ),
             )
 
 
@@ -689,7 +700,8 @@ with st.sidebar:
                     help="Il titolo viene aggiunto come nuova riga della tabella qui sopra.",
                 )
                 if dest == "➕ Nuovo portafoglio":
-                    dest = st.text_input("Nome del nuovo portafoglio", value="Nuovo portafoglio", key="ricerca_nuovo_nome")
+                    ss.setdefault("ricerca_nuovo_nome", "Nuovo portafoglio")  # valore iniziale nello stato, senza value= insieme a key=
+                    dest = st.text_input("Nome del nuovo portafoglio", key="ricerca_nuovo_nome")
                 st.caption(f"Risultati per «{rr['testo']}» (al massimo {R.MASSIMO}): nome · ticker · ISIN · borsa · valuta · tipo")
                 for i, r in enumerate(rr["righe"]):
                     c1, c2 = st.columns([5, 1])
@@ -704,7 +716,8 @@ with st.sidebar:
             "controvalore). Esempio: esempi/portafoglio_broker_esempio.csv."
         )
         f_broker = st.file_uploader("File CSV del broker", type=["csv", "txt"], key="file_broker")
-        nome_broker = st.text_input("Nome del portafoglio", value="Portafoglio importato", key="nome_broker")
+        ss.setdefault("nome_broker", "Portafoglio importato")  # valore iniziale nello stato, senza value= insieme a key=
+        nome_broker = st.text_input("Nome del portafoglio", key="nome_broker")
         if st.button("👀 Mostra anteprima", width="stretch", disabled=f_broker is None, key="btn_anteprima_broker"):
             anteprima_broker(f_broker, nome_broker)
         if ss.get("msg_broker"):
