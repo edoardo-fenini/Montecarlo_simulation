@@ -24,7 +24,7 @@ import isin
 import metriche
 import rendimento
 from configurazione import BENCH, ErroreConfig
-from simula import Bootstrap, ConCrolli, Garch, StudentT, ricentra, simula
+from simula import Bootstrap, ConCrolli, Garch, StudentT, allinea_media_composta, ricentra, simula
 
 registro_log = logging.getLogger("confronta")
 
@@ -450,12 +450,15 @@ def esegui(
         M, porte, colonne, idx = matrice(cfg, per[a])
         ris["periodi"][a] = (idx[0], idx[-1], len(idx))
         ris["storico"][a] = storico(cfg, M, porte, colonne, idx)
-        Mr = prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta), tipi)
-        mats[a] = (Mr, porte)
+        Mr0 = prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta), tipi)
+        mats[a] = (Mr0, porte)  # per il controllo di plausibilità: contiene i rendimenti voluti, prima della correzione sotto
+        # dalla 1.5.1: i blocchi del bootstrap portano con sé il legame tra giorni vicini; si corregge la media giornaliera di una
+        # frazione minima perché 1 € cresca in media esattamente del rendimento annuo atteso (vedi simula.allinea_media_composta)
+        Mr = allinea_media_composta(Mr0, cfg["blocco_medio_giorni"])[0]
         tipo_base, extra_base = "bootstrap", {}
         if modello == "fattori":
             tipo_base = "fattori"
-            extra_base = {"fatt": FA.prepara_generatore(fatt["stima"], fatt["F"], colonne, Mr, cfg["blocco_medio_giorni"])}
+            extra_base = {"fatt": FA.prepara_generatore(fatt["stima"], fatt["F"], colonne, Mr0, cfg["blocco_medio_giorni"])}
         lavori.append(Lavoro(f"base_{a}", tipo_base, f"Analisi {a}: simulazione principale", 1.0, Mr, porte, extra=extra_base))
         if a == "A":
             ris["matrici"] = {"A": (Mr, porte)}  # per la prova rapida dei pesi nell'app
@@ -478,11 +481,11 @@ def esegui(
                 singolo[p] = max(ws) if ws else None
             stress_da_fare[a] = (Mr, porte, cat, singolo)
         if mod["confronto_modelli"]:
-            lavori.append(Lavoro(f"t_{a}", "t", f"Analisi {a}: modello Student-t", 1.0, Mr, porte))
+            lavori.append(Lavoro(f"t_{a}", "t", f"Analisi {a}: modello Student-t", 1.0, Mr0, porte))  # giorni indipendenti: nessuna correzione
             nomi_col = [t for _, t in colonne]
-            lavori.append(Lavoro(f"garch_{a}", "garch", f"Analisi {a}: modello GARCH", 1.3, Mr, porte, extra={"nomi": nomi_col}))
+            lavori.append(Lavoro(f"garch_{a}", "garch", f"Analisi {a}: modello GARCH", 1.3, Mr0, porte, extra={"nomi": nomi_col}))  # idem
             for j, (nome_v, kw) in enumerate(varianti_sensibilita(cfg)):
-                Mv = prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta, **kw), tipi)
+                Mv = allinea_media_composta(prepara_M(cfg, M, colonne, rendimento_colonne(cfg, colonne, beta=beta, **kw), tipi), cfg["blocco_medio_giorni"])[0]
                 lavori.append(Lavoro(f"sens{j}_{a}", "bootstrap", f"Analisi {a}: sensibilità ({nome_v})", 1.0, Mv, porte))
                 nomi_sens[f"sens{j}_{a}"] = nome_v
 

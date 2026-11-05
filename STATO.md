@@ -283,3 +283,38 @@ Ora: tappe 1-2 quasi chiuse (modello, report, app). Prossimo passo: test app con
 - [x] PR #6 aperta verso main (v1.5). Da verificare: controlli GitHub (Test, Prova su Mac); poi merge e tag v1.5.0 (Actions → Release → Run workflow, versione 1.5.0).
 - Correzione tappa 0 (dopo CI rossa sulla PR 6: test_ricerca_per_nome, capitale 0/orizzonte 1/tasso 0/premio 0 dopo il clic su ➕, stato presente ma azzerato): la copia delle impostazioni è ora autorevole (`stato_app.conserva` rimette ogni volta lo stato uguale alla copia; solo `on_change` dei campi o codice dell app aggiornano la copia). Test app adattati all API dei widget. Da verificare: test lenti + browser, poi merge PR 6 e tag.
 - Seconda correzione tappa 0 (CI ancora rossa su un run): il browser manda i valori di partenza di molti campi insieme e fa scattare on_change; ora in `conserva` 3+ campi numerici cambiati nella stessa esecuzione = falso allarme, si ripristina la copia (stato_app.segnala/CAMPI_A_RISCHIO). Da verificare in CI (ripetere i run).
+
+## Versione 1.5.1 (ramo `v1.5.1`): correzioni dopo la 1.5.0 (5 novembre 2026, lavoro notturno autonomo)
+Ora: tappa 1 chiusa nel codice (verifica col modello a fattori sui dati reali in corso). Prossimo passo: tappa 2 (volatilità del benchmark nel modello a fattori).
+Baseline all'inizio: 250 test rapidi verdi (`-m rapido`, 43 s), non regressione identica. Ramo `v1.5.1` creato da `main` (c45ad85).
+- [x] Tappa 0 – release 1.5.0: workflow «Release» (run 41937609394) **riuscito**, tag `v1.5.0` presente, `confronta-portafogli-v1.5.0.zip` (7,5 MB) allegato. Nessuna correzione necessaria.
+- [x] Tappa 1 – controllo di plausibilità. **Causa trovata (in parole semplici)**: il modello pesca blocchi di ~20 giorni consecutivi dalla storia. Nei dati veri
+      un giorno non è indipendente dal successivo (nelle banche, dopo un giorno di calo spesso c'è un rimbalzo: correlazione tra giorni consecutivi −0,10).
+      I blocchi si portano dietro questo legame e il rendimento composto di un anno scende, anche se la media dei rendimenti giornalieri è
+      quella voluta (la ricentratura sistemava solo quella). Non era un problema di pesi ridistribuiti, buchi, ribilanciamento o cambio:
+      la media di ogni colonna è esatta per costruzione (verificato). In più il vecchio controllo guardava la media giornaliera, che nasconde
+      gran parte dell'errore: il rendimento vero del primo anno era 4,7% (Banche, analisi B) contro il 7,40% atteso, non 6,58%.
+      **Correzione** (`simula.crescita_attesa_bootstrap`, `allinea_media_composta`): formula esatta (catena di Markov sui giorni storici) della crescita
+      annua attesa con i blocchi; ogni colonna è spostata di una costante minima (fino a ~4%/anno, ~0,017%/giorno) perché 1 € cresca in media esattamente
+      del rendimento atteso. Volatilità, code e correlazioni non cambiano (verificato). Vale per bootstrap (default, stress test, rischio sul singolo
+      titolo, sensibilità, prova pesi), per il centro del modello a fattori e per il metodo «storico». Student-t e GARCH hanno giorni indipendenti: invariati.
+      **Nuovo controllo**: simula misura il rendimento medio del PRIMO ANNO (1 € senza versamenti, `anno1`/`se_anno1`) e lo confronta con la media pesata dei
+      rendimenti annui dei titoli (tolleranza 5 errori standard + 0,3%).
+      Riproduzione (esempio tre portafogli, dati reali 5/11/2026, 20.000 simulazioni, metodo beta, nuova misura del primo anno):
+      | analisi, portafoglio | atteso | simulato prima | simulato dopo |
+      |---|---|---|---|
+      | A Cyber security | 7,38% | 5,02% (FALLISCE) | 7,08% |
+      | A Banche / PE | 7,40% | 6,39% | 7,49% |
+      | A Big tech USA | 7,33% | 6,09% | 6,96% |
+      | A MSCI World | 5,80% | 5,58% | 5,79% |
+      | B Cyber security | 7,38% | 6,18% | 7,53% |
+      | B Banche / PE | 7,40% | 4,69% (FALLISCE) | 7,18% |
+      | B Big tech USA | 7,33% | 6,35% | 7,37% |
+      | B MSCI World | 5,80% | 5,42% | 5,76% |
+      Volatilità simulate identiche prima e dopo (es. B Banche 31,5%).
+      Test nuovi (`tests/test_plausibilita_v151.py`, 10): formula esatta = simulazione; correzione riporta la crescita al valore voluto senza toccare covarianze;
+      portafoglio con titolo che entra a metà periodo e con buchi (dati con legame tra giorni), analisi A e B × metodi beta/uguale/personalizzato/storico;
+      modello a fattori; prova che SENZA correzione l'errore compare. Riferimento di non regressione rigenerato (correzione voluta): su dati sintetici con giorni
+      indipendenti la mediana delle variazioni è 0,005%, il massimo 5% su una probabilità discreta (400 simulazioni).
+      Nota: il peso ridistribuito per un titolo che entra tardi (riempito con la media pesata degli altri) non crea errori sul rendimento medio, ma attenua il
+      rischio specifico di quel titolo nel periodo prima dell'ingresso: limite noto, non toccato.

@@ -24,6 +24,40 @@ def ricentra(M: np.ndarray, rend_annui, costi_annui=None, giorni: int = 252) -> 
     return M - M.mean(axis=0) + mu
 
 
+def crescita_attesa_bootstrap(X: np.ndarray, blocco: float = 20, giorni: int = 252) -> np.ndarray:
+    """Valore atteso (esatto, senza simulare) di 1 € dopo `giorni` giorni, per ogni colonna di X, quando i rendimenti giornalieri
+    sono pescati con lo stationary block bootstrap di `Bootstrap` (blocchi consecutivi, lunghezza media `blocco`, circolare).
+    Se i giorni fossero indipendenti sarebbe (1+media)^giorni; nei dati veri giorni vicini sono legati (rimbalzi dopo i cali,
+    o il contrario) e i blocchi si portano dietro questo legame: la crescita attesa cambia anche a media giornaliera uguale.
+    Calcolo: catena di Markov sui giorni storici (con probabilità p=1/blocco si salta a un giorno a caso, altrimenti si va al successivo)."""
+    X = np.asarray(X, float)
+    if X.ndim == 1:
+        X = X[:, None]
+    L = len(X)
+    p = 1.0 / blocco
+    G = 1.0 + X
+    v = G / L  # v[j] = valore atteso del prodotto fin qui, ed essere oggi sul giorno storico j
+    for _ in range(giorni - 1):
+        v = G * (p * v.sum(0) / L + (1.0 - p) * np.roll(v, 1, axis=0))
+    return v.sum(0)
+
+
+def allinea_media_composta(X: np.ndarray, blocco: float = 20, giorni: int = 252) -> tuple[np.ndarray, np.ndarray]:
+    """Sposta di una piccola costante per colonna (tipicamente meno di 0,01% al giorno) i rendimenti X, già ricentrati sul rendimento
+    voluto, in modo che la crescita attesa di 1 € in un anno con il block bootstrap sia esattamente (1+media giornaliera)^giorni:
+    cioè il rendimento atteso annuo che l'utente ha chiesto. Volatilità, code e correlazioni non cambiano.
+    Ritorna (X corretta, spostamento per colonna). Con giorni indipendenti lo spostamento è ~0."""
+    X = np.asarray(X, float)
+    bersaglio = np.log((1.0 + X.mean(0)) ** giorni)
+    delta = np.zeros(X.shape[1])
+    for _ in range(12):  # Newton con pendenza approssimata (d log E / d delta ≈ giorni): converge in 3-4 passi
+        errore = bersaglio - np.log(crescita_attesa_bootstrap(X + delta, blocco, giorni))
+        delta += errore / giorni
+        if np.abs(errore).max() < 1e-12:
+            break
+    return X + delta, delta
+
+
 # ---------------------------------------------------------------- generatori
 class Bootstrap:
     """Stationary block bootstrap: si pescano blocchi di giorni consecutivi di lunghezza casuale
@@ -219,6 +253,7 @@ def simula(
         for k in nomi
     }
     s1, cross, cnt = np.zeros(P), np.zeros((P, P)), 0
+    g1, g2 = np.zeros(P), np.zeros(P)  # somma e somma dei quadrati del rendimento del primo anno (senza versamenti): controllo di plausibilità
     fatti = 0
     while fatti < n:
         nn = min(chunk, n - fatti)
@@ -233,6 +268,7 @@ def simula(
                 mdd=np.zeros(nn),
                 last=np.zeros(nn, int),
                 uw=np.zeros(nn, int),
+                Hs=np.tile(w, (nn, 1)),  # «ombra» di 1 € nel primo anno, senza versamenti (solo per il controllo di plausibilità)
             )
             out[k]["mensile"][sl, 0] = capitale
         for m in range(mesi):
@@ -251,6 +287,16 @@ def simula(
                 Hd = H[:, None, :] * np.cumprod(1.0 + blocco[:, :, cols], axis=1)
                 Vd = Hd.sum(2)
                 s["H"] = Hd[:, -1, :]
+                if m < 12:  # primo anno: stessa politica di ribilanciamento, ma senza versamenti
+                    Hs = s["Hs"]
+                    if rib_mesi and m > 0 and m % rib_mesi == 0:
+                        Hs = ribilancia(Hs, w, costo_rb)
+                    s["Hs"] = Hs[:, None, :] * np.cumprod(1.0 + blocco[:, :, cols], axis=1)
+                    s["Hs"] = s["Hs"][:, -1, :]
+                    if m == 11:
+                        G = s["Hs"].sum(1)
+                        g1[nomi.index(k)] += G.sum()
+                        g2[nomi.index(k)] += (G**2).sum()
                 rets.append(Vd / np.concatenate([V0[:, None], Vd[:, :-1]], 1) - 1.0)
                 cm = np.maximum(s["runmax"][:, None], np.maximum.accumulate(Vd, axis=1))
                 s["mdd"] = np.minimum(s["mdd"], (Vd / cm - 1.0).min(1))
@@ -276,7 +322,19 @@ def simula(
     cov = cross / cnt - np.outer(mean, mean)
     sd = np.sqrt(np.diag(cov))
     # rendimento medio giornaliero dei percorsi e suo errore standard: serve al controllo di plausibilità (rendimento.py)
-    out["_rend"] = {k: {"media_giorn": float(mean[i]), "se_giorn": float(sd[i] / np.sqrt(cnt))} for i, k in enumerate(nomi)}
+    # «anno1»: rendimento medio del primo anno (1 € investito all'inizio, nessun versamento) e suo errore standard. È il dato giusto per
+    # confrontare con il rendimento atteso annuo: la media dei rendimenti giornalieri no (se i giorni sono legati tra loro, differisce).
+    m1 = g1 / n
+    se1 = np.sqrt(np.maximum(g2 / n - m1**2, 0.0) / n)
+    out["_rend"] = {
+        k: {
+            "media_giorn": float(mean[i]),
+            "se_giorn": float(sd[i] / np.sqrt(cnt)),
+            "anno1": float(m1[i] - 1.0),
+            "se_anno1": float(se1[i]),
+        }
+        for i, k in enumerate(nomi)
+    }
     for i, k in enumerate(nomi):
         out[k]["vol"] = float(sd[i] * np.sqrt(giorni))
     with np.errstate(invalid="ignore", divide="ignore"):

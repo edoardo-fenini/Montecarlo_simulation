@@ -18,7 +18,7 @@ import yaml
 
 import dati as D
 from configurazione import BENCH, ErroreConfig
-from simula import GG, Bootstrap
+from simula import GG, Bootstrap, allinea_media_composta
 
 FILE_PREDEFINITO = str(pathlib.Path(__file__).resolve().parent / "modelli" / "fattori.yaml")
 GRUPPI = {
@@ -310,12 +310,21 @@ def prepara_generatore(stima: Stima, F: pd.DataFrame, colonne: list, Mr: np.ndar
     mancanti = [t for t in tick if t not in stima.residui]
     if mancanti:
         raise D.ErroreDati(f"Titoli senza stima a fattori: {', '.join(mancanti)}.")
+    col = np.array([tick.index(t) for _, t in colonne])
+    beta = stima.beta.loc[tick].values
+    centro = np.asarray(Mr).mean(0)
+    # dalla 1.5.1: come per il bootstrap dei titoli, il legame tra giorni vicini dei fattori sposta la crescita annua attesa;
+    # si corregge il centro (meno di 0,01% al giorno) perché 1 € cresca in media esattamente del rendimento annuo atteso.
+    # I residui sono indipendenti e a media zero: non cambiano il valore atteso del prodotto.
+    Fv = F.values - F.values.mean(0)
+    X = (Fv @ beta.T)[:, col] + centro
+    centro = centro + allinea_media_composta(X, blocco)[1]
     return {
         "F": F.values,
-        "beta": stima.beta.loc[tick].values,
+        "beta": beta,
         "residui": [stima.residui[t] for t in tick],
-        "colonna_titolo": np.array([tick.index(t) for _, t in colonne]),
-        "centro": np.asarray(Mr).mean(0),
+        "colonna_titolo": col,
+        "centro": centro,
         "blocco": blocco,
     }
 
